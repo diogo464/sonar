@@ -23,7 +23,8 @@ use crate::{
         chat::{AddChatMessage, GetChatMessages},
         jukebox::JukeboxControl,
         lists::{
-            GetAlbumList, GetAlbumList2, GetNowPlaying, GetRandomSongs, GetStarred, GetStarred2, GetSongsByGenre,
+            GetAlbumList, GetAlbumList2, GetNowPlaying, GetRandomSongs, GetSongsByGenre,
+            GetStarred, GetStarred2,
         },
         playlists::{CreatePlaylist, DeletePlaylist, GetPlaylist, GetPlaylists, UpdatePlaylist},
         podcast::{
@@ -467,7 +468,7 @@ macro_rules! route {
     }};
 }
 
-pub async fn serve(address: SocketAddr, server: impl OpenSubsonicServer) -> std::io::Result<()> {
+pub async fn router(server: impl OpenSubsonicServer) -> std::io::Result<Router> {
     let mut router = Router::default();
     router = route!(router => add_chat_message, AddChatMessage, "addChatMessage");
     router = route!(router => change_password, ChangePassword, "changePassword");
@@ -567,11 +568,5 @@ pub async fn serve(address: SocketAddr, server: impl OpenSubsonicServer) -> std:
     router = route!(router => update_playlist, UpdatePlaylist, "updatePlaylist");
     router = route!(router => update_share, UpdateShare, "updateShare");
     router = route!(router => update_user, UpdateUser, "updateUser");
-
-    router = router.layer(tower_http::trace::TraceLayer::new_for_http());
-    let router = router.with_state(Arc::new(server));
-
-    let listener = TcpListener::bind(address).await?;
-    axum::serve(listener, router.into_make_service()).await?;
-    Ok(())
+    Ok(router.with_state(Arc::new(server)))
 }

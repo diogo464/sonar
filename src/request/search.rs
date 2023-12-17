@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
+use serde::{Deserialize, Serialize};
 
 #[allow(unused)]
 use crate::{common::Milliseconds, request::browsing::GetMusicFolders};
@@ -75,4 +75,37 @@ pub struct Search3 {
     /// Since 1.12.0
     /// Only return results from the music folder with the given ID. See [`GetMusicFolders`].
     pub music_folder_id: Option<String>,
+}
+
+impl Search3 {
+    pub const DEFAULT_ARTIST_COUNT: u32 = 20;
+    pub const DEFAULT_ARTIST_OFFSET: u32 = 0;
+    pub const DEFAULT_ALBUM_COUNT: u32 = 20;
+    pub const DEFAULT_ALBUM_OFFSET: u32 = 0;
+    pub const DEFAULT_SONG_COUNT: u32 = 20;
+    pub const DEFAULT_SONG_OFFSET: u32 = 0;
+
+    pub fn artist_count_or_default(&self) -> u32 {
+        self.artist_count.unwrap_or(Self::DEFAULT_ARTIST_COUNT)
+    }
+
+    pub fn artist_offset_or_default(&self) -> u32 {
+        self.artist_offset.unwrap_or(Self::DEFAULT_ARTIST_OFFSET)
+    }
+
+    pub fn album_count_or_default(&self) -> u32 {
+        self.album_count.unwrap_or(Self::DEFAULT_ALBUM_COUNT)
+    }
+
+    pub fn album_offset_or_default(&self) -> u32 {
+        self.album_offset.unwrap_or(Self::DEFAULT_ALBUM_OFFSET)
+    }
+
+    pub fn song_count_or_default(&self) -> u32 {
+        self.song_count.unwrap_or(Self::DEFAULT_SONG_COUNT)
+    }
+
+    pub fn song_offset_or_default(&self) -> u32 {
+        self.song_offset.unwrap_or(Self::DEFAULT_SONG_OFFSET)
+    }
 }

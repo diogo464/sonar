@@ -1,6 +1,7 @@
-use std::time::SystemTime;
+use std::{net::SocketAddr, time::SystemTime};
 
 use opensubsonic::service::OpenSubsonicServer;
+use tokio::net::TcpListener;
 
 struct TestServer;
 
@@ -17,7 +18,12 @@ fn now_milliseconds() -> u64 {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    opensubsonic::service::serve("0.0.0.0:3000".parse().unwrap(), TestServer)
-        .await
-        .unwrap();
+    axum::serve(
+        TcpListener::bind("0.0.0.0:3000".parse::<SocketAddr>().unwrap())
+            .await
+            .unwrap(),
+        opensubsonic::service::router(TestServer).await.unwrap(),
+    )
+    .await
+    .unwrap();
 }
