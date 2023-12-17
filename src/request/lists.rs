@@ -104,7 +104,6 @@ impl<'de> serde::Deserialize<'de> for ListType {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getAlbumList>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.2.0", path = "getAlbumList")]
 pub struct GetAlbumList {
     /// See [`ListType`].
     #[serde(rename = "type")]
@@ -133,7 +132,6 @@ pub struct GetAlbumList {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getAlbumList2>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "getAlbumList2")]
 pub struct GetAlbumList2 {
     /// See [`ListType`].
     #[serde(rename = "type")]
@@ -162,7 +160,6 @@ pub struct GetAlbumList2 {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getRandomSongs>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.2.0", path = "getRandomSongs")]
 pub struct GetRandomSongs {
     /// The maximum number of songs to return. Max 500.
     pub size: Option<u32>,
@@ -181,7 +178,6 @@ pub struct GetRandomSongs {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getSongsByGenre>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.9.0", path = "getSongsByGenre")]
 pub struct GetSongsByGenre {
     /// The genre, as returned by [`GetGenres`].
     pub genre: String,
@@ -199,7 +195,6 @@ pub struct GetSongsByGenre {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getNowPlaying>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.0.0", path = "getNowPlaying")]
 pub struct GetNowPlaying;
 
 /// Returns starred songs, albums and artists.
@@ -207,7 +202,6 @@ pub struct GetNowPlaying;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getStarred>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "getStarred")]
 pub struct GetStarred {
     /// Since 1.12.0
     /// Only return albums in the music folder with the given ID. See [`GetMusicFolders`].
@@ -219,7 +213,6 @@ pub struct GetStarred {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getStarred2>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.12.0", path = "getStarred2")]
 pub struct GetStarred2 {
     /// Since 1.12.0
     /// Only return albums in the music folder with the given ID. See [`GetMusicFolders`].

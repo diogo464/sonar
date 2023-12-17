@@ -9,7 +9,6 @@ use crate::{common::Milliseconds, request::browsing::GetMusicFolders};
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#search>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.0.0", path = "search")]
 pub struct Search {
     /// Artist to search for.
     pub artist: Option<String>,
@@ -33,7 +32,6 @@ pub struct Search {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#search2>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.4.0", path = "search2")]
 pub struct Search2 {
     /// Search query.
     pub query: String,
@@ -59,7 +57,6 @@ pub struct Search2 {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#search3>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "search3")]
 pub struct Search3 {
     /// Search query.
     pub query: String,

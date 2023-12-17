@@ -8,7 +8,6 @@ use crate::common::Milliseconds;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getChatMessages>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.2.0", path = "getChatMessages")]
 pub struct GetChatMessages {
     /// Only return messages newer than this time.
     pub since: Option<Milliseconds>,
@@ -19,7 +18,6 @@ pub struct GetChatMessages {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#addChatMessage>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.2.0", path = "addChatMessage")]
 pub struct AddChatMessage {
     /// The chat message.
     pub message: String,

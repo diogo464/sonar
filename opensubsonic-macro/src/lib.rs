@@ -5,13 +5,12 @@ mod response;
 mod util;
 mod version;
 
-#[proc_macro_derive(SubsonicType, attributes(subsonic))]
-pub fn subsonic(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = syn::parse_macro_input!(input as syn::DeriveInput);
-    match response::expand(input) {
-        Ok(output) => proc_macro::TokenStream::from(output),
-        Err(err) => proc_macro::TokenStream::from(err.into_compile_error()),
-    }
+#[proc_macro_attribute]
+pub fn subsonic_response(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    response::expand(attr, item)
 }
 
 #[proc_macro_derive(SubsonicRequest, attributes(subsonic))]

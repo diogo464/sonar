@@ -6,7 +6,6 @@ use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getInternetRadioStations>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.9.0", path = "getInternetRadioStations")]
 pub struct GetInternetRadioStations;
 
 /// Adds a new internet radio station.
@@ -15,7 +14,6 @@ pub struct GetInternetRadioStations;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#createInternetRadioStation>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.16.0", path = "createInternetRadioStation")]
 pub struct CreateInternetRadioStation {
     /// The stream URL for the station.
     pub stream_url: String,
@@ -31,7 +29,6 @@ pub struct CreateInternetRadioStation {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#updateInternetRadioStation>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.16.0", path = "updateInternetRadioStation")]
 pub struct UpdateInternetRadioStation {
     /// The ID for the station.
     pub id: String,
@@ -49,7 +46,6 @@ pub struct UpdateInternetRadioStation {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deleteInternetRadioStation>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.16.0", path = "deleteInternetRadioStation")]
 pub struct DeleteInternetRadioStation {
     /// The ID for the station.
     pub id: String,

@@ -129,9 +129,6 @@ pub trait SubsonicRequest:
     + std::cmp::PartialEq
     + std::clone::Clone
 {
-    const PATH: &'static str;
-    const SINCE: Version;
-
     fn to_query(&self) -> String {
         query::to_query(self)
     }
@@ -163,14 +160,7 @@ pub struct Request<R: SubsonicRequest> {
     pub body: R,
 }
 
-impl<R> SubsonicRequest for Request<R>
-where
-    R: SubsonicRequest,
-{
-    const PATH: &'static str = R::PATH;
-
-    const SINCE: Version = R::SINCE;
-}
+impl<R> SubsonicRequest for Request<R> where R: SubsonicRequest {}
 
 impl ToQuery for Authentication {
     fn to_query_builder<B>(&self, builder: &mut B)

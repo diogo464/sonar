@@ -8,21 +8,22 @@ use axum::{
     Json, Router,
 };
 use tokio::net::TcpListener;
+use tokio_stream::StreamExt;
 
 use crate::{
-    common::Version,
+    common::{ByteStream, Version},
     request::{
         annotation::{Scrobble, SetRating, Star, Unstar},
         bookmark::{CreateBookmark, DeleteBookmark, GetBookmarks, GetPlayQueue, SavePlayQueue},
         browsing::{
             GetAlbum, GetAlbumInfo, GetAlbumInfo2, GetArtist, GetArtistInfo, GetArtistInfo2,
             GetArtists, GetGenres, GetIndexes, GetMusicDirectory, GetMusicFolders, GetSimilarSongs,
-            GetSimilarSongs2, GetTopSongs, GetVideoInfo, GetVideos,
+            GetSimilarSongs2, GetSong, GetTopSongs, GetVideoInfo, GetVideos,
         },
         chat::{AddChatMessage, GetChatMessages},
         jukebox::JukeboxControl,
         lists::{
-            GetAlbumList, GetAlbumList2, GetNowPlaying, GetRandomSongs, GetStarred, GetStarred2,
+            GetAlbumList, GetAlbumList2, GetNowPlaying, GetRandomSongs, GetStarred, GetStarred2, GetSongsByGenre,
         },
         playlists::{CreatePlaylist, DeletePlaylist, GetPlaylist, GetPlaylists, UpdatePlaylist},
         podcast::{
@@ -33,7 +34,7 @@ use crate::{
             CreateInternetRadioStation, DeleteInternetRadioStation, GetInternetRadioStations,
             UpdateInternetRadioStation,
         },
-        retrieval::{Download, GetAvatar, GetCaptions, GetCoverArt, GetLyrics, Hls},
+        retrieval::{Download, GetAvatar, GetCaptions, GetCoverArt, GetLyrics, Hls, Stream},
         scan::{GetScanStatus, StartScan},
         search::{Search, Search2, Search3},
         sharing::{CreateShare, DeleteShare, GetShares, UpdateShare},
@@ -43,7 +44,7 @@ use crate::{
     },
     response::{
         AlbumInfo, AlbumList, AlbumList2, AlbumWithSongsID3, Artist, ArtistInfo, ArtistInfo2,
-        ArtistsID3, Bookmarks, ChatMessages, Directory, Error, ErrorCode, Genres, Indexes,
+        ArtistsID3, Bookmarks, ChatMessages, Directory, Error, ErrorCode, Genres,
         InternetRadioStations, JukeboxControlResponse, License, Lyrics, MusicFolders,
         NewestPodcasts, NowPlaying, PlayQueue, PlaylistWithSongs, Playlists, Podcasts, Response,
         ResponseBody, ResponseObject, ScanStatus, SearchResult, SearchResult2, SearchResult3,
@@ -52,6 +53,29 @@ use crate::{
     },
 };
 
+pub mod prelude {
+    pub use super::Result;
+    pub use crate::common::*;
+    pub use crate::request::annotation::*;
+    pub use crate::request::bookmark::*;
+    pub use crate::request::browsing::*;
+    pub use crate::request::chat::*;
+    pub use crate::request::jukebox::*;
+    pub use crate::request::lists::*;
+    pub use crate::request::playlists::*;
+    pub use crate::request::podcast::*;
+    pub use crate::request::radio::*;
+    pub use crate::request::retrieval::*;
+    pub use crate::request::scan::*;
+    pub use crate::request::search::*;
+    pub use crate::request::sharing::*;
+    pub use crate::request::system::*;
+    pub use crate::request::user::*;
+    pub use crate::request::*;
+    pub use crate::response::*;
+    pub use crate::service::*;
+}
+
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl IntoResponse for Error {
@@ -59,8 +83,6 @@ impl IntoResponse for Error {
         (StatusCode::OK, self.to_string()).into_response()
     }
 }
-
-pub struct ByteStream;
 
 #[allow(unused)]
 #[async_trait::async_trait]
@@ -170,7 +192,7 @@ pub trait OpenSubsonicServer: Send + Sync + 'static {
     async fn get_genres(&self, request: Request<GetGenres>) -> Result<Genres> {
         unsupported()
     }
-    async fn get_indexes(&self, request: Request<GetIndexes>) -> Result<Indexes> {
+    async fn get_indexes(&self, request: Request<GetIndexes>) -> Result<ArtistsID3> {
         unsupported()
     }
     async fn get_internet_radio_stations(
@@ -231,10 +253,12 @@ pub trait OpenSubsonicServer: Send + Sync + 'static {
     ) -> Result<SimilarSongs2> {
         unsupported()
     }
-    // TODO
-    // async fn get_song(&self, request: Request<GetSong>) -> Result<Songs>{unsupported()}
-    // async fn get_songs_by_genre(&self, request:Request<GetSongsByGenre>) ->
-    // Result<Songs>{unsupported()}
+    async fn get_song(&self, request: Request<GetSong>) -> Result<Songs> {
+        unsupported()
+    }
+    async fn get_songs_by_genre(&self, request: Request<GetSongsByGenre>) -> Result<Songs> {
+        unsupported()
+    }
     async fn get_starreed(&self, request: Request<GetStarred>) -> Result<Starred> {
         unsupported()
     }
@@ -295,7 +319,9 @@ pub trait OpenSubsonicServer: Send + Sync + 'static {
     async fn start_scan(&self, request: Request<StartScan>) -> Result<ScanStatus> {
         unsupported()
     }
-    // TODO: stream
+    async fn stream(&self, request: Request<Stream>) -> Result<ByteStream> {
+        unsupported()
+    }
     async fn unstar(&self, request: Request<Unstar>) -> Result<()> {
         unsupported()
     }
@@ -344,14 +370,14 @@ where
     }
 }
 
-fn wrap_body(body: Option<ResponseBody>) -> Result<Json<ResponseObject>> {
+fn wrap_body(body: Option<ResponseBody>) -> ResponseObject {
     const SERVER_VERSION: &str = "1.0.1";
     const SERVER_TYPE: &str = "mads";
     let response = match body {
         Some(body) => Response::ok(Version::LATEST, body, SERVER_TYPE, SERVER_VERSION),
         None => Response::ok_empty(Version::LATEST, SERVER_TYPE, SERVER_VERSION),
     };
-    Ok(Json(ResponseObject::from(response)))
+    ResponseObject::from(response)
 }
 
 macro_rules! route {
@@ -370,8 +396,37 @@ macro_rules! route {
                 }
             };
             let response = wrap_body(None);
-            tracing::trace!("response: {:#?}", response);
-            response
+            tracing::trace!("response: {:#?}", serde_json::to_string_pretty(&response).unwrap());
+            Ok(Json(response))
+        }
+    };
+    ($name:ident, $req:ty, stream) => {
+        async fn $name(
+            State(state): State<Arc<dyn OpenSubsonicServer>>,
+            request: Request<$req>,
+        ) -> Result<bytes::Bytes> {
+            tracing::trace!("request: {:#?}", request);
+            #[allow(unused)]
+            let mut stream = match state.$name(request).await {
+                Ok(result) => result,
+                Err(err) => {
+                    tracing::warn!("error: {:#?}", err);
+                    return Err(err);
+                }
+            };
+            let mut buffer = bytes::BytesMut::new();
+            while let Some(chunk) = stream.next().await {
+                match chunk {
+                    Ok(chunk) => buffer.extend_from_slice(&chunk),
+                    Err(err) => {
+                        return Err(Error::with_message(
+                            ErrorCode::Generic,
+                            format!("stream error: {}", err),
+                        ))
+                    }
+                }
+            }
+            Ok(buffer.freeze())
         }
     };
     ($name:ident, $req:ty, $body:tt) => {
@@ -389,119 +444,129 @@ macro_rules! route {
                 }
             };
             let response = wrap_body(Some(ResponseBody::$body(result)));
-            tracing::trace!("response: {:#?}", response);
-            response
+            tracing::trace!("response: {}", serde_json::to_string_pretty(&response).unwrap());
+            Ok(Json(response))
         }
     };
-    ($router:expr => $name:ident, $req:ty) => {{
+    ($router:expr => $name:ident, $req:ty, $p:expr) => {{
         route!($name, $req);
-        route!(@ $router => $name, $req)
+        route!(@ $router => $name, $req, $p)
     }};
-    ($router:expr => $name:ident, $req:ty, $body:tt) => {{
+    ($router:expr => $name:ident, $req:ty, stream, $p:expr) => {{
+        route!($name, $req, stream);
+        route!(@ $router => $name, $req, $p)
+    }};
+    ($router:expr => $name:ident, $req:ty, $body:tt, $p:expr) => {{
         route!($name, $req, $body);
-        route!(@ $router => $name, $req)
+        route!(@ $router => $name, $req, $p)
     }};
-    (@ $router:expr => $handler:ident, $req:ty) => {{
+    (@ $router:expr => $handler:ident, $req:ty, $p:expr) => {{
         $router
-            .route(<$req as crate::request::SubsonicRequest>::PATH, get($handler))
-            .route(
-                &format!("{}.view", <$req as crate::request::SubsonicRequest>::PATH),
-                get($handler),
-            )
+            .route(&format!("/rest/{}", $p), get($handler))
+            .route(&format!("/rest/{}.view", $p), get($handler))
     }};
 }
 
 pub async fn serve(address: SocketAddr, server: impl OpenSubsonicServer) -> std::io::Result<()> {
     let mut router = Router::default();
-    router = route!(router => add_chat_message, AddChatMessage);
-    router = route!(router => change_password, ChangePassword);
-    router = route!(router => create_bookmark, CreateBookmark);
+    router = route!(router => add_chat_message, AddChatMessage, "addChatMessage");
+    router = route!(router => change_password, ChangePassword, "changePassword");
+    router = route!(router => create_bookmark, CreateBookmark, "createBookmark");
     router = route!(
         router =>
         create_internet_radio_station,
-        CreateInternetRadioStation
+        CreateInternetRadioStation,
+        "createInternetRadioStation"
     );
-    router = route!(router => create_playlist, CreatePlaylist, Playlist);
-    router = route!(router => create_podcast_channel, CreatePodcastChannel);
-    router = route!(router => create_share, CreateShare, Shares);
-    router = route!(router => create_user, CreateUser);
-    router = route!(router => delete_bookmark, DeleteBookmark);
+    router = route!(router => create_playlist, CreatePlaylist, Playlist, "createPlaylist");
+    router = route!(router => create_podcast_channel, CreatePodcastChannel, "createPodcastChannel");
+    router = route!(router => create_share, CreateShare, Shares, "createShare");
+    router = route!(router => create_user, CreateUser, "createUser");
+    router = route!(router => delete_bookmark, DeleteBookmark, "deleteBookmark");
     router = route!(
         router =>
         delete_internet_radio_station,
-        DeleteInternetRadioStation
+        DeleteInternetRadioStation,
+        "deleteInternetRadioStation"
     );
-    router = route!(router => delete_playlist, DeletePlaylist);
-    router = route!(router => delete_podcast_channel, DeletePodcastChannel);
-    router = route!(router => delete_podcast_episode, DeletePodcastEpisode);
-    router = route!(router => delete_share, DeleteShare);
-    router = route!(router => delete_user, DeleteUser);
-    router = route!(router => download, Download); // TODO: fix
+    router = route!(router => delete_playlist, DeletePlaylist, "deletePlaylist");
+    router = route!(router => delete_podcast_channel, DeletePodcastChannel, "deletePodcastChannel");
+    router = route!(router => delete_podcast_episode, DeletePodcastEpisode, "deletePodcastEpisode");
+    router = route!(router => delete_share, DeleteShare, "deteteShare");
+    router = route!(router => delete_user, DeleteUser, "deleteUser");
+    router = route!(router => download, Download, stream, "download");
     router = route!(
         router =>
         download_podcast_episode,
-        DownloadPodcastEpisode
-    ); // TODO: fix
-    router = route!(router => get_album, GetAlbum, Album);
-    router = route!(router => get_album_info, GetAlbumInfo, AlbumInfo);
-    router = route!(router => get_album_info2, GetAlbumInfo2, AlbumInfo);
-    router = route!(router => get_album_list, GetAlbumList, AlbumList);
-    router = route!(router => get_album_list2, GetAlbumList2, AlbumList2);
-    router = route!(router => get_artist, GetArtist, Artist);
-    router = route!(router => get_artist_info, GetArtistInfo, ArtistInfo);
-    router = route!(router => get_artist_info2, GetArtistInfo2, ArtistInfo2);
-    router = route!(router => get_artists, GetArtists, Artists);
-    router = route!(router => get_avatar, GetAvatar); // TODO: fix
-    router = route!(router => get_bookmarks, GetBookmarks, Bookmarks);
-    router = route!(router => get_captions, GetCaptions); // TODO: fix
-    router = route!(router => get_chat_message, GetChatMessages, ChatMessages);
-    router = route!(router => get_cover_art, GetCoverArt); // TODO: fix
-    router = route!(router => get_genres, GetGenres, Genres);
-    router = route!(router => get_indexes, GetIndexes, Indexes);
+        DownloadPodcastEpisode,
+        stream,
+        "downloadPodcastEpisode"
+    );
+    router = route!(router => get_album, GetAlbum, Album, "getAlbum");
+    router = route!(router => get_album_info, GetAlbumInfo, AlbumInfo, "getAlbumInfo");
+    router = route!(router => get_album_info2, GetAlbumInfo2, AlbumInfo, "getAlbumInfo2");
+    router = route!(router => get_album_list, GetAlbumList, AlbumList, "getAlbumList");
+    router = route!(router => get_album_list2, GetAlbumList2, AlbumList2, "getAlbumList2");
+    router = route!(router => get_artist, GetArtist, Artist, "getArtist");
+    router = route!(router => get_artist_info, GetArtistInfo, ArtistInfo, "getArtistInfo");
+    router = route!(router => get_artist_info2, GetArtistInfo2, ArtistInfo2, "getArtistInfo2");
+    router = route!(router => get_artists, GetArtists, Artists, "getArtists");
+    router = route!(router => get_avatar, GetAvatar, stream, "getAvatar");
+    router = route!(router => get_bookmarks, GetBookmarks, Bookmarks, "getBookmarks");
+    router = route!(router => get_captions, GetCaptions, stream, "getCaptions");
+    router = route!(router => get_chat_message, GetChatMessages, ChatMessages, "getChatMessages");
+    router = route!(router => get_cover_art, GetCoverArt, stream, "getCoverArt");
+    router = route!(router => get_genres, GetGenres, Genres, "getGenres");
+    router = route!(router => get_indexes, GetIndexes, Artists, "getIndexes");
     router = route!(router =>
         get_internet_radio_stations,
         GetInternetRadioStations,
-        InternetRadioStations
+        InternetRadioStations,
+        "getInternetRadioStations"
     );
-    router = route!(router => get_license, GetLicense, License);
-    router = route!(router => get_lyrics, GetLyrics, Lyrics);
-    router = route!(router => get_music_directory, GetMusicDirectory, Directory);
-    router = route!(router => get_music_folders, GetMusicFolders, MusicFolders);
-    router = route!(router => get_newest_podcasts, GetNewestPodcasts, NewestPodcasts);
-    router = route!(router => get_now_playing, GetNowPlaying, NowPlaying);
-    router = route!(router => get_playlist, GetPlaylist, Playlist);
-    router = route!(router => get_playlists, GetPlaylists, Playlists);
-    router = route!(router => get_play_queue, GetPlayQueue, PlayQueue);
-    router = route!(router => get_podcasts, GetPodcasts, Podcasts);
-    router = route!(router => get_random_songs, GetRandomSongs, RandomSongs);
-    router = route!(router => get_scan_status, GetScanStatus, ScanStatus);
-    router = route!(router => get_shares, GetShares, Shares);
-    router = route!(router => get_similar_songs, GetSimilarSongs, SimilarSongs);
-    router = route!(router => get_similar_songs2, GetSimilarSongs2, SimilarSongs2);
-    router = route!(router => get_starreed, GetStarred, Starred);
-    router = route!(router => get_starred2, GetStarred2, Starred2);
-    router = route!(router => get_top_songs, GetTopSongs, TopSongs);
-    router = route!(router => get_user, GetUser, User);
-    router = route!(router => get_users, GetUsers, Users);
-    router = route!(router => get_video_info, GetVideoInfo, VideoInfo);
-    router = route!(router => get_videos, GetVideos, Videos);
-    router = route!(router => hls, Hls); // TODO: fix
-    router = route!(router => jukebox_control, JukeboxControl, JukeboxControlResponse);
-    router = route!(router => ping, Ping);
-    router = route!(router => refresh_podcasts, RefreshPodcasts);
-    router = route!(router => save_play_queue, SavePlayQueue);
-    router = route!(router => scrobble, Scrobble);
-    router = route!(router => search, Search, SearchResult);
-    router = route!(router => search2, Search2, SearchResult2);
-    router = route!(router => search3, Search3, SearchResult3);
-    router = route!(router => set_rating, SetRating);
-    router = route!(router => star, Star);
-    router = route!(router => start_scan, StartScan, ScanStatus);
-    router = route!(router => unstar, Unstar);
-    router = route!(router => update_internet_radio_station, UpdateInternetRadioStation);
-    router = route!(router => update_playlist, UpdatePlaylist);
-    router = route!(router => update_share, UpdateShare);
-    router = route!(router => update_user, UpdateUser);
+    router = route!(router => get_license, GetLicense, License, "getLicense");
+    router = route!(router => get_lyrics, GetLyrics, Lyrics, "getLyrics");
+    router =
+        route!(router => get_music_directory, GetMusicDirectory, Directory, "getMusicDirectory");
+    router = route!(router => get_music_folders, GetMusicFolders, MusicFolders, "getMusicFolders");
+    router = route!(router => get_newest_podcasts, GetNewestPodcasts, NewestPodcasts, "getNewestPodcasts");
+    router = route!(router => get_now_playing, GetNowPlaying, NowPlaying, "getNowPlaying");
+    router = route!(router => get_playlist, GetPlaylist, Playlist, "getPlaylist");
+    router = route!(router => get_playlists, GetPlaylists, Playlists, "getPlaylists");
+    router = route!(router => get_play_queue, GetPlayQueue, PlayQueue, "getPlayQueue");
+    router = route!(router => get_podcasts, GetPodcasts, Podcasts, "getPodcasts");
+    router = route!(router => get_random_songs, GetRandomSongs, RandomSongs, "getRandomSongs");
+    router = route!(router => get_scan_status, GetScanStatus, ScanStatus, "getScanStatus");
+    router = route!(router => get_shares, GetShares, Shares, "getShares");
+    router = route!(router => get_similar_songs, GetSimilarSongs, SimilarSongs, "getSimilarSongs");
+    router =
+        route!(router => get_similar_songs2, GetSimilarSongs2, SimilarSongs2, "getSimilarSongs2");
+    router = route!(router => get_starreed, GetStarred, Starred, "getStarred");
+    router = route!(router => get_starred2, GetStarred2, Starred2, "getStarred2");
+    router = route!(router => get_top_songs, GetTopSongs, TopSongs, "getTopSongs");
+    router = route!(router => get_user, GetUser, User, "getUser");
+    router = route!(router => get_users, GetUsers, Users, "getUsers");
+    router = route!(router => get_video_info, GetVideoInfo, VideoInfo, "getVideoInfo");
+    router = route!(router => get_videos, GetVideos, Videos, "getVideos");
+    router = route!(router => hls, Hls, stream, "hls");
+    router =
+        route!(router => jukebox_control, JukeboxControl, JukeboxControlResponse, "jukeboxControl");
+    router = route!(router => ping, Ping, "ping");
+    router = route!(router => refresh_podcasts, RefreshPodcasts, "refreshPodcasts");
+    router = route!(router => save_play_queue, SavePlayQueue, "savePlayQueue");
+    router = route!(router => scrobble, Scrobble, "scrobble");
+    router = route!(router => search, Search, SearchResult, "search");
+    router = route!(router => search2, Search2, SearchResult2, "search2");
+    router = route!(router => search3, Search3, SearchResult3, "search3");
+    router = route!(router => set_rating, SetRating, "setRating");
+    router = route!(router => star, Star, "star");
+    router = route!(router => start_scan, StartScan, ScanStatus, "startScan");
+    router = route!(router => stream, Stream, stream, "stream");
+    router = route!(router => unstar, Unstar, "unstar");
+    router = route!(router => update_internet_radio_station, UpdateInternetRadioStation, "updateInternetRadioStation");
+    router = route!(router => update_playlist, UpdatePlaylist, "updatePlaylist");
+    router = route!(router => update_share, UpdateShare, "updateShare");
+    router = route!(router => update_user, UpdateUser, "updateUser");
 
     router = router.layer(tower_http::trace::TraceLayer::new_for_http());
     let router = router.with_state(Arc::new(server));

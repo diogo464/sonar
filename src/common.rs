@@ -4,8 +4,12 @@ use std::{str::FromStr, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use time::{OffsetDateTime, PrimitiveDateTime};
+use tokio_stream::Stream;
 
 use crate::{impl_from_query_value_for_parse, impl_to_query_value_for_display};
+
+pub type ByteStream =
+    Box<dyn Stream<Item = std::io::Result<bytes::Bytes>> + Unpin + Send + 'static>;
 
 #[derive(Debug)]
 pub struct InvalidFormat;
@@ -701,6 +705,11 @@ impl std::hash::Hash for AverageRating {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.to_bits().hash(state)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct RecordLabel {
+    pub name: String,
 }
 
 #[derive(Debug)]

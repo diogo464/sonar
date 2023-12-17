@@ -8,7 +8,6 @@ use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getPodcasts>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.6.0", path = "getPodcasts")]
 pub struct GetPodcasts {
     /// Since 1.9.0
     /// Whether to include Podcast episodes in the returned result.
@@ -23,7 +22,6 @@ pub struct GetPodcasts {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getNewestPodcasts>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.13.0", path = "getNewestPodcasts")]
 pub struct GetNewestPodcasts {
     /// The maximum number of episodes to return.
     pub count: Option<u32>,
@@ -35,7 +33,6 @@ pub struct GetNewestPodcasts {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#refreshPodcasts>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.9.0", path = "refreshPodcasts")]
 pub struct RefreshPodcasts;
 
 /// Adds a new Podcast channel.
@@ -44,7 +41,6 @@ pub struct RefreshPodcasts;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#createPodcastChannel>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.9.0", path = "createPodcastChannel")]
 pub struct CreatePodcastChannel {
     /// The URL of the Podcast to add.
     pub url: String,
@@ -56,7 +52,6 @@ pub struct CreatePodcastChannel {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deletePodcastChannel>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.9.0", path = "deletePodcastChannel")]
 pub struct DeletePodcastChannel {
     /// The ID of the Podcast channel to delete.
     pub id: String,
@@ -68,7 +63,6 @@ pub struct DeletePodcastChannel {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deletePodcastEpisode>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.9.0", path = "deletePodcastEpisode")]
 pub struct DeletePodcastEpisode {
     /// The ID of the Podcast episode to delete.
     pub id: String,
@@ -80,7 +74,6 @@ pub struct DeletePodcastEpisode {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#downloadPodcastEpisode>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.9.0", path = "downloadPodcastEpisode")]
 pub struct DownloadPodcastEpisode {
     /// The ID of the Podcast episode to download.
     pub id: String,

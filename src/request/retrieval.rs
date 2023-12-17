@@ -10,7 +10,6 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.0.0", path = "stream")]
 pub struct Stream {
     /// A string which uniquely identifies the file to stream. Obtained by calls to [`GetMusicDirectory`].
     pub id: String,
@@ -44,7 +43,6 @@ pub struct Stream {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#download>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.0.0", path = "download")]
 pub struct Download {
     /// A string which uniquely identifies the file to download.
     /// Obtained by calls to [`GetMusicDirectory`].
@@ -59,7 +57,6 @@ pub struct Download {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#hls>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "hls")]
 pub struct Hls {
     /// A string which uniquely identifies the file to stream. Obtained by calls to [`GetMusicDirectory`].
     pub id: String,
@@ -78,7 +75,6 @@ pub struct Hls {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getCaptions>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.14.0", path = "getCaptions")]
 pub struct GetCaptions {
     /// The ID of the video.
     pub id: String,
@@ -91,7 +87,6 @@ pub struct GetCaptions {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getCoverArt>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.0.0", path = "getCoverArt")]
 pub struct GetCoverArt {
     /// The ID of a song, album or artist.
     pub id: String,
@@ -104,7 +99,6 @@ pub struct GetCoverArt {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getLyrics>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.2.0", path = "getLyrics")]
 pub struct GetLyrics {
     /// The artist name.
     pub artist: Option<String>,
@@ -117,7 +111,6 @@ pub struct GetLyrics {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getAvatar>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "getAvatar")]
 pub struct GetAvatar {
     /// The user in question.
     pub username: String,

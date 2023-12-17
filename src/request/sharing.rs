@@ -8,7 +8,6 @@ use crate::common::Milliseconds;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getShares>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.6.0", path = "getShares")]
 pub struct GetShares;
 
 /// Creates a public URL that can be used by anyone to stream music or video from the Subsonic server.
@@ -18,7 +17,6 @@ pub struct GetShares;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#createShare>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.6.0", path = "createShare")]
 pub struct CreateShare {
     /// ID of a song, album or video to share. Use one id parameter for each entry to share
     #[serde(default)]
@@ -34,7 +32,6 @@ pub struct CreateShare {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#updateShare>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.6.0", path = "updateShare")]
 pub struct UpdateShare {
     /// ID of the share to update.
     pub id: String,
@@ -49,7 +46,6 @@ pub struct UpdateShare {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deleteShare>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.6.0", path = "deleteShare")]
 pub struct DeleteShare {
     /// ID of the share to delete.
     pub id: String,

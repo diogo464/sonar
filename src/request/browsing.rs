@@ -8,7 +8,6 @@ use crate::common::Milliseconds;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getMusicFolders>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.0.0", path = "getMusicFolders")]
 pub struct GetMusicFolders;
 
 /// Returns an indexed structure of all artists.
@@ -16,7 +15,6 @@ pub struct GetMusicFolders;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getIndexes>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.0.0", path = "getIndexes")]
 pub struct GetIndexes {
     /// If specified, only return artists in the music folder with the given ID.
     /// See [`GetMusicFolders`].
@@ -30,7 +28,6 @@ pub struct GetIndexes {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getMusicDirectory>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.0.0", path = "getMusicDirectory")]
 pub struct GetMusicDirectory {
     /// A string which uniquely identifies the music folder. Obtained by calls to getIndexes or getMusicDirectory.
     pub id: String,
@@ -41,7 +38,6 @@ pub struct GetMusicDirectory {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getGenres>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.9.0", path = "getGenres")]
 pub struct GetGenres;
 
 /// Represents the parameters for the `getArtists` request.
@@ -49,7 +45,6 @@ pub struct GetGenres;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getArtists>.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "getArtists")]
 pub struct GetArtists {
     /// If specified, only return artists in the music folder with the given ID.
     /// See [`GetMusicFolders`].
@@ -61,7 +56,6 @@ pub struct GetArtists {
 /// See: <http://www.subsonic.org/pages/api.jsp#getArtist>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "getArtist")]
 pub struct GetArtist {
     /// The artist ID.
     pub id: String,
@@ -72,7 +66,6 @@ pub struct GetArtist {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getAlbum>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "getAlbum")]
 pub struct GetAlbum {
     /// The album ID.
     pub id: String,
@@ -83,7 +76,6 @@ pub struct GetAlbum {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getSong>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "getSong")]
 pub struct GetSong {
     /// The ID of the song to retrieve.
     pub id: String,
@@ -94,7 +86,6 @@ pub struct GetSong {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getVideos>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "getVideos")]
 pub struct GetVideos;
 
 /// Returns details for a video, including information about available audio tracks, subtitles (captions) and conversions.
@@ -102,7 +93,6 @@ pub struct GetVideos;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getVideoInfo>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.14.0", path = "getVideoInfo")]
 pub struct GetVideoInfo {
     pub id: String,
 }
@@ -112,7 +102,6 @@ pub struct GetVideoInfo {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getArtistInfo>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.11.0", path = "getArtistInfo")]
 pub struct GetArtistInfo {
     /// The artist, album or song ID.
     pub id: String,
@@ -132,7 +121,6 @@ impl GetArtistInfo {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getArtistInfo2>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.11.0", path = "getArtistInfo2")]
 pub struct GetArtistInfo2 {
     /// The artist, album or song ID.
     pub id: String,
@@ -152,7 +140,6 @@ impl GetArtistInfo2 {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getAlbumInfo>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.14.0", path = "getAlbumInfo")]
 pub struct GetAlbumInfo {
     /// The album or song ID.
     pub id: String,
@@ -163,10 +150,11 @@ pub struct GetAlbumInfo {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getAlbumInfo2>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.14.0", path = "getAlbumInfo2")]
 pub struct GetAlbumInfo2 {
     /// The album or song ID.
     pub id: String,
+    // TODO: why  does symfonium send this field, its not in the spec
+    pub count:Option<u32>,
 }
 
 /// Returns a random collection of songs from the given artist and similar artists, using data from last.fm. Typically used for artist radio features.
@@ -174,7 +162,6 @@ pub struct GetAlbumInfo2 {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getSimilarSongs>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.11.0", path = "getSimilarSongs")]
 pub struct GetSimilarSongs {
     /// The artist, album or song ID.
     pub id: String,
@@ -191,7 +178,6 @@ impl GetSimilarSongs {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getSimilarSongs2>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.11.0", path = "getSimilarSongs2")]
 pub struct GetSimilarSongs2 {
     /// The artist, album or song ID.
     pub id: String,
@@ -208,7 +194,6 @@ impl GetSimilarSongs2 {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getTopSongs>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.13.0", path = "getTopSongs")]
 pub struct GetTopSongs {
     /// The artist name.
     pub id: String,

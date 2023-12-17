@@ -6,7 +6,6 @@ use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getPlaylists>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.0.0", path = "getPlaylists")]
 pub struct GetPlaylists {
     /// Since 1.8.0
     /// If specified, return playlists for this user rather than for the authenticated user. The authenticated user must have admin role if this parameter is used.
@@ -18,7 +17,6 @@ pub struct GetPlaylists {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getPlaylist>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.0.0", path = "getPlaylist")]
 pub struct GetPlaylist {
     /// ID of the playlist to return, as obtained by [`GetPlaylists`].
     pub id: String,
@@ -29,7 +27,6 @@ pub struct GetPlaylist {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#createPlaylist>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.2.0", path = "createPlaylist")]
 pub struct CreatePlaylist {
     /// The playlist ID.
     /// Required if updating.
@@ -47,7 +44,6 @@ pub struct CreatePlaylist {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#updatePlaylist>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "updatePlaylist")]
 pub struct UpdatePlaylist {
     /// The playlist ID.
     pub playlist_id: String,
@@ -70,7 +66,6 @@ pub struct UpdatePlaylist {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deletePlaylist>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.2.0", path = "deletePlaylist")]
 pub struct DeletePlaylist {
     /// ID of the playlist to delete, as obtained by [`GetPlaylists`].
     pub id: String,

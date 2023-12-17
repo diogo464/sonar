@@ -45,7 +45,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::common::{
-    AverageRating, DateTime, MediaType, Milliseconds, Seconds, UserRating, Version,
+    AverageRating, DateTime, MediaType, Milliseconds, Seconds, UserRating, Version, RecordLabel,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -139,9 +139,9 @@ pub enum ResponseBody {
     Indexes(Indexes),
     Directory(Directory),
     Genres(Genres),
-    Artist(Artist),
     #[serde(rename = "indexes")]
     Artists(ArtistsID3),
+    Artist(Artist),
     ArtistWithAlbums(ArtistWithAlbumsID3),
     Album(AlbumWithSongsID3),
     Song(Child),
@@ -284,28 +284,45 @@ pub struct ArtistWithAlbumsID3 {
     pub album: Vec<AlbumID3>,
 }
 
+/// An album from ID3 tags.
+/// https://opensubsonic.netlify.app/docs/responses/albumid3/
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AlbumID3 {
+    /// The id of the album
     pub id: String,
+    /// The album name.
     pub name: String,
+    /// Artist name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artist: Option<String>,
+    /// The id of the artist
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artist_id: Option<String>,
+    /// A covertArt id.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_art: Option<String>,
+    /// Number of songs
     pub song_count: u32,
-    pub duration: u32,
-    pub play_count: Option<u64>,
+    /// Total duration of the album
+    pub duration: Milliseconds,
+    /// Number of play of the album
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created: Option<DateTime>,
+    pub play_count: Option<u64>,
+    /// Date the album was added. [ISO 8601]
+    pub created: DateTime,
+    /// Date the album was starred. [ISO 8601]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub starred: Option<DateTime>,
+    /// The album year
     #[serde(skip_serializing_if = "Option::is_none")]
     pub year: Option<u32>,
+    /// The album genre
     #[serde(skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_rating: Option<UserRating>,
+    pub record_labels: Vec<RecordLabel>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
@@ -490,14 +507,19 @@ pub struct Playlists {
 pub struct Playlist {
     pub id: String,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub public: Option<bool>,
     pub song_count: u32,
     pub duration: Seconds,
     pub created: DateTime,
     pub changed: DateTime,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_art: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub allowed_user: Vec<String>,
 }
 
@@ -637,7 +659,7 @@ pub struct InternetRadioStation {
     pub home_page_url: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Bookmarks {
     pub bookmark: Vec<Bookmark>,
@@ -699,23 +721,23 @@ pub struct Starred {
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AlbumInfo {
-    pub notes: Vec<String>,
-    pub music_brainz_id: Vec<String>,
-    pub last_fm_url: Vec<String>,
-    pub small_image_url: Vec<String>,
-    pub medium_image_url: Vec<String>,
-    pub large_image_url: Vec<String>,
+    pub notes: String,
+    pub music_brainz_id: String,
+    pub last_fm_url: String,
+    pub small_image_url: String,
+    pub medium_image_url: String,
+    pub large_image_url: String,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistInfoBase {
-    pub biography: Vec<String>,
-    pub music_brainz_id: Vec<String>,
-    pub last_fm_url: Vec<String>,
-    pub small_image_url: Vec<String>,
-    pub medium_image_url: Vec<String>,
-    pub large_image_url: Vec<String>,
+    pub biography: String,
+    pub music_brainz_id: String,
+    pub last_fm_url: String,
+    pub small_image_url: String,
+    pub medium_image_url: String,
+    pub large_image_url: String,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
@@ -726,7 +748,7 @@ pub struct ArtistInfo {
     pub similar_artist: Vec<Artist>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistInfo2 {
     #[serde(flatten)]

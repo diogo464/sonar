@@ -9,7 +9,6 @@ use crate::common::AudioBitrate;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getUser>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.3.0", path = "getUser")]
 pub struct GetUser {
     /// The name of the user to retrieve.
     /// You can only retrieve your own user unless you have admin privileges.
@@ -22,7 +21,6 @@ pub struct GetUser {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getUsers>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.8.0", path = "getUsers")]
 pub struct GetUsers;
 
 /// Creates a new Subsonic user, using the following parameters.
@@ -30,7 +28,6 @@ pub struct GetUsers;
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#createUser>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.1.0", path = "createUser")]
 pub struct CreateUser {
     /// The name of the new user.
     pub username: String,
@@ -77,7 +74,6 @@ pub struct CreateUser {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#updateUser>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.10.1", path = "updateUser")]
 pub struct UpdateUser {
     /// The name of the user.
     pub username: String,
@@ -126,7 +122,6 @@ pub struct UpdateUser {
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deleteUser>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.3.0", path = "deleteUser")]
 pub struct DeleteUser {
     /// The name of the user to delete.
     pub username: String,
@@ -136,7 +131,6 @@ pub struct DeleteUser {
 /// You can only change your own password unless you have admin privileges.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
 #[serde(rename_all = "camelCase")]
-#[subsonic(since = "1.1.0", path = "changePassword")]
 pub struct ChangePassword {
     /// The name of the user which should change its password.
     pub username: String,
