@@ -178,6 +178,12 @@ impl From<u64> for Milliseconds {
     }
 }
 
+impl From<Milliseconds> for u64 {
+    fn from(milliseconds: Milliseconds) -> Self {
+        milliseconds.0
+    }
+}
+
 impl From<Milliseconds> for Duration {
     fn from(milliseconds: Milliseconds) -> Self {
         milliseconds.into_duration()
@@ -230,6 +236,12 @@ impl From<u64> for Seconds {
 impl From<Seconds> for Duration {
     fn from(seconds: Seconds) -> Self {
         seconds.into_duration()
+    }
+}
+
+impl From<Duration> for Seconds {
+    fn from(duration: Duration) -> Self {
+        Self::new(duration.as_secs())
     }
 }
 
