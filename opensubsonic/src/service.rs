@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::Cow, future::Future, pin::Pin, sync::Arc};
 
 use axum::{
     extract::{FromRequestParts, State},
@@ -80,11 +80,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
-        (
-            StatusCode::OK,
-            serde_json::to_string(&self).unwrap_or_default(),
-        )
-            .into_response()
+        (StatusCode::OK, self.to_string()).into_response()
     }
 }
 
@@ -343,6 +339,60 @@ pub trait OpenSubsonicServer: Send + Sync + 'static {
     }
     async fn update_user(&self, request: Request<UpdateUser>) -> Result<()> {
         unsupported()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OpenSubsonicService<S> {
+    server_version: Cow<'static, str>,
+    server_type: Cow<'static, str>,
+    server: S,
+}
+
+impl<S> OpenSubsonicService<S> {
+    pub fn new(
+        server_version: impl Into<Cow<'static, str>>,
+        server_type: impl Into<Cow<'static, str>>,
+        server: S,
+    ) -> Self {
+        Self {
+            server_version: server_version.into(),
+            server_type: server_type.into(),
+            server,
+        }
+    }
+}
+
+impl<S, B> tower::Service<http::Request<B>> for OpenSubsonicService<S>
+where
+    S: OpenSubsonicServer + Send + Sync + 'static,
+{
+    type Response = http::Response<Vec<u8>>;
+
+    type Error = std::convert::Infallible;
+
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync + 'static>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::prelude::v1::Result<(), Self::Error>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, req: http::Request<B>) -> Self::Future {
+        let path = req.uri().path();
+        let query = req.uri().query().unwrap_or_default();
+
+        match path {
+            "/rest/addChatMessage" | "/rest/addChatMessage.ping" => {
+                
+            }
+            _ => {}
+        }
+
+        todo!()
     }
 }
 

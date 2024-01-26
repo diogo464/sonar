@@ -546,6 +546,7 @@ dependencies = [
  "async-trait",
  "axum",
  "bytes",
+ "http",
  "lofty",
  "opensubsonic-macro",
  "percent-encoding",
@@ -554,7 +555,9 @@ dependencies = [
  "time",
  "tokio",
  "tokio-stream",
+ "tower",
  "tower-http",
+ "tower-service",
  "tracing",
  "tracing-subscriber",
 ]
