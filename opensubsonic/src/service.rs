@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
     extract::{FromRequestParts, State},
@@ -7,7 +7,6 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use tokio::net::TcpListener;
 use tokio_stream::StreamExt;
 
 use crate::{
@@ -81,7 +80,11 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
-        (StatusCode::OK, self.to_string()).into_response()
+        (
+            StatusCode::OK,
+            serde_json::to_string(&self).unwrap_or_default(),
+        )
+            .into_response()
     }
 }
 

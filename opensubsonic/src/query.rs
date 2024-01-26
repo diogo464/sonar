@@ -357,7 +357,14 @@ where
             return Err(QueryValueParseError::duplicate_value());
         }
         let value = value.ok_or_else(QueryValueParseError::empty_value)?;
-        let value = value.parse().map_err(QueryValueParseError::message)?;
+        let value = if value.contains('+') {
+            value
+                .replace('+', " ")
+                .parse()
+                .map_err(QueryValueParseError::message)?
+        } else {
+            value.parse().map_err(QueryValueParseError::message)?
+        };
         self.value = Some(value);
         Ok(())
     }
@@ -613,5 +620,19 @@ mod tests {
         };
         let query = to_query(&test);
         assert_eq!(query, "field_d=3&field_e=4");
+    }
+
+    #[test]
+    fn test_with_spaces() {
+        let query = "field_d=3&field_e=4%205";
+        let query_plus = "field_d=3&field_e=4+5";
+
+        let test: Nested = from_query(query).unwrap();
+        assert_eq!(test.field_d, 3);
+        assert_eq!(test.field_e, Some("4 5".to_string()));
+
+        let test: Nested = from_query(query_plus).unwrap();
+        assert_eq!(test.field_d, 3);
+        assert_eq!(test.field_e, Some("4 5".to_string()));
     }
 }

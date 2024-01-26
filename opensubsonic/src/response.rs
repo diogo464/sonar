@@ -4,7 +4,7 @@
 //! Building a response:
 //! ```
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     use subsonic_types::{common::Version, response::{Response, ResponseBody, License}};
+//!     use opensubsonic::{common::Version, response::{Response, ResponseBody, License}};
 //!     let response = Response::ok(
 //!         Version::V1_16_1,
 //!         ResponseBody::License(License {
@@ -24,7 +24,7 @@
 //! Deserialize a response from json
 //! ```
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     use subsonic_types::{common::Version, response::{Response, ResponseBody, License}};
+//!     use opensubsonic::{common::Version, response::{Response, ResponseBody, License}};
 //!     let response = Response::ok(
 //!         Version::V1_16_1,
 //!         ResponseBody::License(License {

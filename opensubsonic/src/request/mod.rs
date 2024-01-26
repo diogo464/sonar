@@ -5,7 +5,7 @@
 //!
 //! ```rust
 //! # fn main() {
-//!     use subsonic_types::{
+//!     use opensubsonic::{
 //!         common::{Version, Format},
 //!         request::{Request, SubsonicRequest, browsing::GetSong, Authentication}
 //!     };
@@ -29,7 +29,7 @@
 //! Parsing a request:
 //! ```rust
 //! # fn main() {
-//!     use subsonic_types::{
+//!     use opensubsonic::{
 //!         common::{Version, Format},
 //!         request::{Request, SubsonicRequest, browsing::GetSong, Authentication}
 //!     };
@@ -105,12 +105,12 @@ pub mod scan;
 /// Trait for Subsonic API requests
 /// ```rust
 /// # fn main() {
-///     use subsonic_types::request::SubsonicRequest;
+///     use opensubsonic::request::SubsonicRequest;
 ///
-///     assert_eq!("/rest/getArtistInfo", subsonic_types::request::browsing::GetArtistInfo::PATH);
-///     assert_eq!(subsonic_types::common::Version::V1_11_0, subsonic_types::request::browsing::GetArtistInfo::SINCE);
+///     assert_eq!("/rest/getArtistInfo", opensubsonic::request::browsing::GetArtistInfo::PATH);
+///     assert_eq!(opensubsonic::common::Version::V1_11_0, opensubsonic::request::browsing::GetArtistInfo::SINCE);
 ///
-///     let request = subsonic_types::request::browsing::GetArtistInfo {
+///     let request = opensubsonic::request::browsing::GetArtistInfo {
 ///         id: "123".into(),
 ///         count: Some(10),
 ///         include_not_present: Some(true),
@@ -118,7 +118,7 @@ pub mod scan;
 ///     let query = request.to_query();
 ///     assert_eq!("id=123&count=10&includeNotPresent", query);
 ///     
-///     let parsed = subsonic_types::request::browsing::GetArtistInfo::from_query(&query).unwrap();
+///     let parsed = opensubsonic::request::browsing::GetArtistInfo::from_query(&query).unwrap();
 ///     assert_eq!(request, parsed);
 /// # }
 /// ```

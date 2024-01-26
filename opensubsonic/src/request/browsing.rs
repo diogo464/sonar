@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
+use serde::{Deserialize, Serialize};
 
 use crate::common::Milliseconds;
 
@@ -154,7 +154,7 @@ pub struct GetAlbumInfo2 {
     /// The album or song ID.
     pub id: String,
     // TODO: why  does symfonium send this field, its not in the spec
-    pub count:Option<u32>,
+    pub count: Option<u32>,
 }
 
 /// Returns a random collection of songs from the given artist and similar artists, using data from last.fm. Typically used for artist radio features.
@@ -350,6 +350,7 @@ mod tests {
     fn test_get_album_info_2() {
         let request = GetAlbumInfo2 {
             id: "123".to_string(),
+            count: None,
         };
         let query = test_request_encode(&request);
         assert_eq!(query, "id=123");
