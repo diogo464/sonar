@@ -7,6 +7,7 @@ use crate::common::Milliseconds;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getMusicFolders>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetMusicFolders;
 
@@ -14,6 +15,7 @@ pub struct GetMusicFolders;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getIndexes>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetIndexes {
     /// If specified, only return artists in the music folder with the given ID.
@@ -27,6 +29,7 @@ pub struct GetIndexes {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getMusicDirectory>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetMusicDirectory {
     /// A string which uniquely identifies the music folder. Obtained by calls to getIndexes or getMusicDirectory.
@@ -37,6 +40,7 @@ pub struct GetMusicDirectory {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getGenres>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetGenres;
 
@@ -44,6 +48,7 @@ pub struct GetGenres;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getArtists>.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetArtists {
     /// If specified, only return artists in the music folder with the given ID.
@@ -55,6 +60,7 @@ pub struct GetArtists {
 ///
 /// See: <http://www.subsonic.org/pages/api.jsp#getArtist>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetArtist {
     /// The artist ID.
@@ -65,6 +71,7 @@ pub struct GetArtist {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getAlbum>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetAlbum {
     /// The album ID.
@@ -75,6 +82,7 @@ pub struct GetAlbum {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getSong>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetSong {
     /// The ID of the song to retrieve.
@@ -85,6 +93,7 @@ pub struct GetSong {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getVideos>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetVideos;
 
@@ -92,6 +101,7 @@ pub struct GetVideos;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getVideoInfo>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetVideoInfo {
     pub id: String,
@@ -101,6 +111,7 @@ pub struct GetVideoInfo {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getArtistInfo>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetArtistInfo {
     /// The artist, album or song ID.
@@ -120,6 +131,7 @@ impl GetArtistInfo {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getArtistInfo2>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetArtistInfo2 {
     /// The artist, album or song ID.
@@ -139,6 +151,7 @@ impl GetArtistInfo2 {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getAlbumInfo>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetAlbumInfo {
     /// The album or song ID.
@@ -149,6 +162,7 @@ pub struct GetAlbumInfo {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getAlbumInfo2>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetAlbumInfo2 {
     /// The album or song ID.
@@ -161,6 +175,7 @@ pub struct GetAlbumInfo2 {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getSimilarSongs>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetSimilarSongs {
     /// The artist, album or song ID.
@@ -177,6 +192,7 @@ impl GetSimilarSongs {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getSimilarSongs2>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetSimilarSongs2 {
     /// The artist, album or song ID.
@@ -193,6 +209,7 @@ impl GetSimilarSongs2 {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getTopSongs>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetTopSongs {
     /// The artist name.

@@ -885,6 +885,7 @@ dependencies = [
  "async-trait",
  "axum",
  "bytes",
+ "clap",
  "http 1.0.0",
  "http-body 1.0.0",
  "http-body-util",
@@ -908,6 +909,7 @@ name = "opensubsonic-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "opensubsonic",
  "reqwest",
  "tokio",
  "tracing",

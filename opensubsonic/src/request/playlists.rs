@@ -5,6 +5,7 @@ use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getPlaylists>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetPlaylists {
     /// Since 1.8.0
@@ -16,6 +17,7 @@ pub struct GetPlaylists {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getPlaylist>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetPlaylist {
     /// ID of the playlist to return, as obtained by [`GetPlaylists`].
@@ -26,6 +28,7 @@ pub struct GetPlaylist {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#createPlaylist>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct CreatePlaylist {
     /// The playlist ID.
@@ -43,6 +46,7 @@ pub struct CreatePlaylist {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#updatePlaylist>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePlaylist {
     /// The playlist ID.
@@ -65,6 +69,7 @@ pub struct UpdatePlaylist {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deletePlaylist>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct DeletePlaylist {
     /// ID of the playlist to delete, as obtained by [`GetPlaylists`].

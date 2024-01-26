@@ -7,6 +7,7 @@ use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getPodcasts>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetPodcasts {
     /// Since 1.9.0
@@ -21,6 +22,7 @@ pub struct GetPodcasts {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getNewestPodcasts>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetNewestPodcasts {
     /// The maximum number of episodes to return.
@@ -32,6 +34,7 @@ pub struct GetNewestPodcasts {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#refreshPodcasts>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct RefreshPodcasts;
 
@@ -40,6 +43,7 @@ pub struct RefreshPodcasts;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#createPodcastChannel>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct CreatePodcastChannel {
     /// The URL of the Podcast to add.
@@ -51,6 +55,7 @@ pub struct CreatePodcastChannel {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deletePodcastChannel>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct DeletePodcastChannel {
     /// The ID of the Podcast channel to delete.
@@ -62,6 +67,7 @@ pub struct DeletePodcastChannel {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deletePodcastEpisode>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct DeletePodcastEpisode {
     /// The ID of the Podcast episode to delete.
@@ -73,6 +79,7 @@ pub struct DeletePodcastEpisode {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#downloadPodcastEpisode>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadPodcastEpisode {
     /// The ID of the Podcast episode to download.

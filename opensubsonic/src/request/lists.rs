@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
+use serde::{Deserialize, Serialize};
 
 #[allow(unused)]
 use crate::request::browsing::{GetGenres, GetMusicFolders};
@@ -103,9 +103,21 @@ impl<'de> serde::Deserialize<'de> for ListType {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getAlbumList>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetAlbumList {
-    /// See [`ListType`].
+    /// The list order to use on a given list operation.
+    /// Can be one of the following:
+    /// * `Random`
+    /// * `Newest`
+    /// * `Highest`
+    /// * `Frequent`
+    /// * `Recent`
+    /// * `AlphabeticalByName` (since 1.8.0)
+    /// * `AlphabeticalByArtist` (since 1.8.0)
+    /// * `Starred` (since 1.8.0)
+    /// * `ByYear` (since 1.10.1)
+    /// * `ByGenre` (since 1.10.1)
     #[serde(rename = "type")]
     #[query(rename = "type")]
     pub list_type: ListType,
@@ -131,9 +143,21 @@ pub struct GetAlbumList {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getAlbumList2>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetAlbumList2 {
-    /// See [`ListType`].
+    /// The list order to use on a given list operation.
+    /// Can be one of the following:
+    /// * `Random`
+    /// * `Newest`
+    /// * `Highest`
+    /// * `Frequent`
+    /// * `Recent`
+    /// * `AlphabeticalByName` (since 1.8.0)
+    /// * `AlphabeticalByArtist` (since 1.8.0)
+    /// * `Starred` (since 1.8.0)
+    /// * `ByYear` (since 1.10.1)
+    /// * `ByGenre` (since 1.10.1)
     #[serde(rename = "type")]
     #[query(rename = "type")]
     pub list_type: ListType,
@@ -159,6 +183,7 @@ pub struct GetAlbumList2 {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getRandomSongs>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetRandomSongs {
     /// The maximum number of songs to return. Max 500.
@@ -177,6 +202,7 @@ pub struct GetRandomSongs {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getSongsByGenre>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetSongsByGenre {
     /// The genre, as returned by [`GetGenres`].
@@ -194,6 +220,7 @@ pub struct GetSongsByGenre {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getNowPlaying>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetNowPlaying;
 
@@ -201,6 +228,7 @@ pub struct GetNowPlaying;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getStarred>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetStarred {
     /// Since 1.12.0
@@ -212,6 +240,7 @@ pub struct GetStarred {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getStarred2>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetStarred2 {
     /// Since 1.12.0

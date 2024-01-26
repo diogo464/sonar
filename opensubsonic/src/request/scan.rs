@@ -5,6 +5,7 @@ use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getScanStatus>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetScanStatus;
 
@@ -12,5 +13,6 @@ pub struct GetScanStatus;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#startScan>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct StartScan;

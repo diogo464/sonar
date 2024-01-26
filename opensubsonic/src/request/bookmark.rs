@@ -7,6 +7,7 @@ use crate::common::Milliseconds;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getBookmarks>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetBookmarks;
 
@@ -14,6 +15,7 @@ pub struct GetBookmarks;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#createBookmark>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct CreateBookmark {
     /// ID of the media file to bookmark.
@@ -29,6 +31,7 @@ pub struct CreateBookmark {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deleteBookmark>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteBookmark {
     /// ID of the media file for which to delete the bookmark.
@@ -42,6 +45,7 @@ pub struct DeleteBookmark {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getPlayQueue>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetPlayQueue;
 
@@ -51,6 +55,7 @@ pub struct GetPlayQueue;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#savePlayQueue>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct SavePlayQueue {
     /// ID of a song in the play queue.

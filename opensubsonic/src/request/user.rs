@@ -8,6 +8,7 @@ use crate::common::AudioBitrate;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getUser>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetUser {
     /// The name of the user to retrieve.
@@ -20,6 +21,7 @@ pub struct GetUser {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getUsers>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetUsers;
 
@@ -27,6 +29,7 @@ pub struct GetUsers;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#createUser>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct CreateUser {
     /// The name of the new user.
@@ -73,6 +76,7 @@ pub struct CreateUser {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#updateUser>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateUser {
     /// The name of the user.
@@ -121,6 +125,7 @@ pub struct UpdateUser {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deleteUser>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteUser {
     /// The name of the user to delete.
@@ -130,6 +135,7 @@ pub struct DeleteUser {
 /// Changes the password of an existing Subsonic user, using the following parameters.
 /// You can only change your own password unless you have admin privileges.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct ChangePassword {
     /// The name of the user which should change its password.

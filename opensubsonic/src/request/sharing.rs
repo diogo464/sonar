@@ -7,6 +7,7 @@ use crate::common::Milliseconds;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getShares>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetShares;
 
@@ -16,6 +17,7 @@ pub struct GetShares;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#createShare>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct CreateShare {
     /// ID of a song, album or video to share. Use one id parameter for each entry to share
@@ -31,6 +33,7 @@ pub struct CreateShare {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#updateShare>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateShare {
     /// ID of the share to update.
@@ -45,6 +48,7 @@ pub struct UpdateShare {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deleteShare>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteShare {
     /// ID of the share to delete.

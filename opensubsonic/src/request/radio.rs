@@ -5,6 +5,7 @@ use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#getInternetRadioStations>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct GetInternetRadioStations;
 
@@ -13,6 +14,7 @@ pub struct GetInternetRadioStations;
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#createInternetRadioStation>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct CreateInternetRadioStation {
     /// The stream URL for the station.
@@ -28,6 +30,7 @@ pub struct CreateInternetRadioStation {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#updateInternetRadioStation>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateInternetRadioStation {
     /// The ID for the station.
@@ -45,6 +48,7 @@ pub struct UpdateInternetRadioStation {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#deleteInternetRadioStation>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteInternetRadioStation {
     /// The ID for the station.

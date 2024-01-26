@@ -1,3 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["opensubsonic", "opensubsonic-cli", "opensubsonic-macro"]
+
+[profile.release]
+opt-level = "z"
+strip = true

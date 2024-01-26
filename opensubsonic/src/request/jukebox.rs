@@ -96,6 +96,7 @@ impl<'de> serde::Deserialize<'de> for JukeboxAction {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#jukeboxControl>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct JukeboxControl {
     /// The operation to perform.

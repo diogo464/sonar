@@ -11,6 +11,7 @@ use crate::{
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#star>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct Star {
     /// The ID of the file (song) or folder (album/artist) to star.
@@ -30,6 +31,7 @@ pub struct Star {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#unstar>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct Unstar {
     /// The ID of the file (song) or folder (album/artist) to star.
@@ -49,6 +51,7 @@ pub struct Unstar {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#setRating>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct SetRating {
     /// A string which uniquely identifies the file (song) or folder (album/artist) to rate.
@@ -67,6 +70,7 @@ pub struct SetRating {
 ///
 /// For more information, see <http://www.subsonic.org/pages/api.jsp#scrobble>
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToQuery, FromQuery, SubsonicRequest)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
 #[serde(rename_all = "camelCase")]
 pub struct Scrobble {
     /// A string which uniquely identifies the file to scrobble.
