@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     path::{Path, PathBuf},
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 use anyhow::{Context, Result as AResult};
@@ -71,6 +71,7 @@ impl FilesystemServer {
                         album_id: Some(album_id.clone()),
                         artist_id: Some(artist_id.clone()),
                         path: Some(m.path.to_string_lossy().to_string()),
+                        duration: Some(From::from(m.duration)),
                         ..Default::default()
                     },
                 );
@@ -122,7 +123,7 @@ impl FilesystemServer {
 
 #[opensubsonic::async_trait]
 impl OpenSubsonicServer for FilesystemServer {
-    async fn ping(&self, request: Request<Ping>) -> Result<()> {
+    async fn ping(&self, _request: Request<Ping>) -> Result<()> {
         Ok(())
     }
     async fn scrobble(&self, request: Request<Scrobble>) -> Result<()> {
@@ -135,15 +136,42 @@ impl OpenSubsonicServer for FilesystemServer {
             .pictures
             .get(track_id)
             .expect(&format!("picture '{}' not found", track_id));
-        Ok(Box::new(tokio_stream::once(Ok(From::from(
-            picture.data.clone(),
-        )))))
+        Ok(ByteStream::new(
+            picture.mime_type.as_deref().unwrap_or("image/jpeg"),
+            tokio_stream::once(Ok(From::from(picture.data.clone()))),
+        ))
     }
-    async fn get_starred2(&self, request: Request<GetStarred2>) -> Result<Starred2> {
+    async fn get_starred2(&self, _request: Request<GetStarred2>) -> Result<Starred2> {
         Ok(Default::default())
     }
-    async fn get_playlists(&self, request: Request<GetPlaylists>) -> Result<Playlists> {
+    async fn get_playlists(&self, _request: Request<GetPlaylists>) -> Result<Playlists> {
         Ok(Default::default())
+    }
+    async fn get_artists(&self, _request: Request<GetArtists>) -> Result<ArtistsID3> {
+        let mut artists_by_letter: HashMap<char, Vec<ArtistID3>> = Default::default();
+        for artist in self.artists.values() {
+            let letter = artist
+                .name
+                .chars()
+                .next()
+                .unwrap_or_default()
+                .to_ascii_uppercase();
+            artists_by_letter
+                .entry(letter)
+                .or_default()
+                .push(artist.clone());
+        }
+
+        Ok(ArtistsID3 {
+            index: artists_by_letter
+                .into_iter()
+                .map(|(letter, artists)| IndexID3 {
+                    name: letter.to_string(),
+                    artist: artists,
+                })
+                .collect(),
+            ignored_articles: Default::default(),
+        })
     }
     async fn get_album(&self, request: Request<GetAlbum>) -> Result<AlbumWithSongsID3> {
         let album_id = &request.body.id;
@@ -179,7 +207,10 @@ impl OpenSubsonicServer for FilesystemServer {
             .get(track_id)
             .expect(&format!("track '{}' not found", track_id));
         let content = std::fs::read(track.path.as_ref().unwrap()).expect("failed to read file");
-        Ok(Box::new(tokio_stream::once(Ok(From::from(content)))))
+        Ok(ByteStream::new(
+            "audio/mpeg",
+            tokio_stream::once(Ok(From::from(content))),
+        ))
     }
 }
 
@@ -213,20 +244,22 @@ async fn main() -> AResult<()> {
     tracing_subscriber::fmt::init();
 
     let tracks = read_metadata_dir(Path::new("music"))?;
-
     tracing::info!("Found {} tracks", tracks.len());
     for track in tracks.iter() {
         tracing::debug!("{:?}", track);
     }
 
+    let server = FilesystemServer::new(tracks);
+    let service = OpenSubsonicService::new("filesystem-server", "1.0.0", server);
+    let router = axum::Router::default()
+        .nest_service("/", service)
+        .layer(tower_http::trace::TraceLayer::new_for_http());
+
     axum::serve(
         TcpListener::bind("0.0.0.0:3000".parse::<SocketAddr>().unwrap())
             .await
             .context("failed to bind")?,
-        opensubsonic::service::router(FilesystemServer::new(tracks))
-            .await
-            .context("failed to create router")?
-            .layer(tower_http::trace::TraceLayer::new_for_http()),
+        router,
     )
     .await
     .context("failed to serve")?;
@@ -298,11 +331,4 @@ fn read_metadata(path: &Path) -> AResult<TrackMetadata> {
         duration,
         picture,
     })
-}
-
-fn now_milliseconds() -> u64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64
 }

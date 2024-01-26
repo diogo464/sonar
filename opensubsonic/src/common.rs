@@ -1,6 +1,6 @@
 //! Module for Subsonic API common types.
 
-use std::{str::FromStr, time::Duration};
+use std::{pin::Pin, str::FromStr, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use time::{OffsetDateTime, PrimitiveDateTime};
@@ -8,8 +8,46 @@ use tokio_stream::Stream;
 
 use crate::{impl_from_query_value_for_parse, impl_to_query_value_for_display};
 
-pub type ByteStream =
-    Box<dyn Stream<Item = std::io::Result<bytes::Bytes>> + Unpin + Send + 'static>;
+pub struct ByteStream {
+    mime_type: String,
+    stream: Box<dyn Stream<Item = std::io::Result<bytes::Bytes>> + Unpin + Send + 'static>,
+}
+
+impl std::fmt::Debug for ByteStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ByteStream")
+            .field("mime_type", &self.mime_type)
+            .finish()
+    }
+}
+
+impl ByteStream {
+    pub fn new(
+        mime_type: impl Into<String>,
+        stream: impl Stream<Item = std::io::Result<bytes::Bytes>> + Unpin + Send + 'static,
+    ) -> Self {
+        Self {
+            mime_type: mime_type.into(),
+            stream: Box::new(stream),
+        }
+    }
+
+    pub fn mime_type(&self) -> &str {
+        &self.mime_type
+    }
+}
+
+impl Stream for ByteStream {
+    type Item = std::io::Result<bytes::Bytes>;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let stream = self.get_mut().stream.as_mut();
+        Pin::new(stream).poll_next(cx)
+    }
+}
 
 #[derive(Debug)]
 pub struct InvalidFormat;

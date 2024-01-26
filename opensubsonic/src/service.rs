@@ -1,13 +1,37 @@
+//! # Tower Service
+//! To create a server, implement the [`OpenSubsonicServer`] trait.
+//! Then create a [`tower::Service`] from it using [`OpenSubsonicService::new`].
+//! The service can be used with an http server like [`axum`](https://docs.rs/axum).
+//!
+//! ## Example
+//! ```rust
+//! use opensubsonic::service::prelude::*;
+//!
+//! struct MyServer;
+//!
+//! #[opensubsonic::async_trait]
+//! impl OpenSubsonicServer for MyServer {
+//!     // implement methods here.  
+//!     // unimplemented methods will return an error by default.
+//!     // not all methods need to be implemented to have a functional server.
+//!     // check the example in 'examples/filesystem-server.rs' for a basic implementation.
+//! }
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let server = MyServer;
+//!     let service = OpenSubsonicService::new("my-service", "0.0.0", server);
+//!     let router = axum::Router::default().nest_service("/", service);
+//!     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+//!     # if false { // don't run this line when running tests.
+//!     axum::serve(listener, router).await?;
+//!     # }
+//!     Ok(())
+//! }
+//! ```
 use std::{borrow::Cow, future::Future, pin::Pin, sync::Arc};
 
-use axum::{
-    extract::{FromRequestParts, State},
-    http::{request::Parts, StatusCode},
-    response::IntoResponse,
-    routing::get,
-    Json, Router,
-};
-use tokio_stream::StreamExt;
+use bytes::Bytes;
 
 use crate::{
     common::{ByteStream, Version},
@@ -40,7 +64,7 @@ use crate::{
         sharing::{CreateShare, DeleteShare, GetShares, UpdateShare},
         system::{GetLicense, Ping},
         user::{ChangePassword, CreateUser, DeleteUser, GetUser, GetUsers, UpdateUser},
-        Request, SubsonicRequest,
+        Request,
     },
     response::{
         AlbumInfo, AlbumList, AlbumList2, AlbumWithSongsID3, Artist, ArtistInfo, ArtistInfo2,
@@ -73,16 +97,10 @@ pub mod prelude {
     pub use crate::request::user::*;
     pub use crate::request::*;
     pub use crate::response::*;
-    pub use crate::service::*;
+    pub use crate::service::{OpenSubsonicServer, OpenSubsonicService};
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-impl IntoResponse for Error {
-    fn into_response(self) -> axum::response::Response {
-        (StatusCode::OK, self.to_string()).into_response()
-    }
-}
 
 #[allow(unused)]
 #[async_trait::async_trait]
@@ -342,11 +360,91 @@ pub trait OpenSubsonicServer: Send + Sync + 'static {
     }
 }
 
-#[derive(Debug, Clone)]
+type HttpResponse = http::Response<http_body_util::StreamBody<OpenSubsonicBodyStream>>;
+
+pub enum OpenSubsonicBodyStream {
+    Empty,
+    Bytes(Option<Bytes>),
+    ByteStream(ByteStream),
+}
+
+impl tokio_stream::Stream for OpenSubsonicBodyStream {
+    type Item = std::io::Result<http_body::Frame<Bytes>>;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        match self.get_mut() {
+            Self::Empty => std::task::Poll::Ready(None),
+            Self::Bytes(bytes) => match bytes.take() {
+                Some(bytes) => {
+                    let frame = http_body::Frame::data(bytes);
+                    std::task::Poll::Ready(Some(Ok(frame)))
+                }
+                None => std::task::Poll::Ready(None),
+            },
+            Self::ByteStream(stream) => {
+                let stream = Pin::new(&mut *stream);
+                stream
+                    .poll_next(cx)
+                    .map(|opt| opt.map(|res| res.map(http_body::Frame::data)))
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct OpenSubsonicService<S> {
     server_version: Cow<'static, str>,
     server_type: Cow<'static, str>,
-    server: S,
+    server: Arc<S>,
+}
+
+impl<S> Clone for OpenSubsonicService<S> {
+    fn clone(&self) -> Self {
+        Self {
+            server_version: self.server_version.clone(),
+            server_type: self.server_type.clone(),
+            server: self.server.clone(),
+        }
+    }
+}
+
+macro_rules! case {
+    ($path:literal) => {
+        concat!("/rest/", $path) | concat!("/rest/", $path, ".view")
+    };
+    // responses that return ()
+    ($self:expr, $query:expr,$method:ident) => {{
+        let request = $self.parse_query($query)?;
+        $self
+            .server
+            .$method(request)
+            .await
+            .map_err(|err| $self.response_from_error(err))?;
+        Ok($self.response_from_body(None))
+    }};
+    // responses that return some concrete type
+    ($self:expr, $query:expr,$method:ident, $body:ident) => {{
+        let request = $self.parse_query($query)?;
+        let response_body = $self
+            .server
+            .$method(request)
+            .await
+            .map_err(|err| $self.response_from_error(err))?;
+        Ok($self.response_from_body(Some(ResponseBody::$body(response_body))))
+    }};
+    // responses that return a byte stream with mime-type
+    ($self:expr, $query:expr,$method:ident ->) => {{
+        let request = $self.parse_query($query)?;
+        let stream = $self
+            .server
+            .$method(request)
+            .await
+            .map_err(|err| $self.response_from_error(err))?;
+        Ok($self.response_from_byte_stream(stream))
+    }};
 }
 
 impl<S> OpenSubsonicService<S> {
@@ -358,8 +456,184 @@ impl<S> OpenSubsonicService<S> {
         Self {
             server_version: server_version.into(),
             server_type: server_type.into(),
-            server,
+            server: Arc::new(server),
         }
+    }
+}
+
+impl<S> OpenSubsonicService<S>
+where
+    S: OpenSubsonicServer + Send + Sync + 'static,
+{
+    const VERSION: Version = Version::V1_16_1;
+
+    async fn handle_request(&self, path: &str, query: &str) -> Result<HttpResponse, HttpResponse> {
+        tracing::debug!("path: {}", path);
+        tracing::debug!("query: {}", query);
+        match path {
+            case!("addChatMessage") => case!(self, query, add_chat_message),
+            case!("changePassword") => case!(self, query, change_password),
+            case!("createBookmark") => case!(self, query, create_bookmark),
+            case!("createInternetRadioStation") => {
+                case!(self, query, create_internet_radio_station)
+            }
+            case!("createPlaylist") => case!(self, query, create_playlist, Playlist),
+            case!("createPodcastChannel") => case!(self, query, create_podcast_channel),
+            case!("createShare") => case!(self, query, create_share, Shares),
+            case!("createUser") => case!(self, query, create_user),
+            case!("deleteBookmark") => case!(self, query, delete_bookmark),
+            case!("deleteInternetRadioStation") => {
+                case!(self, query, delete_internet_radio_station)
+            }
+            case!("deletePlaylist") => case!(self, query, delete_playlist),
+            case!("deletePodcastChannel") => case!(self, query, delete_podcast_channel),
+            case!("deletePodcastEpisode") => case!(self, query, delete_podcast_episode),
+            case!("deleteShare") => case!(self, query, delete_share),
+            case!("deleteUser") => case!(self, query, delete_user),
+            case!("download") => case!(self, query, download ->),
+            case!("downloadPodcastEpisode") => case!(self, query, download_podcast_episode ->),
+            case!("getAlbum") => case!(self, query, get_album, Album),
+            case!("getAlbumInfo") => case!(self, query, get_album_info, AlbumInfo),
+            case!("getAlbumInfo2") => case!(self, query, get_album_info2, AlbumInfo),
+            case!("getAlbumList") => case!(self, query, get_album_list, AlbumList),
+            case!("getAlbumList2") => case!(self, query, get_album_list2, AlbumList2),
+            case!("getArtist") => case!(self, query, get_artist, Artist),
+            case!("getArtistInfo") => case!(self, query, get_artist_info),
+            case!("getArtistInfo2") => case!(self, query, get_artist_info2),
+            case!("getArtists") => case!(self, query, get_artists, Artists),
+            case!("getAvatar") => case!(self, query, get_avatar ->),
+            case!("getBookmarks") => case!(self, query, get_bookmarks, Bookmarks),
+            case!("getCaptions") => case!(self, query, get_captions ->),
+            case!("getChatMessages") => case!(self, query, get_chat_message, ChatMessages),
+            case!("getCoverArt") => case!(self, query, get_cover_art ->),
+            case!("getGenres") => case!(self, query, get_genres, Genres),
+            case!("getIndexes") => case!(self, query, get_indexes, Indexes),
+            case!("getInternetRadioStations") => {
+                case!(
+                    self,
+                    query,
+                    get_internet_radio_stations,
+                    InternetRadioStations
+                )
+            }
+            case!("getLicense") => case!(self, query, get_license),
+            case!("getLyrics") => case!(self, query, get_lyrics),
+            case!("getMusicDirectory") => case!(self, query, get_music_directory, Directory),
+            case!("getMusicFolders") => case!(self, query, get_music_folders, MusicFolders),
+            case!("getNewestPodcasts") => case!(self, query, get_newest_podcasts, NewestPodcasts),
+            case!("getNowPlaying") => case!(self, query, get_now_playing, NowPlaying),
+            case!("getPlaylist") => case!(self, query, get_playlist, Playlist),
+            case!("getPlaylists") => case!(self, query, get_playlists, Playlists),
+            case!("getPlayQueue") => case!(self, query, get_play_queue, PlayQueue),
+            case!("getPodcasts") => case!(self, query, get_podcasts, Podcasts),
+            case!("getRandomSongs") => case!(self, query, get_random_songs, RandomSongs),
+            case!("getScanStatus") => case!(self, query, get_scan_status, ScanStatus),
+            case!("getShares") => case!(self, query, get_shares, Shares),
+            case!("getSimilarSongs") => case!(self, query, get_similar_songs, SimilarSongs),
+            case!("getSimilarSongs2") => case!(self, query, get_similar_songs2, SimilarSongs2),
+            case!("getStarred") => case!(self, query, get_starreed, Starred),
+            case!("getStarred2") => case!(self, query, get_starred2, Starred2),
+            case!("getTopSongs") => case!(self, query, get_top_songs, TopSongs),
+            case!("getUser") => case!(self, query, get_user, User),
+            case!("getUsers") => case!(self, query, get_users, Users),
+            case!("getVideoInfo") => case!(self, query, get_video_info, VideoInfo),
+            case!("getVideos") => case!(self, query, get_videos, Videos),
+            case!("hls") => case!(self, query, hls ->),
+            case!("jukeboxControl") => case!(self, query, jukebox_control, JukeboxControlResponse),
+            case!("ping") => case!(self, query, ping),
+            case!("refreshPodcasts") => case!(self, query, refresh_podcasts),
+            case!("savePlayQueue") => case!(self, query, save_play_queue),
+            case!("scrobble") => case!(self, query, scrobble),
+            case!("search") => case!(self, query, search, SearchResult),
+            case!("search2") => case!(self, query, search2, SearchResult2),
+            case!("search3") => case!(self, query, search3, SearchResult3),
+            case!("setRating") => case!(self, query, set_rating),
+            case!("star") => case!(self, query, star),
+            case!("startScan") => case!(self, query, start_scan, ScanStatus),
+            case!("stream") => case!(self, query, stream ->),
+            case!("unstar") => case!(self, query, unstar),
+            case!("updateInternetRadioStation") => {
+                case!(self, query, update_internet_radio_station)
+            }
+            case!("updatePlaylist") => case!(self, query, update_playlist),
+            case!("updateShare") => case!(self, query, update_share),
+            case!("updateUser") => case!(self, query, update_user),
+            _ => Err(self.response_not_found()),
+        }
+    }
+
+    fn parse_query<Q>(&self, query: &str) -> Result<Q, HttpResponse>
+    where
+        Q: crate::query::FromQuery,
+    {
+        match crate::query::from_query(query) {
+            Ok(request) => Ok(request),
+            Err(err) => {
+                Err(self
+                    .response_from_error(Error::with_message(ErrorCode::Generic, err.to_string())))
+            }
+        }
+    }
+
+    fn response_from_body(&self, body: Option<ResponseBody>) -> HttpResponse {
+        self.response_from_response(match body {
+            Some(body) => Response::ok(
+                Self::VERSION,
+                body,
+                self.server_type.clone(),
+                self.server_version.clone(),
+            ),
+            None => Response::ok_empty(
+                Self::VERSION,
+                self.server_type.clone(),
+                self.server_version.clone(),
+            ),
+        })
+    }
+
+    fn response_from_byte_stream(&self, stream: ByteStream) -> HttpResponse {
+        let mime_type = match stream.mime_type().parse() {
+            Ok(mime_type) => mime_type,
+            Err(err) => {
+                tracing::warn!("failed to parse mime type: {}", err);
+                http::HeaderValue::from_static("application/octet-stream")
+            }
+        };
+        let mut response = http::Response::new(http_body_util::StreamBody::new(
+            OpenSubsonicBodyStream::ByteStream(stream),
+        ));
+        *response.status_mut() = http::StatusCode::OK;
+        response
+            .headers_mut()
+            .insert(http::header::CONTENT_TYPE, mime_type);
+        response
+    }
+
+    fn response_from_error(&self, error: Error) -> HttpResponse {
+        self.response_from_response(Response::failed(
+            Self::VERSION,
+            error,
+            self.server_type.clone(),
+            self.server_version.clone(),
+        ))
+    }
+
+    fn response_from_response(&self, response: Response) -> HttpResponse {
+        let serialized = serde_json::to_vec(&ResponseObject::from(response))
+            .expect("failed to serialize response");
+        let mut response = http::Response::new(http_body_util::StreamBody::new(
+            OpenSubsonicBodyStream::Bytes(Some(From::from(serialized))),
+        ));
+        *response.status_mut() = http::StatusCode::OK;
+        response
+    }
+
+    fn response_not_found(&self) -> HttpResponse {
+        let mut response = http::Response::new(http_body_util::StreamBody::new(
+            OpenSubsonicBodyStream::Empty,
+        ));
+        *response.status_mut() = http::StatusCode::NOT_FOUND;
+        response
     }
 }
 
@@ -367,32 +641,31 @@ impl<S, B> tower::Service<http::Request<B>> for OpenSubsonicService<S>
 where
     S: OpenSubsonicServer + Send + Sync + 'static,
 {
-    type Response = http::Response<Vec<u8>>;
+    type Response = HttpResponse;
 
     type Error = std::convert::Infallible;
 
     type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync + 'static>>;
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
     fn poll_ready(
         &mut self,
-        cx: &mut std::task::Context<'_>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::prelude::v1::Result<(), Self::Error>> {
         std::task::Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, req: http::Request<B>) -> Self::Future {
-        let path = req.uri().path();
-        let query = req.uri().query().unwrap_or_default();
+        let svc = self.clone();
+        let path = req.uri().path().to_string();
+        let query = req.uri().query().unwrap_or_default().to_string();
 
-        match path {
-            "/rest/addChatMessage" | "/rest/addChatMessage.ping" => {
-                
-            }
-            _ => {}
-        }
-
-        todo!()
+        Box::pin(async move {
+            Ok(match svc.handle_request(&path, &query).await {
+                Ok(response) => response,
+                Err(response) => response,
+            })
+        })
     }
 }
 
@@ -401,225 +674,4 @@ fn unsupported<T>() -> Result<T> {
         ErrorCode::Generic,
         "unsupported method",
     ))
-}
-
-#[axum::async_trait]
-impl<S, T> FromRequestParts<S> for Request<T>
-where
-    T: SubsonicRequest,
-    S: Send + Sync,
-{
-    type Rejection = axum::response::Response;
-
-    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
-        let query = match parts.uri.query() {
-            Some(query) => query,
-            None => return Err((StatusCode::BAD_REQUEST, "missing query").into_response()),
-        };
-        let request = match Self::from_query(query) {
-            Ok(request) => request,
-            Err(err) => return Err((StatusCode::BAD_REQUEST, err.to_string()).into_response()),
-        };
-        Ok(request)
-    }
-}
-
-fn wrap_body(body: Option<ResponseBody>) -> ResponseObject {
-    const SERVER_VERSION: &str = "1.0.1";
-    const SERVER_TYPE: &str = "mads";
-    let response = match body {
-        Some(body) => Response::ok(Version::LATEST, body, SERVER_TYPE, SERVER_VERSION),
-        None => Response::ok_empty(Version::LATEST, SERVER_TYPE, SERVER_VERSION),
-    };
-    ResponseObject::from(response)
-}
-
-macro_rules! route {
-    ($name:ident, $req:ty) => {
-        async fn $name(
-            State(state): State<Arc<dyn OpenSubsonicServer>>,
-            request: Request<$req>,
-        ) -> Result<Json<ResponseObject>> {
-            tracing::trace!("request: {:#?}", request);
-            #[allow(unused)]
-            let result = match state.$name(request).await {
-                Ok(result) => result,
-                Err(err) => {
-                    tracing::warn!("error: {:#?}", err);
-                    return Err(err);
-                }
-            };
-            let response = wrap_body(None);
-            tracing::trace!("response: {:#?}", serde_json::to_string_pretty(&response).unwrap());
-            Ok(Json(response))
-        }
-    };
-    ($name:ident, $req:ty, stream) => {
-        async fn $name(
-            State(state): State<Arc<dyn OpenSubsonicServer>>,
-            request: Request<$req>,
-        ) -> Result<bytes::Bytes> {
-            tracing::trace!("request: {:#?}", request);
-            #[allow(unused)]
-            let mut stream = match state.$name(request).await {
-                Ok(result) => result,
-                Err(err) => {
-                    tracing::warn!("error: {:#?}", err);
-                    return Err(err);
-                }
-            };
-            let mut buffer = bytes::BytesMut::new();
-            while let Some(chunk) = stream.next().await {
-                match chunk {
-                    Ok(chunk) => buffer.extend_from_slice(&chunk),
-                    Err(err) => {
-                        return Err(Error::with_message(
-                            ErrorCode::Generic,
-                            format!("stream error: {}", err),
-                        ))
-                    }
-                }
-            }
-            Ok(buffer.freeze())
-        }
-    };
-    ($name:ident, $req:ty, $body:tt) => {
-        async fn $name(
-            State(state): State<Arc<dyn OpenSubsonicServer>>,
-            request: Request<$req>,
-        ) -> Result<Json<ResponseObject>> {
-            tracing::trace!("request: {:#?}", request);
-            #[allow(unused)]
-            let result = match state.$name(request).await {
-                Ok(result) => result,
-                Err(err) => {
-                    tracing::warn!("error: {:#?}", err);
-                    return Err(err);
-                }
-            };
-            let response = wrap_body(Some(ResponseBody::$body(result)));
-            tracing::trace!("response: {}", serde_json::to_string_pretty(&response).unwrap());
-            Ok(Json(response))
-        }
-    };
-    ($router:expr => $name:ident, $req:ty, $p:expr) => {{
-        route!($name, $req);
-        route!(@ $router => $name, $req, $p)
-    }};
-    ($router:expr => $name:ident, $req:ty, stream, $p:expr) => {{
-        route!($name, $req, stream);
-        route!(@ $router => $name, $req, $p)
-    }};
-    ($router:expr => $name:ident, $req:ty, $body:tt, $p:expr) => {{
-        route!($name, $req, $body);
-        route!(@ $router => $name, $req, $p)
-    }};
-    (@ $router:expr => $handler:ident, $req:ty, $p:expr) => {{
-        $router
-            .route(&format!("/rest/{}", $p), get($handler))
-            .route(&format!("/rest/{}.view", $p), get($handler))
-    }};
-}
-
-pub async fn router(server: impl OpenSubsonicServer) -> std::io::Result<Router> {
-    let mut router = Router::default();
-    router = route!(router => add_chat_message, AddChatMessage, "addChatMessage");
-    router = route!(router => change_password, ChangePassword, "changePassword");
-    router = route!(router => create_bookmark, CreateBookmark, "createBookmark");
-    router = route!(
-        router =>
-        create_internet_radio_station,
-        CreateInternetRadioStation,
-        "createInternetRadioStation"
-    );
-    router = route!(router => create_playlist, CreatePlaylist, Playlist, "createPlaylist");
-    router = route!(router => create_podcast_channel, CreatePodcastChannel, "createPodcastChannel");
-    router = route!(router => create_share, CreateShare, Shares, "createShare");
-    router = route!(router => create_user, CreateUser, "createUser");
-    router = route!(router => delete_bookmark, DeleteBookmark, "deleteBookmark");
-    router = route!(
-        router =>
-        delete_internet_radio_station,
-        DeleteInternetRadioStation,
-        "deleteInternetRadioStation"
-    );
-    router = route!(router => delete_playlist, DeletePlaylist, "deletePlaylist");
-    router = route!(router => delete_podcast_channel, DeletePodcastChannel, "deletePodcastChannel");
-    router = route!(router => delete_podcast_episode, DeletePodcastEpisode, "deletePodcastEpisode");
-    router = route!(router => delete_share, DeleteShare, "deteteShare");
-    router = route!(router => delete_user, DeleteUser, "deleteUser");
-    router = route!(router => download, Download, stream, "download");
-    router = route!(
-        router =>
-        download_podcast_episode,
-        DownloadPodcastEpisode,
-        stream,
-        "downloadPodcastEpisode"
-    );
-    router = route!(router => get_album, GetAlbum, Album, "getAlbum");
-    router = route!(router => get_album_info, GetAlbumInfo, AlbumInfo, "getAlbumInfo");
-    router = route!(router => get_album_info2, GetAlbumInfo2, AlbumInfo, "getAlbumInfo2");
-    router = route!(router => get_album_list, GetAlbumList, AlbumList, "getAlbumList");
-    router = route!(router => get_album_list2, GetAlbumList2, AlbumList2, "getAlbumList2");
-    router = route!(router => get_artist, GetArtist, Artist, "getArtist");
-    router = route!(router => get_artist_info, GetArtistInfo, ArtistInfo, "getArtistInfo");
-    router = route!(router => get_artist_info2, GetArtistInfo2, ArtistInfo2, "getArtistInfo2");
-    router = route!(router => get_artists, GetArtists, Artists, "getArtists");
-    router = route!(router => get_avatar, GetAvatar, stream, "getAvatar");
-    router = route!(router => get_bookmarks, GetBookmarks, Bookmarks, "getBookmarks");
-    router = route!(router => get_captions, GetCaptions, stream, "getCaptions");
-    router = route!(router => get_chat_message, GetChatMessages, ChatMessages, "getChatMessages");
-    router = route!(router => get_cover_art, GetCoverArt, stream, "getCoverArt");
-    router = route!(router => get_genres, GetGenres, Genres, "getGenres");
-    router = route!(router => get_indexes, GetIndexes, Artists, "getIndexes");
-    router = route!(router =>
-        get_internet_radio_stations,
-        GetInternetRadioStations,
-        InternetRadioStations,
-        "getInternetRadioStations"
-    );
-    router = route!(router => get_license, GetLicense, License, "getLicense");
-    router = route!(router => get_lyrics, GetLyrics, Lyrics, "getLyrics");
-    router =
-        route!(router => get_music_directory, GetMusicDirectory, Directory, "getMusicDirectory");
-    router = route!(router => get_music_folders, GetMusicFolders, MusicFolders, "getMusicFolders");
-    router = route!(router => get_newest_podcasts, GetNewestPodcasts, NewestPodcasts, "getNewestPodcasts");
-    router = route!(router => get_now_playing, GetNowPlaying, NowPlaying, "getNowPlaying");
-    router = route!(router => get_playlist, GetPlaylist, Playlist, "getPlaylist");
-    router = route!(router => get_playlists, GetPlaylists, Playlists, "getPlaylists");
-    router = route!(router => get_play_queue, GetPlayQueue, PlayQueue, "getPlayQueue");
-    router = route!(router => get_podcasts, GetPodcasts, Podcasts, "getPodcasts");
-    router = route!(router => get_random_songs, GetRandomSongs, RandomSongs, "getRandomSongs");
-    router = route!(router => get_scan_status, GetScanStatus, ScanStatus, "getScanStatus");
-    router = route!(router => get_shares, GetShares, Shares, "getShares");
-    router = route!(router => get_similar_songs, GetSimilarSongs, SimilarSongs, "getSimilarSongs");
-    router =
-        route!(router => get_similar_songs2, GetSimilarSongs2, SimilarSongs2, "getSimilarSongs2");
-    router = route!(router => get_starreed, GetStarred, Starred, "getStarred");
-    router = route!(router => get_starred2, GetStarred2, Starred2, "getStarred2");
-    router = route!(router => get_top_songs, GetTopSongs, TopSongs, "getTopSongs");
-    router = route!(router => get_user, GetUser, User, "getUser");
-    router = route!(router => get_users, GetUsers, Users, "getUsers");
-    router = route!(router => get_video_info, GetVideoInfo, VideoInfo, "getVideoInfo");
-    router = route!(router => get_videos, GetVideos, Videos, "getVideos");
-    router = route!(router => hls, Hls, stream, "hls");
-    router =
-        route!(router => jukebox_control, JukeboxControl, JukeboxControlResponse, "jukeboxControl");
-    router = route!(router => ping, Ping, "ping");
-    router = route!(router => refresh_podcasts, RefreshPodcasts, "refreshPodcasts");
-    router = route!(router => save_play_queue, SavePlayQueue, "savePlayQueue");
-    router = route!(router => scrobble, Scrobble, "scrobble");
-    router = route!(router => search, Search, SearchResult, "search");
-    router = route!(router => search2, Search2, SearchResult2, "search2");
-    router = route!(router => search3, Search3, SearchResult3, "search3");
-    router = route!(router => set_rating, SetRating, "setRating");
-    router = route!(router => star, Star, "star");
-    router = route!(router => start_scan, StartScan, ScanStatus, "startScan");
-    router = route!(router => stream, Stream, stream, "stream");
-    router = route!(router => unstar, Unstar, "unstar");
-    router = route!(router => update_internet_radio_station, UpdateInternetRadioStation, "updateInternetRadioStation");
-    router = route!(router => update_playlist, UpdatePlaylist, "updatePlaylist");
-    router = route!(router => update_share, UpdateShare, "updateShare");
-    router = route!(router => update_user, UpdateUser, "updateUser");
-    Ok(router.with_state(Arc::new(server)))
 }

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use syn::Result;
 
 pub const RENAME: AttrName = AttrName::new("rename");

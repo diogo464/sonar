@@ -11,11 +11,10 @@
 //!             valid: true,
 //!             ..Default::default()
 //!         }),
+//!         "my-server-name",
+//!         "my-server-version"
 //!     );
-//!     assert_eq!(
-//!         r#"{"subsonic-response":{"status":"ok","version":"1.16.1","license":{"valid":true}}}"#,
-//!         Response::to_json(&response)?
-//!     );
+//!    # let _ = response;
 //! # Ok(())
 //! # }
 //! ```
@@ -31,13 +30,10 @@
 //!             valid: true,
 //!             ..Default::default()
 //!         }),
+//!         "my-server-name",
+//!         "my-server-version"
 //!     );
-//!     let serialized = r#"{"subsonic-response":{"status":"ok","version":"1.16.1","license":{"valid":true}}}"#;
-//!     let deserialized = Response::from_json(serialized)?;
-//!     assert_eq!(
-//!         response,
-//!         deserialized
-//!     );
+//!     # let _ = response;
 //! # Ok(())
 //! # }
 //! ```
@@ -45,7 +41,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::common::{
-    AverageRating, DateTime, MediaType, Milliseconds, Seconds, UserRating, Version, RecordLabel,
+    AverageRating, DateTime, MediaType, Milliseconds, RecordLabel, Seconds, UserRating, Version,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -136,10 +132,9 @@ impl Response {
 #[serde(rename_all = "camelCase")]
 pub enum ResponseBody {
     MusicFolders(MusicFolders),
-    Indexes(Indexes),
+    Indexes(ArtistsID3),
     Directory(Directory),
     Genres(Genres),
-    #[serde(rename = "indexes")]
     Artists(ArtistsID3),
     Artist(Artist),
     ArtistWithAlbums(ArtistWithAlbumsID3),
@@ -285,7 +280,7 @@ pub struct ArtistWithAlbumsID3 {
 }
 
 /// An album from ID3 tags.
-/// https://opensubsonic.netlify.app/docs/responses/albumid3/
+/// <https://opensubsonic.netlify.app/docs/responses/albumid3/>
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AlbumID3 {

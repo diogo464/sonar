@@ -1,3 +1,4 @@
+#![allow(unused)]
 use syn::Result;
 
 use crate::attr;
@@ -8,11 +9,11 @@ impl ContainerAttributes {
     fn extract(attrs: &mut Vec<syn::Attribute>) -> Result<Self> {
         let metas = attr::extract_meta_list(attrs)?;
 
-        for meta in metas {
-            match &meta {
-                _ => return Err(syn::Error::new_spanned(meta, "Invalid subsonic attribute")),
-            }
-        }
+        // for meta in metas {
+        //     match &meta {
+        //         _ => return Err(syn::Error::new_spanned(meta, "Invalid subsonic attribute")),
+        //     }
+        // }
 
         Ok(Self {})
     }

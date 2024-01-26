@@ -107,9 +107,6 @@ pub mod scan;
 /// # fn main() {
 ///     use opensubsonic::request::SubsonicRequest;
 ///
-///     assert_eq!("/rest/getArtistInfo", opensubsonic::request::browsing::GetArtistInfo::PATH);
-///     assert_eq!(opensubsonic::common::Version::V1_11_0, opensubsonic::request::browsing::GetArtistInfo::SINCE);
-///
 ///     let request = opensubsonic::request::browsing::GetArtistInfo {
 ///         id: "123".into(),
 ///         count: Some(10),

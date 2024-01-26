@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub struct Version {
     pub major: u8,
