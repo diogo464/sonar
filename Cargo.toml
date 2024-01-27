@@ -1,0 +1,3 @@
+[workspace]
+resolver = "2"
+members = ["sonar", "sonar-cli", "sonar-spotify"]
