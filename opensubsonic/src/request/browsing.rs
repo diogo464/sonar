@@ -213,7 +213,7 @@ impl GetSimilarSongs2 {
 #[serde(rename_all = "camelCase")]
 pub struct GetTopSongs {
     /// The artist name.
-    pub id: String,
+    pub artist: String,
     /// Max number of songs to return.
     pub count: Option<u32>,
 }
