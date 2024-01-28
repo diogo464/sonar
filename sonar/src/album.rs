@@ -52,6 +52,34 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Album>> {
     Ok(albums)
 }
 
+pub async fn list_by_artist(
+    db: &mut DbC,
+    artist_id: ArtistId,
+    params: ListParams,
+) -> Result<Vec<Album>> {
+    let artist_id = artist_id.to_db();
+    let (offset, limit) = params.to_db_offset_limit();
+    let views = sqlx::query_as!(
+        AlbumView,
+        "SELECT * FROM album_view WHERE artist = ? ORDER BY id ASC LIMIT ? OFFSET ?",
+        artist_id,
+        limit,
+        offset
+    )
+    .fetch_all(&mut *db)
+    .await?;
+
+    let mut albums = Vec::with_capacity(views.len());
+    for view in views {
+        let genres = crate::genre::get(&mut *db, crate::genre::Namespace::Album, view.id).await?;
+        let properties =
+            crate::property::get(&mut *db, crate::property::Namespace::Album, view.id).await?;
+        albums.push(view.into_album(genres, properties));
+    }
+
+    Ok(albums)
+}
+
 pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
     let album_id = album_id.to_db();
     let album_view = sqlx::query_as!(AlbumView, "SELECT * FROM album_view WHERE id = ?", album_id)
@@ -70,12 +98,14 @@ pub async fn create(db: &mut DbC, create: AlbumCreate) -> Result<Album> {
     let cover_art = create.cover_art.map(|id| id.to_db());
     let genres = create.genres;
     let properties = create.properties;
+    let release_date = create.release_date.to_rfc3339();
 
     let album_id = sqlx::query!(
-        "INSERT INTO album (artist, name, cover_art) VALUES (?, ?, ?) RETURNING id",
+        "INSERT INTO album (artist, name, cover_art, release_date) VALUES (?, ?, ?, ?) RETURNING id",
         artist_id,
         name,
-        cover_art
+        cover_art,
+        release_date,
     )
     .fetch_one(&mut *db)
     .await?

@@ -1,6 +1,7 @@
 use crate::{
-    album, artist, blob::BlobStorage, ks, metadata::SonarExtractor, track, AlbumCreate, AlbumId,
-    ArtistCreate, ArtistId, ByteStream, Db, Error, ErrorKind, Result, Track, TrackCreate, bytestream,
+    album, artist, blob::BlobStorage, bytestream, ks, metadata::SonarExtractor, track, AlbumCreate,
+    AlbumId, ArtistCreate, ArtistId, ByteStream, DateTime, Db, Error, ErrorKind, Result, Track,
+    TrackCreate,
 };
 
 #[derive(Debug)]
@@ -106,6 +107,23 @@ pub async fn import(
 
     let track_number = metadatas.iter().find_map(|metadata| metadata.track_number);
 
+    let release_date = metadatas
+        .iter()
+        .find_map(|metadata| metadata.release_date)
+        .unwrap_or_else(|| {
+            DateTime::from_timestamp(0, 0).expect("failed to create default DateTime")
+        });
+
+    let duration = metadatas
+        .iter()
+        .find_map(|metadata| metadata.duration)
+        .ok_or_else(|| {
+            Error::new(
+                ErrorKind::Invalid,
+                format!("unable to find duration for file: {}", import.filename),
+            )
+        })?;
+
     let genres = metadatas
         .iter()
         .filter(|metadata| !metadata.genres.is_empty())
@@ -165,6 +183,7 @@ pub async fn import(
             name: album_name.to_owned(),
             artist: artist_id,
             cover_art: Default::default(),
+            release_date,
             genres: Default::default(),
             properties: Default::default(),
         };
@@ -184,6 +203,7 @@ pub async fn import(
         disc_number,
         track_number,
         cover_art: None, // TODO: extract cover art
+        duration,
         genres,
         lyrics: None, // TODO: extract lyrics
         properties: Default::default(),

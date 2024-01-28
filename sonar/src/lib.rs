@@ -6,14 +6,16 @@
 use std::{sync::Arc, time::Duration};
 
 use bytes::Bytes;
-use importer::{Import, Importer};
+use importer::Importer;
 use metadata::{Extractor, SonarExtractor};
 use scrobbler::SonarScrobbler;
 use sqlx::Executor;
 
 pub use async_trait::async_trait;
 
-pub mod grpc;
+#[doc(hidden)]
+#[cfg(feature = "test-utilities")]
+pub mod test;
 
 mod error;
 pub use error::*;
@@ -45,10 +47,12 @@ pub use property::{Properties, PropertyKey, PropertyUpdate, PropertyUpdateAction
 pub(crate) mod user;
 pub use user::Username;
 
+pub(crate) mod importer;
+pub use importer::Import;
+
 pub(crate) mod album;
 pub(crate) mod artist;
 pub(crate) mod image;
-pub(crate) mod importer;
 pub(crate) mod ks;
 pub(crate) mod playlist;
 pub(crate) mod scrobble;
@@ -130,6 +134,31 @@ pub struct Context {
     scrobblers: Arc<Vec<SonarScrobbler>>,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ByteRange {
+    pub offset: Option<u64>,
+    pub length: Option<u64>,
+}
+
+impl ByteRange {
+    pub fn new(offset: u64, length: u64) -> Self {
+        Self {
+            offset: Some(offset),
+            length: Some(length),
+        }
+    }
+
+    pub fn with_offset(mut self, offset: u64) -> Self {
+        self.offset = Some(offset);
+        self
+    }
+
+    pub fn with_length(mut self, length: u64) -> Self {
+        self.length = Some(length);
+        self
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ListParams {
     pub offset: Option<u32>,
@@ -141,6 +170,16 @@ impl ListParams {
         let limit = self.limit.map(|limit| limit as i64).unwrap_or(i64::MAX);
         let offset = self.offset.map(|offset| offset as i64).unwrap_or(0);
         (offset, limit)
+    }
+
+    pub fn with_offset(mut self, offset: u32) -> Self {
+        self.offset = Some(offset);
+        self
+    }
+
+    pub fn with_limit(mut self, limit: u32) -> Self {
+        self.limit = Some(limit);
+        self
     }
 }
 
@@ -243,6 +282,7 @@ pub struct AlbumCreate {
     pub name: String,
     pub artist: ArtistId,
     pub cover_art: Option<ImageId>,
+    pub release_date: DateTime,
     pub genres: Genres,
     pub properties: Properties,
 }
@@ -283,6 +323,7 @@ pub struct TrackCreate {
     pub album: AlbumId,
     pub disc_number: Option<u32>,
     pub track_number: Option<u32>,
+    pub duration: Duration,
     pub cover_art: Option<ImageId>,
     pub genres: Genres,
     pub lyrics: Option<TrackLyrics>,
@@ -314,6 +355,13 @@ pub struct TrackUpdate {
     pub genres: Vec<GenreUpdate>,
     pub lyrics: ValueUpdate<TrackLyrics>,
     pub properties: Vec<PropertyUpdate>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlaylistTrack {
+    pub playlist: PlaylistId,
+    pub track: TrackId,
+    pub inserted_at: Timestamp,
 }
 
 #[derive(Debug, Clone)]
@@ -437,6 +485,11 @@ pub async fn image_delete(context: &Context, image_id: ImageId) -> Result<()> {
     result
 }
 
+pub async fn user_list(context: &Context, params: ListParams) -> Result<Vec<User>> {
+    let mut conn = context.db.acquire().await?;
+    user::list(&mut conn, params).await
+}
+
 pub async fn user_create(context: &Context, create: UserCreate) -> Result<User> {
     let mut tx = context.db.begin().await?;
     let result = user::create(&mut tx, create).await;
@@ -496,6 +549,15 @@ pub async fn album_list(context: &Context, params: ListParams) -> Result<Vec<Alb
     album::list(&mut conn, params).await
 }
 
+pub async fn album_list_by_artist(
+    context: &Context,
+    artist_id: ArtistId,
+    params: ListParams,
+) -> Result<Vec<Album>> {
+    let mut conn = context.db.acquire().await?;
+    album::list_by_artist(&mut conn, artist_id, params).await
+}
+
 pub async fn album_get(context: &Context, album_id: AlbumId) -> Result<Album> {
     let mut conn = context.db.acquire().await?;
     album::get(&mut conn, album_id).await
@@ -527,6 +589,15 @@ pub async fn track_list(context: &Context, params: ListParams) -> Result<Vec<Tra
     track::list(&mut conn, params).await
 }
 
+pub async fn track_list_by_album(
+    context: &Context,
+    album_id: AlbumId,
+    params: ListParams,
+) -> Result<Vec<Track>> {
+    let mut conn = context.db.acquire().await?;
+    track::list_by_album(&mut conn, album_id, params).await
+}
+
 pub async fn track_get(context: &Context, track_id: TrackId) -> Result<Track> {
     let mut conn = context.db.acquire().await?;
     track::get(&mut conn, track_id).await
@@ -551,6 +622,15 @@ pub async fn track_delete(context: &Context, id: TrackId) -> Result<()> {
     let result = track::delete(&mut tx, id).await;
     tx.commit().await?;
     result
+}
+
+pub async fn track_download(
+    context: &Context,
+    track_id: TrackId,
+    range: ByteRange,
+) -> Result<ByteStream> {
+    let mut conn = context.db.acquire().await?;
+    track::download(&mut conn, &*context.storage, track_id, range).await
 }
 
 pub async fn track_get_lyrics(context: &Context, track_id: TrackId) -> Result<Lyrics> {
@@ -593,9 +673,18 @@ pub async fn playlist_delete(context: &Context, id: PlaylistId) -> Result<()> {
     result
 }
 
-pub async fn playlist_clear(context: &Context, id: PlaylistId) -> Result<()> {
+pub async fn playlist_list_tracks(
+    context: &Context,
+    id: PlaylistId,
+    params: ListParams,
+) -> Result<Vec<PlaylistTrack>> {
+    let mut conn = context.db.acquire().await?;
+    playlist::list_tracks(&mut conn, id, params).await
+}
+
+pub async fn playlist_clear_tracks(context: &Context, id: PlaylistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = playlist::clear(&mut tx, id).await;
+    let result = playlist::clear_tracks(&mut tx, id).await;
     tx.commit().await?;
     result
 }

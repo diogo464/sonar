@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use crate::{
     genre, property, Artist, ArtistCreate, ArtistId, ArtistUpdate, DbC, Genres, ImageId,
     ListParams, Properties, Result,
@@ -75,6 +73,7 @@ pub async fn create(db: &mut DbC, create: ArtistCreate) -> Result<Artist> {
     .fetch_one(&mut *db)
     .await?
     .id;
+    tracing::info!("created artist {}", artist_id);
 
     property::set(
         &mut *db,

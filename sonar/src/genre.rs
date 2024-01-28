@@ -125,6 +125,34 @@ impl Genres {
     }
 }
 
+impl std::ops::Deref for Genres {
+    type Target = [Genre];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Genres {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl std::ops::Index<usize> for Genres {
+    type Output = Genre;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl std::ops::IndexMut<usize> for Genres {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
+    }
+}
+
 impl IntoIterator for Genres {
     type Item = Genre;
     type IntoIter = std::vec::IntoIter<Self::Item>;

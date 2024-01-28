@@ -24,7 +24,7 @@ CREATE TABLE image (
 
 CREATE TABLE user (
 	id				INTEGER PRIMARY KEY,
-	username		TEXT NOT NULL,
+	username		TEXT NOT NULL UNIQUE,
 	-- scrypt PHC string
 	password_hash	TEXT NOT NULL DEFAULT '',
 	avatar			INTEGER REFERENCES image(id),
@@ -101,7 +101,8 @@ CREATE VIEW artist_album_count (
 ) AS
 	SELECT artist.id, COUNT(album.id)
 	FROM artist
-	LEFT JOIN album ON artist.id = album.artist;
+	LEFT JOIN album ON artist.id = album.artist
+	GROUP BY artist.id;
 
 CREATE VIEW artist_view (
 	id, name, listen_count, cover_art, album_count
@@ -115,7 +116,8 @@ CREATE VIEW album_track_count (
 ) AS
 	SELECT album.id, COUNT(track.id)
 	FROM album
-	LEFT JOIN track ON album.id = track.album;
+	LEFT JOIN track ON album.id = track.album
+	GROUP BY album.id;
 
 CREATE VIEW album_view (
 	id, name, artist, release_date, listen_count, cover_art, track_count
@@ -143,7 +145,8 @@ CREATE VIEW playlist_track_count (
 ) AS
 	SELECT playlist.id, COUNT(playlist_track.track)
 	FROM playlist
-	LEFT JOIN playlist_track ON playlist_track.playlist = playlist.id;
+	LEFT JOIN playlist_track ON playlist_track.playlist = playlist.id
+	GROUP BY playlist.id;
 
 CREATE VIEW playlist_view (
 	id, name, owner, track_count

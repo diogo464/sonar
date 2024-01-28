@@ -1,10 +1,17 @@
-use std::{io::Result, path::PathBuf};
+use std::{
+    io::{Result, SeekFrom},
+    path::PathBuf,
+};
 
 use bytes::Bytes;
+use tokio::{
+    fs::File,
+    io::{AsyncReadExt, AsyncSeekExt},
+};
 
 use crate::{async_trait, bytestream, ByteStream};
 
-use super::BlobStorage;
+use super::{BlobRange, BlobStorage};
 
 #[derive(Debug)]
 pub struct FilesystemBlobStorage {
@@ -19,17 +26,15 @@ impl FilesystemBlobStorage {
 
 #[async_trait]
 impl BlobStorage for FilesystemBlobStorage {
-    async fn get(&self, key: &str) -> Result<Bytes> {
-        let reader = self.read(key).await?;
-        bytestream::to_bytes(reader).await
-    }
-    async fn read(&self, key: &str) -> Result<ByteStream> {
+    async fn read(&self, key: &str, range: BlobRange) -> Result<ByteStream> {
         let path = self.root.join(key);
-        bytestream::from_file(&path).await
+        let mut file = File::open(path).await?;
+        file.seek(SeekFrom::Start(range.start.unwrap_or(0))).await?;
+        let reader = tokio::io::BufReader::new(file).take(range.length.unwrap_or(u64::MAX));
+        Ok(Box::new(tokio_util::io::ReaderStream::new(reader)))
     }
     async fn put(&self, key: &str, bytes: Bytes) -> Result<()> {
-        self.write(key, bytestream::from_bytes(bytes))
-            .await
+        self.write(key, bytestream::from_bytes(bytes)).await
     }
     async fn write(&self, key: &str, reader: ByteStream) -> Result<()> {
         let path = self.root.join(key);

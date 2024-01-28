@@ -1,10 +1,7 @@
-mod common;
-use common::*;
-
 #[tokio::test]
 async fn artist_list_empty() {
-    let context = create_context().await;
-    let artists = sonar::artist_list(&context, sonar::ListParams::default())
+    let ctx = sonar::test::create_context_memory().await;
+    let artists = sonar::artist_list(&ctx, sonar::ListParams::default())
         .await
         .unwrap();
     assert_eq!(artists.len(), 0);
@@ -12,15 +9,14 @@ async fn artist_list_empty() {
 
 #[tokio::test]
 async fn artist_create_one() {
-    tracing_subscriber::fmt::init();
-    let context = create_context().await;
+    let ctx = sonar::test::create_context_memory().await;
     let create = sonar::ArtistCreate {
         name: "Artist".to_string(),
         cover_art: None,
-        genres: create_simple_genres(),
-        properties: create_simple_properties(),
+        genres: sonar::test::create_simple_genres(),
+        properties: sonar::test::create_simple_properties(),
     };
-    let artist = sonar::artist_create(&context, create).await.unwrap();
+    let artist = sonar::artist_create(&ctx, create).await.unwrap();
     assert_eq!(artist.name, "Artist");
     assert_eq!(artist.genres.len(), 2);
     assert_eq!(artist.properties.len(), 2);
@@ -28,15 +24,9 @@ async fn artist_create_one() {
 
 #[tokio::test]
 async fn artist_list_one() {
-    let context = create_context().await;
-    let create = sonar::ArtistCreate {
-        name: "Artist".to_string(),
-        cover_art: None,
-        genres: create_simple_genres(),
-        properties: create_simple_properties(),
-    };
-    let artist = sonar::artist_create(&context, create).await.unwrap();
-    let artists = sonar::artist_list(&context, sonar::ListParams::default())
+    let ctx = sonar::test::create_context_memory().await;
+    let artist = sonar::test::create_artist(&ctx, "artist").await;
+    let artists = sonar::artist_list(&ctx, sonar::ListParams::default())
         .await
         .unwrap();
     assert_eq!(artists.len(), 1);
@@ -44,15 +34,28 @@ async fn artist_list_one() {
 }
 
 #[tokio::test]
+async fn artist_list_two() {
+    let ctx = sonar::test::create_context_memory().await;
+    let artist1 = sonar::test::create_artist(&ctx, "artist1").await;
+    let artist2 = sonar::test::create_artist(&ctx, "artist2").await;
+    let artists = sonar::artist_list(&ctx, sonar::ListParams::default())
+        .await
+        .unwrap();
+    assert_eq!(artists.len(), 2);
+    assert_eq!(artists[0].id, artist1.id);
+    assert_eq!(artists[1].id, artist2.id);
+}
+
+#[tokio::test]
 async fn artist_update_one() {
-    let context = create_context().await;
+    let ctx = sonar::test::create_context_memory().await;
     let create = sonar::ArtistCreate {
         name: "Artist".to_string(),
         cover_art: None,
-        genres: create_simple_genres(),
-        properties: create_simple_properties(),
+        genres: sonar::test::create_simple_genres(),
+        properties: sonar::test::create_simple_properties(),
     };
-    let artist = sonar::artist_create(&context, create).await.unwrap();
+    let artist = sonar::artist_create(&ctx, create).await.unwrap();
     let update = sonar::ArtistUpdate {
         name: sonar::ValueUpdate::Set("Artist2".to_string()),
         genres: vec![sonar::GenreUpdate::set("rock".parse().unwrap())],
@@ -62,9 +65,7 @@ async fn artist_update_one() {
         )],
         ..Default::default()
     };
-    let artist = sonar::artist_update(&context, artist.id, update)
-        .await
-        .unwrap();
+    let artist = sonar::artist_update(&ctx, artist.id, update).await.unwrap();
     assert_eq!(artist.name, "Artist2");
     assert_eq!(artist.genres.len(), 3);
     assert_eq!(artist.properties.len(), 3);
@@ -72,17 +73,25 @@ async fn artist_update_one() {
 
 #[tokio::test]
 async fn artist_delete_one() {
-    let context = create_context().await;
-    let create = sonar::ArtistCreate {
-        name: "Artist".to_string(),
-        cover_art: None,
-        genres: create_simple_genres(),
-        properties: create_simple_properties(),
-    };
-    let artist = sonar::artist_create(&context, create).await.unwrap();
-    sonar::artist_delete(&context, artist.id).await.unwrap();
-    let artists = sonar::artist_list(&context, sonar::ListParams::default())
+    let ctx = sonar::test::create_context_memory().await;
+    let artist1 = sonar::test::create_artist(&ctx, "artist").await;
+    let artist2 = sonar::test::create_artist(&ctx, "artist").await;
+    sonar::artist_delete(&ctx, artist1.id).await.unwrap();
+    let artists = sonar::artist_list(&ctx, sonar::ListParams::default())
         .await
         .unwrap();
-    assert_eq!(artists.len(), 0);
+    assert_eq!(artists.len(), 1);
+    assert_eq!(artists[0].id, artist2.id);
+}
+
+#[tokio::test]
+async fn artist_list_offset() {
+    let ctx = sonar::test::create_context_memory().await;
+    let _artist1 = sonar::test::create_artist(&ctx, "artist1").await;
+    let artist2 = sonar::test::create_artist(&ctx, "artist2").await;
+    let artists = sonar::artist_list(&ctx, sonar::ListParams::default().with_offset(1))
+        .await
+        .unwrap();
+    assert_eq!(artists.len(), 1);
+    assert_eq!(artists[0].id, artist2.id);
 }

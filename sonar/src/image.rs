@@ -12,7 +12,7 @@ pub async fn reader(
     let row = sqlx::query!("SELECT mime_type, blob_key FROM image WHERE id = ?", db_id)
         .fetch_one(db)
         .await?;
-    let reader = storage.read(&row.blob_key).await?;
+    let reader = storage.read(&row.blob_key, Default::default()).await?;
     Ok(ImageReader::new(row.mime_type, reader))
 }
 

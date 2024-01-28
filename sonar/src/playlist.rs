@@ -1,7 +1,24 @@
 use crate::{
-    property, DbC, ListParams, Playlist, PlaylistCreate, PlaylistId, PlaylistUpdate, Properties,
-    Result, TrackId, UserId, ValueUpdate,
+    property, DbC, ListParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack, PlaylistUpdate,
+    Properties, Result, Timestamp, TrackId, UserId, ValueUpdate,
 };
+
+#[derive(Debug, sqlx::FromRow)]
+struct PlaylistTrackView {
+    playlist: i64,
+    track: i64,
+    created_at: i64,
+}
+
+impl PlaylistTrackView {
+    fn into_playlist_track(self) -> PlaylistTrack {
+        PlaylistTrack {
+            playlist: PlaylistId::from_db(self.playlist),
+            track: TrackId::from_db(self.track),
+            inserted_at: Timestamp::from_seconds(self.created_at as u64),
+        }
+    }
+}
 
 #[derive(Debug, sqlx::FromRow)]
 struct PlaylistView {
@@ -120,7 +137,29 @@ pub async fn delete(db: &mut DbC, playlist_id: PlaylistId) -> Result<()> {
     Ok(())
 }
 
-pub async fn clear(db: &mut DbC, playlist_id: PlaylistId) -> Result<()> {
+pub async fn list_tracks(
+    db: &mut DbC,
+    playlist_id: PlaylistId,
+    params: ListParams,
+) -> Result<Vec<PlaylistTrack>> {
+    let playlist_id = playlist_id.to_db();
+    let (offset, limit) = params.to_db_offset_limit();
+    let tracks = sqlx::query_as!(
+        PlaylistTrackView,
+        "SELECT playlist, track, created_at FROM playlist_track WHERE playlist = ? ORDER BY rowid ASC LIMIT ? OFFSET ?",
+        playlist_id,
+        limit,
+        offset
+    )
+    .fetch_all(&mut *db)
+    .await?;
+    Ok(tracks
+        .into_iter()
+        .map(|t| t.into_playlist_track())
+        .collect())
+}
+
+pub async fn clear_tracks(db: &mut DbC, playlist_id: PlaylistId) -> Result<()> {
     let playlist_id = playlist_id.to_db();
     sqlx::query!("DELETE FROM playlist_track WHERE playlist = ?", playlist_id)
         .execute(&mut *db)

@@ -21,7 +21,10 @@ pub async fn from_file(path: &Path) -> std::io::Result<ByteStream> {
     )))
 }
 
-pub async fn to_bytes(mut stream: ByteStream) -> std::io::Result<bytes::Bytes> {
+pub async fn to_bytes<S>(mut stream: S) -> std::io::Result<bytes::Bytes>
+where
+    S: tokio_stream::Stream<Item = std::io::Result<bytes::Bytes>> + Unpin,
+{
     let mut bytes = bytes::BytesMut::new();
     while let Some(buf) = stream.next().await {
         bytes.extend_from_slice(&buf?);

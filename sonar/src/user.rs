@@ -1,6 +1,6 @@
 use std::{borrow::Cow, str::FromStr};
 
-use crate::{DbC, Error, ErrorKind, ImageId, Result, User, UserCreate, UserId};
+use crate::{DbC, Error, ErrorKind, ImageId, ListParams, Result, User, UserCreate, UserId};
 
 const USERNAME_MAX_LENGTH: usize = 24;
 const PASSWORD_MIN_LENGTH: usize = 8;
@@ -93,6 +93,25 @@ impl UserView {
             avatar: self.avatar.map(|id| ImageId::from_db(id)),
         }
     }
+}
+
+pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<User>> {
+    let (offset, limit) = params.to_db_offset_limit();
+    let views = sqlx::query_as!(
+        UserView,
+        "SELECT id, username, avatar FROM user ORDER BY id ASC LIMIT ? OFFSET ?",
+        limit,
+        offset
+    )
+    .fetch_all(db)
+    .await?;
+
+    let mut users = Vec::with_capacity(views.len());
+    for view in views {
+        users.push(view.into_user());
+    }
+
+    Ok(users)
 }
 
 pub async fn create(db: &mut DbC, create: UserCreate) -> Result<User> {
