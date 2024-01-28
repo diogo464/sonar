@@ -277,7 +277,7 @@ pub trait OpenSubsonicServer: Send + Sync + 'static {
     async fn get_songs_by_genre(&self, request: Request<GetSongsByGenre>) -> Result<Songs> {
         unsupported()
     }
-    async fn get_starreed(&self, request: Request<GetStarred>) -> Result<Starred> {
+    async fn get_starred(&self, request: Request<GetStarred>) -> Result<Starred> {
         unsupported()
     }
     async fn get_starred2(&self, request: Request<GetStarred2>) -> Result<Starred2> {
@@ -531,7 +531,7 @@ where
             case!("getShares") => case!(self, query, get_shares, Shares),
             case!("getSimilarSongs") => case!(self, query, get_similar_songs, SimilarSongs),
             case!("getSimilarSongs2") => case!(self, query, get_similar_songs2, SimilarSongs2),
-            case!("getStarred") => case!(self, query, get_starreed, Starred),
+            case!("getStarred") => case!(self, query, get_starred, Starred),
             case!("getStarred2") => case!(self, query, get_starred2, Starred2),
             case!("getTopSongs") => case!(self, query, get_top_songs, TopSongs),
             case!("getUser") => case!(self, query, get_user, User),
