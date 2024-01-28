@@ -393,17 +393,17 @@ mod tests {
     #[test]
     fn test_get_top_songs() {
         let request = GetTopSongs {
-            id: "123".to_string(),
+            artist: "123".to_string(),
             count: None,
         };
         let query = test_request_encode(&request);
-        assert_eq!(query, "id=123");
+        assert_eq!(query, "artist=123");
 
         let request = GetTopSongs {
-            id: "123".to_string(),
+            artist: "123".to_string(),
             count: Some(123),
         };
         let query = test_request_encode(&request);
-        assert_eq!(query, "id=123&count=123");
+        assert_eq!(query, "artist=123&count=123");
     }
 }
