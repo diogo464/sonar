@@ -576,19 +576,22 @@ where
     }
 
     fn response_from_body(&self, body: Option<ResponseBody>) -> HttpResponse {
-        self.response_from_response(match body {
-            Some(body) => Response::ok(
-                Self::VERSION,
-                body,
-                self.server_type.clone(),
-                self.server_version.clone(),
-            ),
-            None => Response::ok_empty(
-                Self::VERSION,
-                self.server_type.clone(),
-                self.server_version.clone(),
-            ),
-        })
+        self.response_from_response(
+            match body {
+                Some(body) => Response::ok(
+                    Self::VERSION,
+                    body,
+                    self.server_type.clone(),
+                    self.server_version.clone(),
+                ),
+                None => Response::ok_empty(
+                    Self::VERSION,
+                    self.server_type.clone(),
+                    self.server_version.clone(),
+                ),
+            },
+            http::StatusCode::OK,
+        )
     }
 
     fn response_from_byte_stream(&self, stream: ByteStream) -> HttpResponse {
@@ -610,21 +613,24 @@ where
     }
 
     fn response_from_error(&self, error: Error) -> HttpResponse {
-        self.response_from_response(Response::failed(
-            Self::VERSION,
-            error,
-            self.server_type.clone(),
-            self.server_version.clone(),
-        ))
+        self.response_from_response(
+            Response::failed(
+                Self::VERSION,
+                error,
+                self.server_type.clone(),
+                self.server_version.clone(),
+            ),
+            http::StatusCode::BAD_REQUEST,
+        )
     }
 
-    fn response_from_response(&self, response: Response) -> HttpResponse {
+    fn response_from_response(&self, response: Response, status: http::StatusCode) -> HttpResponse {
         let serialized = serde_json::to_vec(&ResponseObject::from(response))
             .expect("failed to serialize response");
         let mut response = http::Response::new(http_body_util::StreamBody::new(
             OpenSubsonicBodyStream::Bytes(Some(From::from(serialized))),
         ));
-        *response.status_mut() = http::StatusCode::OK;
+        *response.status_mut() = status;
         response
     }
 
