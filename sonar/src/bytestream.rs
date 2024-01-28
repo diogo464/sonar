@@ -4,8 +4,7 @@ use bytes::Bytes;
 use tokio::fs::File;
 use tokio_stream::StreamExt;
 
-pub type ByteStream =
-    Box<dyn tokio_stream::Stream<Item = std::io::Result<Bytes>> + Send + Sync + Unpin>;
+pub type ByteStream = Box<dyn tokio_stream::Stream<Item = std::io::Result<Bytes>> + Send + Unpin>;
 
 pub async fn to_file(stream: ByteStream, path: &Path) -> std::io::Result<()> {
     let mut file = File::create(path).await?;

@@ -8,7 +8,7 @@ pub struct ExtractedImage {
     pub data: Vec<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct ExtractedMetadata {
     pub title: Option<String>,
     pub album: Option<String>,

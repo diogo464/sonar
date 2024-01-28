@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::{
     album, artist, blob::BlobStorage, bytestream, metadata::SonarExtractor, track, AlbumCreate,
     AlbumId, ArtistCreate, ArtistId, ByteStream, DateTime, Db, Error, ErrorKind, Result, Track,
@@ -13,14 +15,14 @@ pub struct Config {
 pub struct Import {
     pub artist: Option<ArtistId>,
     pub album: Option<AlbumId>,
-    pub filename: String,
+    pub filepath: Option<String>,
     pub stream: ByteStream,
 }
 
 impl std::fmt::Debug for Import {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Import")
-            .field("filename", &self.filename)
+            .field("filename", &self.filepath)
             .finish()
     }
 }
@@ -47,8 +49,13 @@ pub async fn import(
     let _permit = importer.semaphore.acquire().await;
 
     // write to temporary file
+    let filename = import
+        .filepath
+        .as_ref()
+        .and_then(|x| x.split('/').last())
+        .unwrap_or("input");
     let tmp_dir = tempfile::tempdir()?;
-    let tmp_filepath = tmp_dir.path().join(&import.filename);
+    let tmp_filepath = tmp_dir.path().join(filename);
     bytestream::to_file(import.stream, &tmp_filepath).await?;
 
     // check file size
@@ -57,7 +64,10 @@ pub async fn import(
     if tokio::fs::metadata(&tmp_filepath).await?.len() as usize > importer.config.max_import_size {
         return Err(Error::new(
             ErrorKind::Invalid,
-            format!("file size exceeds maximum import size: {}", import.filename),
+            format!(
+                "file size exceeds maximum import size: {:?}",
+                import.filepath
+            ),
         ));
     }
 
@@ -98,7 +108,7 @@ pub async fn import(
         None => {
             return Err(Error::new(
                 ErrorKind::Invalid,
-                format!("unable to find track name for file: {}", import.filename),
+                format!("unable to find track name for file: {:?}", import.filepath),
             ))
         }
     };
@@ -120,7 +130,7 @@ pub async fn import(
         .ok_or_else(|| {
             Error::new(
                 ErrorKind::Invalid,
-                format!("unable to find duration for file: {}", import.filename),
+                format!("unable to find duration for file: {:?}", import.filepath),
             )
         })?;
 
@@ -143,7 +153,7 @@ pub async fn import(
             None => {
                 return Err(Error::new(
                     ErrorKind::Invalid,
-                    format!("unable to find artist name for file: {}", import.filename),
+                    format!("unable to find artist name for file: {:?}", import.filepath),
                 ))
             }
         };
@@ -174,7 +184,7 @@ pub async fn import(
             None => {
                 return Err(Error::new(
                     ErrorKind::Invalid,
-                    format!("unable to find album name for file: {}", import.filename),
+                    format!("unable to find album name for file: {:?}", import.filepath),
                 ))
             }
         };
@@ -208,7 +218,7 @@ pub async fn import(
         lyrics: None, // TODO: extract lyrics
         properties: Default::default(),
         audio_stream,
-        audio_filename: import.filename,
+        audio_filename: import.filepath.unwrap_or_default(),
     };
 
     // TODO: add _tx methods

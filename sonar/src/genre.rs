@@ -206,6 +206,12 @@ impl From<Genres> for Vec<String> {
     }
 }
 
+impl From<Genre> for Genres {
+    fn from(genre: Genre) -> Self {
+        Self(vec![genre])
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GenreUpdateAction {
     Set,

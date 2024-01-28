@@ -1,8 +1,10 @@
-use std::{net::SocketAddr, path::PathBuf, sync::OnceLock};
+use std::{collections::HashSet, net::SocketAddr, path::PathBuf, sync::OnceLock};
 
 use clap::Parser;
 use eyre::{Context, Result};
+use tokio_stream::StreamExt;
 
+const IMPORT_FILETYPES: &[&str] = &["flac", "mp3", "ogg", "opus", "wav"];
 static SERVER_ENDPOINT: OnceLock<String> = OnceLock::new();
 
 #[derive(Debug, Parser)]
@@ -26,6 +28,7 @@ struct Args {
 #[derive(Debug, Parser)]
 enum Command {
     Artist(ArtistArgs),
+    Import(ImportArgs),
     Server(ServerArgs),
 }
 
@@ -45,6 +48,7 @@ async fn main() -> Result<()> {
             ArtistCommand::Update(cargs) => cmd_artist_update(cargs).await?,
             ArtistCommand::Delete(cargs) => cmd_artist_delete(cargs).await?,
         },
+        Command::Import(cargs) => cmd_import(cargs).await?,
         Command::Server(cargs) => cmd_server(cargs).await?,
     }
 
@@ -161,6 +165,43 @@ struct ServerArgs {
     data_dir: PathBuf,
 }
 
+#[derive(Debug, Parser)]
+struct ImportArgs {
+    paths: Vec<PathBuf>,
+}
+
+async fn cmd_import(args: ImportArgs) -> Result<()> {
+    let mut client = create_client().await?;
+
+    tracing::info!("scanning for files");
+    let files = list_files_in_directories(args.paths)
+        .await?
+        .into_iter()
+        .filter(|path| {
+            IMPORT_FILETYPES
+                .iter()
+                .any(|filetype| path.extension().map(|x| x == *filetype).unwrap_or(false))
+        });
+
+    for filepath in files {
+        tracing::info!("importing {}", filepath.display());
+        let file = tokio::fs::File::open(&filepath).await?;
+        let reader = tokio::io::BufReader::new(file);
+        let stream =
+            tokio_util::io::ReaderStream::new(reader).map(move |x| sonar_grpc::ImportRequest {
+                chunk: x.unwrap().to_vec(),
+                filepath: Some(filepath.display().to_string()),
+                artist_id: None,
+                album_id: None,
+            });
+        let response = client.import(stream).await?;
+        let track = response.into_inner();
+        println!("{:?}", track);
+    }
+
+    Ok(())
+}
+
 async fn cmd_server(args: ServerArgs) -> Result<()> {
     let data_dir = args
         .data_dir
@@ -177,7 +218,10 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     let storage_backend = sonar::StorageBackend::Filesystem {
         path: data_dir.join("storage"),
     };
-    let config = sonar::Config::new(database_url, storage_backend);
+    let mut config = sonar::Config::new(database_url, storage_backend);
+    config
+        .register_extractor("lofty", sonar_extractor_lofty::LoftyExtractor::default())
+        .context("registering lofty extractor")?;
     let context = sonar::new(config).await.context("creating sonar context")?;
 
     let grpc_context = context.clone();
@@ -201,4 +245,33 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     r1?;
 
     Ok(())
+}
+
+async fn list_files_in_directories(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
+    let mut queue = paths;
+    let mut files = vec![];
+    let mut inserted = HashSet::<PathBuf>::new();
+    while let Some(p) = queue.pop() {
+        let metadata = tokio::fs::metadata(&p).await?;
+        if metadata.is_dir() {
+            let mut entries = tokio::fs::read_dir(&p).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                queue.push(entry.path());
+            }
+        } else if metadata.is_file() {
+            match p.canonicalize() {
+                Ok(p) => {
+                    if inserted.contains(&p) {
+                        continue;
+                    }
+                    inserted.insert(p.clone());
+                    files.push(p)
+                }
+                Err(err) => {
+                    tracing::warn!("failed to canonicalize {}: {}", p.display(), err);
+                }
+            }
+        }
+    }
+    Ok(files)
 }

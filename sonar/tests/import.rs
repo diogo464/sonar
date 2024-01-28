@@ -25,7 +25,7 @@ async fn import_simple() {
         sonar::Import {
             artist: None,
             album: None,
-            filename: "test.mp3".to_string(),
+            filepath: "test.mp3".to_string(),
             stream: sonar::test::create_stream(b"music data"),
         },
     )
@@ -93,7 +93,7 @@ async fn import_merge_metadata() {
         sonar::Import {
             artist: None,
             album: None,
-            filename: "test.mp3".to_string(),
+            filepath: "test.mp3".to_string(),
             stream: sonar::test::create_stream(b"music data"),
         },
     )

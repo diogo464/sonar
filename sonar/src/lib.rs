@@ -289,6 +289,8 @@ pub struct ArtistUpdate {
     pub properties: Vec<PropertyUpdate>,
 }
 
+// TODO: add duration
+// TODO: add created at
 #[derive(Debug, Clone)]
 pub struct Album {
     pub id: AlbumId,
@@ -362,10 +364,14 @@ impl std::fmt::Debug for TrackCreate {
         f.debug_struct("TrackCreate")
             .field("name", &self.name)
             .field("album", &self.album)
+            .field("disc_number", &self.disc_number)
+            .field("track_number", &self.track_number)
+            .field("duration", &self.duration)
             .field("cover_art", &self.cover_art)
             .field("genres", &self.genres)
             .field("lyrics", &self.lyrics)
             .field("properties", &self.properties)
+            .field("audio_filename", &self.audio_filename)
             .finish()
     }
 }

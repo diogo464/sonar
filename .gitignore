@@ -1,3 +1,4 @@
 /sonar-cli/storage
+/sonar-cli/spotify-music
 *.db
 *.png

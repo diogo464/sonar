@@ -43,6 +43,33 @@ impl OpenSubsonicServer for Server {
             ignored_articles: Default::default(),
         })
     }
+    async fn get_artist_info2(&self, _request: Request<GetArtistInfo2>) -> Result<ArtistInfo2> {
+        Ok(Default::default())
+    }
+    async fn get_artist(&self, request: Request<GetArtist>) -> Result<ArtistWithAlbumsID3> {
+        let artist_id = request.body.id.parse::<sonar::ArtistId>().m()?;
+        let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
+        let albums = sonar::album_list_by_artist(&self.context, artist_id, Default::default())
+            .await
+            .m()?;
+        Ok(ArtistWithAlbumsID3 {
+            artist: ArtistID3 {
+                id: artist.id.to_string(),
+                name: artist.name.clone(),
+                artist_image_url: None,
+                starred: None,
+                album_count: artist.album_count,
+                cover_art: artist.cover_art.map(|id| id.to_string()),
+            },
+            album: albums
+                .into_iter()
+                .map(|album| albumid3_from_album_and_artist(&artist, album))
+                .collect(),
+        })
+    }
+    async fn get_top_songs(&self, _request: Request<GetTopSongs>) -> Result<TopSongs> {
+        Ok(Default::default())
+    }
     async fn get_album_list2(&self, _request: Request<GetAlbumList2>) -> Result<AlbumList2> {
         Ok(Default::default())
     }
@@ -67,6 +94,25 @@ fn artistid3_from_artist(artist: sonar::Artist) -> ArtistID3 {
         artist_image_url: None,
         album_count: artist.album_count,
         starred: None,
+    }
+}
+
+fn albumid3_from_album_and_artist(artist: &sonar::Artist, album: sonar::Album) -> AlbumID3 {
+    AlbumID3 {
+        id: album.id.to_string(),
+        name: album.name,
+        artist: Some(artist.name.clone()),
+        artist_id: Some(artist.id.to_string()),
+        cover_art: album.cover_art.map(|id| id.to_string()),
+        song_count: album.track_count,
+        duration: Default::default(),
+        play_count: Some(album.listen_count as u64),
+        created: Default::default(),
+        starred: None,
+        year: None,
+        genre: None,
+        user_rating: None,
+        record_labels: Default::default(),
     }
 }
 

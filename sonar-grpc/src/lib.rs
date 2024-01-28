@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use bytes::Bytes;
 use eyre::Context;
 
 tonic::include_proto!("sonar");
@@ -95,6 +96,42 @@ impl sonar_service_server::SonarService for Server {
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         todo!()
     }
+    async fn import(
+        &self,
+        request: tonic::Request<tonic::Streaming<ImportRequest>>,
+    ) -> std::result::Result<tonic::Response<Track>, tonic::Status> {
+        let mut stream = request.into_inner();
+        let first_message = match stream.message().await? {
+            Some(message) => message,
+            None => return Err(tonic::Status::invalid_argument("empty stream")),
+        };
+        let filepath = first_message.filepath;
+        let artist = first_message
+            .artist_id
+            .map(sonar::ArtistId::try_from)
+            .transpose()
+            .m()?;
+        let album = first_message
+            .album_id
+            .map(sonar::AlbumId::try_from)
+            .transpose()
+            .m()?;
+        let track = sonar::import(
+            &self.context,
+            sonar::Import {
+                artist,
+                album,
+                filepath,
+                stream: Box::new(ImportStream {
+                    first_chunk: Some(Bytes::from(first_message.chunk)),
+                    stream,
+                }),
+            },
+        )
+        .await
+        .m()?;
+        Ok(tonic::Response::new(track.into()))
+    }
 }
 
 pub async fn client(endpoint: &str) -> eyre::Result<Client> {
@@ -169,6 +206,24 @@ impl From<sonar::Artist> for Artist {
     }
 }
 
+impl From<sonar::Track> for Track {
+    fn from(value: sonar::Track) -> Self {
+        Self {
+            id: From::from(value.id),
+            name: value.name,
+            artist_id: From::from(value.artist),
+            album_id: From::from(value.album),
+            disc_number: value.disc_number as u32,
+            track_number: value.track_number as u32,
+            duration: Some(TryFrom::try_from(value.duration).expect("failed to convert duration")),
+            listen_count: value.listen_count as u32,
+            cover_art_id: value.cover_art.map(From::from),
+            genres: From::from(value.genres),
+            properties: convert_properties_to_pb(value.properties),
+        }
+    }
+}
+
 fn convert_properties_to_pb(properties: sonar::Properties) -> Vec<Property> {
     let mut props = Vec::with_capacity(properties.len());
     for (key, value) in properties {
@@ -190,4 +245,35 @@ fn convert_properties_from_pb(
         props.insert(key, value);
     }
     Ok(props)
+}
+
+struct ImportStream {
+    first_chunk: Option<Bytes>,
+    stream: tonic::Streaming<ImportRequest>,
+}
+
+impl tokio_stream::Stream for ImportStream {
+    type Item = std::io::Result<Bytes>;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        match self.first_chunk.take() {
+            Some(chunk) => std::task::Poll::Ready(Some(Ok(chunk))),
+            None => {
+                let stream = std::pin::Pin::new(&mut self.get_mut().stream);
+                match stream.poll_next(cx) {
+                    std::task::Poll::Ready(Some(Ok(message))) => {
+                        std::task::Poll::Ready(Some(Ok(Bytes::from(message.chunk))))
+                    }
+                    std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Some(Err(
+                        std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+                    ))),
+                    std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
+                    std::task::Poll::Pending => std::task::Poll::Pending,
+                }
+            }
+        }
+    }
 }
