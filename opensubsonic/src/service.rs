@@ -67,9 +67,9 @@ use crate::{
         Request,
     },
     response::{
-        AlbumInfo, AlbumList, AlbumList2, AlbumWithSongsID3, Artist, ArtistInfo, ArtistInfo2,
-        ArtistsID3, Bookmarks, ChatMessages, Directory, Error, ErrorCode, Genres,
-        InternetRadioStations, JukeboxControlResponse, License, Lyrics, MusicFolders,
+        AlbumInfo, AlbumList, AlbumList2, AlbumWithSongsID3, ArtistInfo, ArtistInfo2,
+        ArtistWithAlbumsID3, ArtistsID3, Bookmarks, ChatMessages, Directory, Error, ErrorCode,
+        Genres, InternetRadioStations, JukeboxControlResponse, License, Lyrics, MusicFolders,
         NewestPodcasts, NowPlaying, PlayQueue, PlaylistWithSongs, Playlists, Podcasts, Response,
         ResponseBody, ResponseObject, ScanStatus, SearchResult, SearchResult2, SearchResult3,
         Shares, SimilarSongs, SimilarSongs2, Songs, Starred, Starred2, TopSongs, User, Users,
@@ -180,7 +180,7 @@ pub trait OpenSubsonicServer: Send + Sync + 'static {
     async fn get_album_list2(&self, request: Request<GetAlbumList2>) -> Result<AlbumList2> {
         unsupported()
     }
-    async fn get_artist(&self, request: Request<GetArtist>) -> Result<Artist> {
+    async fn get_artist(&self, request: Request<GetArtist>) -> Result<ArtistWithAlbumsID3> {
         unsupported()
     }
     async fn get_artist_info(&self, request: Request<GetArtistInfo>) -> Result<ArtistInfo> {
