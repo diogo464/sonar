@@ -3,7 +3,7 @@
 #![feature(concat_idents)]
 #![feature(backtrace_frames)]
 
-use std::{sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use importer::Importer;
@@ -39,10 +39,13 @@ mod blob;
 pub(crate) use blob::BlobStorage;
 
 pub(crate) mod genre;
-pub use genre::{Genre, GenreUpdate, GenreUpdateAction, Genres};
+pub use genre::{Genre, GenreUpdate, GenreUpdateAction, Genres, InvalidGenreError};
 
 pub(crate) mod property;
-pub use property::{Properties, PropertyKey, PropertyUpdate, PropertyUpdateAction, PropertyValue};
+pub use property::{
+    InvalidPropertyKeyError, InvalidPropertyValueError, Properties, PropertyKey, PropertyUpdate,
+    PropertyUpdateAction, PropertyValue,
+};
 
 pub(crate) mod user;
 pub use user::Username;
@@ -66,7 +69,7 @@ pub type DateTime = chrono::DateTime<chrono::Utc>;
 #[derive(Debug, Clone)]
 pub enum StorageBackend {
     Memory,
-    Filesystem { path: String },
+    Filesystem { path: PathBuf },
 }
 
 #[derive(Debug)]
@@ -165,11 +168,27 @@ pub struct ListParams {
     pub limit: Option<u32>,
 }
 
+impl From<(Option<u32>, Option<u32>)> for ListParams {
+    fn from((offset, limit): (Option<u32>, Option<u32>)) -> Self {
+        Self { offset, limit }
+    }
+}
+
+impl From<(u32, u32)> for ListParams {
+    fn from((offset, limit): (u32, u32)) -> Self {
+        Self {
+            offset: Some(offset),
+            limit: Some(limit),
+        }
+    }
+}
+
 impl ListParams {
-    pub(crate) fn to_db_offset_limit(self) -> (i64, i64) {
-        let limit = self.limit.map(|limit| limit as i64).unwrap_or(i64::MAX);
-        let offset = self.offset.map(|offset| offset as i64).unwrap_or(0);
-        (offset, limit)
+    pub fn new(offset: u32, limit: u32) -> Self {
+        Self {
+            offset: Some(offset),
+            limit: Some(limit),
+        }
     }
 
     pub fn with_offset(mut self, offset: u32) -> Self {
@@ -181,39 +200,45 @@ impl ListParams {
         self.limit = Some(limit);
         self
     }
+
+    pub(crate) fn to_db_offset_limit(self) -> (i64, i64) {
+        let limit = self.limit.map(|limit| limit as i64).unwrap_or(i64::MAX);
+        let offset = self.offset.map(|offset| offset as i64).unwrap_or(0);
+        (offset, limit)
+    }
 }
 
 pub struct ImageCreate {
     pub data: ByteStream,
 }
 
-pub struct ImageReader {
+pub struct ImageDownload {
     mime_type: String,
-    reader: ByteStream,
+    stream: ByteStream,
 }
 
-impl ImageReader {
-    pub(crate) fn new(mime_type: String, reader: ByteStream) -> Self {
-        Self { mime_type, reader }
+impl ImageDownload {
+    pub(crate) fn new(mime_type: String, stream: ByteStream) -> Self {
+        Self { mime_type, stream }
     }
 }
 
-impl std::fmt::Debug for ImageReader {
+impl std::fmt::Debug for ImageDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ImageReader")
+        f.debug_struct("ImageDownload")
             .field("mime_type", &self.mime_type)
             .finish()
     }
 }
 
-impl tokio_stream::Stream for ImageReader {
+impl tokio_stream::Stream for ImageDownload {
     type Item = std::io::Result<Bytes>;
 
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        std::pin::Pin::new(&mut *self.get_mut().reader).poll_next(cx)
+        std::pin::Pin::new(&mut *self.get_mut().stream).poll_next(cx)
     }
 }
 
@@ -466,11 +491,6 @@ pub async fn new(config: Config) -> Result<Context> {
     })
 }
 
-pub async fn image_reader(context: &Context, image_id: ImageId) -> Result<ImageReader> {
-    let mut conn = context.db.acquire().await?;
-    image::reader(&mut conn, &*context.storage, image_id).await
-}
-
 pub async fn image_create(context: &Context, create: ImageCreate) -> Result<ImageId> {
     let mut tx = context.db.begin().await?;
     let result = image::create(&mut tx, &*context.storage, create).await;
@@ -483,6 +503,11 @@ pub async fn image_delete(context: &Context, image_id: ImageId) -> Result<()> {
     let result = image::delete(&mut tx, image_id).await;
     tx.commit().await?;
     result
+}
+
+pub async fn image_download(context: &Context, image_id: ImageId) -> Result<ImageDownload> {
+    let mut conn = context.db.acquire().await?;
+    image::download(&mut conn, &*context.storage, image_id).await
 }
 
 pub async fn user_list(context: &Context, params: ListParams) -> Result<Vec<User>> {

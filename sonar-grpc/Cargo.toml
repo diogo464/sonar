@@ -1,0 +1,18 @@
+[package]
+name = "sonar-grpc"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+sonar = { path = "../sonar" }
+
+prost = "0.12.3"
+prost-types = "0.12.3"
+tonic = "0.10.2"
+eyre = "0.6.11"
+tracing = "0.1.40"
+
+[build-dependencies]
+tonic-build = "0.10.2"

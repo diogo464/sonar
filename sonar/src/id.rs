@@ -27,7 +27,7 @@ impl InvalidIdError {
 
 impl std::fmt::Display for InvalidIdError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:#x} is not a valid ID: {}", self.id, self.message)
+        write!(f, "{:x} is not a valid ID: {}", self.id, self.message)
     }
 }
 
@@ -80,6 +80,12 @@ macro_rules! impl_id {
                 Self::try_from(id)
             }
         }
+
+        impl std::fmt::Display for $t {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                SonarId::from(*self).fmt(f)
+            }
+        }
     };
 }
 
@@ -104,6 +110,13 @@ pub enum SonarId {
     User(UserId),
     Lyrics(LyricsId),
     Scrobble(ScrobbleId),
+}
+
+impl std::fmt::Display for SonarId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let id = u32::from(*self);
+        write!(f, "{:x}", id)
+    }
 }
 
 impl TryFrom<u32> for SonarId {

@@ -16,7 +16,7 @@ async fn read_image_one() {
         data: sonar::test::create_stream(b"image data"),
     };
     let image_id = sonar::image_create(&ctx, create).await.unwrap();
-    let reader = sonar::image_reader(&ctx, image_id).await.unwrap();
+    let reader = sonar::image_download(&ctx, image_id).await.unwrap();
     let data = sonar::bytestream::to_bytes(reader).await.unwrap();
     assert_eq!(data, &b"image data"[..]);
 }
@@ -29,6 +29,6 @@ async fn delete_image_one() {
     };
     let image_id = sonar::image_create(&ctx, create).await.unwrap();
     sonar::image_delete(&ctx, image_id).await.unwrap();
-    let reader = sonar::image_reader(&ctx, image_id).await;
+    let reader = sonar::image_download(&ctx, image_id).await;
     assert!(reader.is_err());
 }

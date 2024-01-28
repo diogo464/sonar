@@ -1,19 +1,19 @@
 use crate::{
     blob::{self, BlobStorage},
-    DbC, ImageCreate, ImageId, ImageReader, Result,
+    DbC, ImageCreate, ImageId, ImageDownload, Result,
 };
 
-pub async fn reader(
+pub async fn download(
     db: &mut DbC,
     storage: &dyn BlobStorage,
     image_id: ImageId,
-) -> Result<ImageReader> {
+) -> Result<ImageDownload> {
     let db_id = image_id.to_db();
     let row = sqlx::query!("SELECT mime_type, blob_key FROM image WHERE id = ?", db_id)
         .fetch_one(db)
         .await?;
-    let reader = storage.read(&row.blob_key, Default::default()).await?;
-    Ok(ImageReader::new(row.mime_type, reader))
+    let stream = storage.read(&row.blob_key, Default::default()).await?;
+    Ok(ImageDownload::new(row.mime_type, stream))
 }
 
 pub async fn create(

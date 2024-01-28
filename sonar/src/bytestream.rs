@@ -32,6 +32,6 @@ where
     Ok(bytes.freeze())
 }
 
-pub fn from_bytes(bytes: bytes::Bytes) -> ByteStream {
-    Box::new(tokio_stream::once(Ok(bytes)))
+pub fn from_bytes(bytes: impl Into<Bytes>) -> ByteStream {
+    Box::new(tokio_stream::once(Ok(bytes.into())))
 }

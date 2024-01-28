@@ -26,6 +26,3 @@ rand = { version = "0.8.5", optional = true }
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 sonar = { path = "." , features = ["test-utilities"] }
-
-[profile.dev.packages.scrypt]
-opt-level = 3

@@ -89,6 +89,12 @@ impl AsRef<str> for PropertyKey {
     }
 }
 
+impl From<PropertyKey> for String {
+    fn from(key: PropertyKey) -> Self {
+        key.0.into_owned()
+    }
+}
+
 impl PropertyKey {
     pub fn new(key: impl AsRef<str>) -> Result<Self, InvalidPropertyKeyError> {
         Self::from_str(key.as_ref())
@@ -175,6 +181,12 @@ impl AsRef<str> for PropertyValue {
     }
 }
 
+impl From<PropertyValue> for String {
+    fn from(value: PropertyValue) -> Self {
+        value.0.into_owned()
+    }
+}
+
 impl PropertyValue {
     pub fn new(value: impl AsRef<str>) -> Result<Self, InvalidPropertyValueError> {
         Self::from_str(value.as_ref())
@@ -231,6 +243,31 @@ impl Properties {
 
     pub fn values(&self) -> impl Iterator<Item = PropertyValue> + '_ {
         self.0.values().map(|v| PropertyValue(v.clone()))
+    }
+}
+
+pub struct PropertiesIntoIter {
+    inner: std::collections::hash_map::IntoIter<Cow<'static, str>, Cow<'static, str>>,
+}
+
+impl Iterator for PropertiesIntoIter {
+    type Item = (PropertyKey, PropertyValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next()
+            .map(|(k, v)| (PropertyKey(k), PropertyValue(v)))
+    }
+}
+
+impl IntoIterator for Properties {
+    type Item = (PropertyKey, PropertyValue);
+    type IntoIter = PropertiesIntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        PropertiesIntoIter {
+            inner: self.0.into_iter(),
+        }
     }
 }
 

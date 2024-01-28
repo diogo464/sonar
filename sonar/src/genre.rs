@@ -192,6 +192,20 @@ impl FromStr for Genres {
     }
 }
 
+impl TryFrom<Vec<String>> for Genres {
+    type Error = InvalidGenreError;
+
+    fn try_from(genres: Vec<String>) -> Result<Self, Self::Error> {
+        Self::new(genres)
+    }
+}
+
+impl From<Genres> for Vec<String> {
+    fn from(genres: Genres) -> Self {
+        genres.into_iter().map(|genre| genre.to_string()).collect()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GenreUpdateAction {
     Set,

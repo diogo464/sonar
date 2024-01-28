@@ -1,1 +1,3 @@
+/sonar-cli/storage
 *.db
+*.png
