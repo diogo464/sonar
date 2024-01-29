@@ -1,7 +1,5 @@
-use std::path::Path;
-
 use crate::{
-    album, artist, blob::BlobStorage, bytestream, metadata::SonarExtractor, track, AlbumCreate,
+    album, artist, blob::BlobStorage, bytestream, extractor::SonarExtractor, track, AlbumCreate,
     AlbumId, ArtistCreate, ArtistId, ByteStream, DateTime, Db, Error, ErrorKind, Result, Track,
     TrackCreate,
 };
@@ -160,6 +158,7 @@ pub async fn import(
 
         let artist_create = ArtistCreate {
             name: artist_name.to_owned(),
+            description: None,
             cover_art: Default::default(),
             genres: Default::default(),
             properties: Default::default(),
@@ -209,6 +208,7 @@ pub async fn import(
     let audio_stream = bytestream::from_file(&tmp_filepath).await?;
     let track_create = TrackCreate {
         name: track_name.to_owned(),
+        description: None,
         album: album_id,
         disc_number,
         track_number,

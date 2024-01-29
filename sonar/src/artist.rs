@@ -1,15 +1,17 @@
 use crate::{
     genre, property, Artist, ArtistCreate, ArtistId, ArtistUpdate, DbC, Genres, ImageId,
-    ListParams, Properties, Result,
+    ListParams, Properties, Result, Timestamp,
 };
 
 #[derive(sqlx::FromRow)]
 struct ArtistView {
     id: i64,
     name: String,
+    description: Option<String>,
     listen_count: i64,
     cover_art: Option<i64>,
     album_count: i64,
+    created_at: i64,
 }
 
 impl ArtistView {
@@ -17,11 +19,13 @@ impl ArtistView {
         Artist {
             id: ArtistId::from_db(self.id),
             name: self.name,
+            description: self.description,
             listen_count: self.listen_count as u32,
             genres,
             cover_art: self.cover_art.map(ImageId::from_db),
             properties,
             album_count: self.album_count as u32,
+            created_at: Timestamp::from_seconds(self.created_at as u64),
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use sonar::{metadata::ExtractedMetadata, Genres};
+use sonar::{extractor::ExtractedMetadata, Genres};
 
 #[tokio::test]
 async fn import_simple() {
@@ -25,7 +25,7 @@ async fn import_simple() {
         sonar::Import {
             artist: None,
             album: None,
-            filepath: "test.mp3".to_string(),
+            filepath: Some("test.mp3".to_string()),
             stream: sonar::test::create_stream(b"music data"),
         },
     )
@@ -93,7 +93,7 @@ async fn import_merge_metadata() {
         sonar::Import {
             artist: None,
             album: None,
-            filepath: "test.mp3".to_string(),
+            filepath: Some("test.mp3".to_string()),
             stream: sonar::test::create_stream(b"music data"),
         },
     )

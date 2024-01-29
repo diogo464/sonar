@@ -3,11 +3,11 @@ use lofty::{Accessor, AudioFile, TaggedFileExt};
 #[derive(Debug, Default)]
 pub struct LoftyExtractor;
 
-impl sonar::metadata::Extractor for LoftyExtractor {
+impl sonar::extractor::Extractor for LoftyExtractor {
     fn extract(
         &self,
         path: &std::path::Path,
-    ) -> std::io::Result<sonar::metadata::ExtractedMetadata> {
+    ) -> std::io::Result<sonar::extractor::ExtractedMetadata> {
         let file = lofty::read_from_path(path)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
@@ -36,7 +36,7 @@ impl sonar::metadata::Extractor for LoftyExtractor {
             .pictures()
             .iter()
             .next()
-            .map(|p| sonar::metadata::ExtractedImage {
+            .map(|p| sonar::extractor::ExtractedImage {
                 mime_type: p
                     .mime_type()
                     .map(|x| x.to_string())
@@ -44,7 +44,7 @@ impl sonar::metadata::Extractor for LoftyExtractor {
                 data: p.data().to_vec(),
             });
 
-        Ok(sonar::metadata::ExtractedMetadata {
+        Ok(sonar::extractor::ExtractedMetadata {
             title,
             album,
             artist,

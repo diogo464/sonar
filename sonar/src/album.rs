@@ -1,17 +1,22 @@
+use std::time::Duration;
+
 use crate::{
     genre, property, Album, AlbumCreate, AlbumId, AlbumUpdate, ArtistId, DbC, Error, ErrorKind,
-    Genres, ImageId, ListParams, Properties, Result, ValueUpdate,
+    Genres, ImageId, ListParams, Properties, Result, Timestamp, ValueUpdate,
 };
 
 #[derive(sqlx::FromRow)]
 struct AlbumView {
     id: i64,
     name: String,
+    description: Option<String>,
+    duration_ms: i64,
     artist: i64,
     release_date: String,
     listen_count: i64,
     cover_art: Option<i64>,
     track_count: i64,
+    created_at: i64,
 }
 
 impl AlbumView {
@@ -19,6 +24,8 @@ impl AlbumView {
         Album {
             id: AlbumId::from_db(self.id),
             name: self.name,
+            description: self.description,
+            duration: Duration::from_millis(self.duration_ms as u64),
             artist: ArtistId::from_db(self.artist),
             release_date: self.release_date.parse().unwrap(),
             listen_count: self.listen_count as u32,
@@ -26,6 +33,7 @@ impl AlbumView {
             genres,
             properties,
             track_count: self.track_count as u32,
+            created_at: Timestamp::from_seconds(self.created_at as u64),
         }
     }
 }

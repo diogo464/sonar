@@ -357,7 +357,7 @@ struct ExtractorArgs {
 }
 
 async fn cmd_extractor(args: ExtractorArgs) -> Result<()> {
-    use sonar::metadata::Extractor;
+    use sonar::extractor::Extractor;
 
     let extractors = vec![(
         "lofty",

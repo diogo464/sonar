@@ -3,14 +3,15 @@ use std::time::Duration;
 use crate::{
     blob::{self, BlobStorage},
     genre, property, AlbumId, ArtistId, ByteRange, ByteStream, DbC, Error, ErrorKind, Genres,
-    ImageId, ListParams, Lyrics, LyricsKind, LyricsLine, Properties, Result, Track, TrackCreate,
-    TrackId, TrackLyrics, TrackUpdate, ValueUpdate,
+    ImageId, ListParams, Lyrics, LyricsKind, LyricsLine, Properties, Result, Timestamp, Track,
+    TrackCreate, TrackId, TrackLyrics, TrackUpdate, ValueUpdate,
 };
 
 #[derive(sqlx::FromRow)]
 struct TrackView {
     id: i64,
     name: String,
+    description: Option<String>,
     artist: i64,
     album: i64,
     disc_number: i64,
@@ -18,6 +19,7 @@ struct TrackView {
     duration_ms: i64,
     listen_count: i64,
     cover_art: Option<i64>,
+    created_at: i64,
 }
 
 impl TrackView {
@@ -25,6 +27,7 @@ impl TrackView {
         Track {
             id: TrackId::from_db(self.id),
             name: self.name,
+            description: self.description,
             artist: ArtistId::from_db(self.artist),
             album: AlbumId::from_db(self.album),
             disc_number: self.disc_number as u32,
@@ -34,6 +37,7 @@ impl TrackView {
             cover_art: self.cover_art.map(ImageId::from_db),
             genres,
             properties,
+            created_at: Timestamp::from_seconds(self.created_at as u64),
         }
     }
 }

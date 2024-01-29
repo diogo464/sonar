@@ -1,66 +1,57 @@
-use std::{path::Path, sync::Arc, time::Duration};
+//"title": "Your Time",
+//"artist": "Savoy feat. KIELY",
+//"track": "2/4",
+//"album": "1000 Years EP",
+//"disc": "1/1",
+//"date": "2015-12-02",
+//"genre": "complextro",
+//"TBPM": "0",
+//"compilation": "0",
+//"language": "eng",
+//"lyrics-XXX": "",
+//"album_artist": "Savoy",
+//"TLEN": "276486",
+//"TIPL": "arranger",
+//"TDOR": "2015-12-02",
+//"publisher": "Monstercat",
+//"Script": "Latn",
+//"TSRC": "CA6D21500408",
+//"TMED": "Digital Media",
+//"encoder": "Lavf60.16.100",
+//"artist-sort": "Savoy feat. KIELY",
+//"ALBUMARTISTSORT": "Savoy",
+//"CATALOGNUMBER": "MCEP086",
+//"Album Artist Credit": "Savoy",
+//"MusicBrainz Album Type": "e",
+//"Artist Credit": "Savoy feat. KIELY",
+//"MusicBrainz Album Status": "Official",
+//"MusicBrainz Album Release Country": "XW",
+//"spotify_album_id": "4frUzLfeOhJxIGZVG5n1iK",
+//"spotify_track_id": "496lkFmrm4eXHCXifwqOGW",
+//"spotify_artist_id": "25vU5DYwHIHhg1ViWV3SJq",
+//"MusicBrainz Album Id": "2ce0cb4b-7958-455e-b6f9-e3d500fd1a99",
+//"MusicBrainz Artist Id": "89d03474-2f5f-45fe-839e-209a2728dc9c",
+//"MusicBrainz Album Artist Id": "89d03474-2f5f-45fe-839e-209a2728dc9c",
+//"MusicBrainz Release Group Id": "836b2d7f-189a-4e99-8c19-22c1545ea7ef",
+//"MusicBrainz Release Track Id": "c70dbc1a-6dea-4090-b998-4de2a06c0700"
 
-use crate::{DateTime, Genres};
+use crate::{Genre, Genres, Properties};
 
-#[derive(Clone)]
-pub struct ExtractedImage {
-    pub mime_type: String,
-    pub data: Vec<u8>,
-}
-
-impl std::fmt::Debug for ExtractedImage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ExtractedImage")
-            .field("mime_type", &self.mime_type)
-            .field("data", &self.data.len())
-            .finish()
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct ExtractedMetadata {
-    pub title: Option<String>,
-    pub album: Option<String>,
-    pub artist: Option<String>,
-    pub track_number: Option<u32>,
-    pub disc_number: Option<u32>,
-    pub duration: Option<Duration>,
-    pub release_date: Option<DateTime>,
-    pub cover_art: Option<ExtractedImage>,
+#[derive(Debug, Clone)]
+pub struct ArtistMetadata {
+    pub name: Option<String>,
     pub genres: Genres,
+    pub properties: Properties,
 }
 
-pub trait Extractor: Send + Sync + 'static {
-    fn extract(&self, path: &Path) -> std::io::Result<ExtractedMetadata>;
+pub struct AlbumMetadata {
+    pub name: Option<String>,
+    pub genres: Genres,
+    pub properties: Properties,
 }
 
-#[derive(Clone)]
-pub(crate) struct SonarExtractor {
-    name: String,
-    extractor: Arc<dyn Extractor>,
-}
-
-impl std::fmt::Debug for SonarExtractor {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SonarExtractor")
-            .field("name", &self.name)
-            .finish()
-    }
-}
-
-impl SonarExtractor {
-    pub fn new(name: impl Into<String>, extractor: impl Extractor) -> Self {
-        Self {
-            name: name.into(),
-            extractor: Arc::new(extractor),
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn extract(&self, path: &Path) -> std::io::Result<ExtractedMetadata> {
-        self.extractor.extract(path)
-    }
+pub struct TrackMetadata {
+    pub name: Option<String>,
+    pub genres: Genres,
+    pub properties: Properties,
 }

@@ -24,6 +24,7 @@ impl PlaylistTrackView {
 struct PlaylistView {
     id: i64,
     name: String,
+    duration_ms: i64,
     owner: i64,
     track_count: i64,
 }
@@ -36,6 +37,7 @@ impl PlaylistView {
             owner: UserId::from_db(self.owner),
             track_count: self.track_count as u32,
             properties,
+            created_at: Timestamp::from_seconds(self.id as u64),
         }
     }
 }

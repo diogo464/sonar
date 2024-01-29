@@ -4,7 +4,7 @@ use bytes::Bytes;
 use rand::RngCore;
 
 use crate::{
-    metadata::{ExtractedMetadata, Extractor},
+    extractor::{ExtractedMetadata, Extractor},
     Album, AlbumId, Artist, ArtistId, ByteStream, Context, Track, User, UserId, Playlist,
 };
 

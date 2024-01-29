@@ -66,7 +66,15 @@ impl OpenSubsonicServer for Server {
         })
     }
     async fn get_artist_info2(&self, _request: Request<GetArtistInfo2>) -> Result<ArtistInfo2> {
-        Ok(Default::default())
+        Ok(ArtistInfo2 {
+            info: ArtistInfoBase {
+                biography: "this is a biography\n".to_string(),
+                music_brainz_id: "this is a music brainz id".to_string(),
+                last_fm_url: "this is a last fm url".to_string(),
+                ..Default::default()
+            },
+            similar_artist: Default::default(),
+        })
     }
     async fn get_artist(&self, request: Request<GetArtist>) -> Result<ArtistWithAlbumsID3> {
         let artist_id = request.body.id.parse::<sonar::ArtistId>().m()?;

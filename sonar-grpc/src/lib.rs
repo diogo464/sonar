@@ -119,6 +119,7 @@ impl sonar_service_server::SonarService for Server {
             &self.context,
             sonar::ArtistCreate {
                 name: req.name,
+                description: None,
                 cover_art: req.coverart.map(sonar::ImageId::try_from).transpose().m()?,
                 genres: sonar::Genres::try_from(req.genres).m()?,
                 properties: convert_properties_from_pb(req.properties)?,
