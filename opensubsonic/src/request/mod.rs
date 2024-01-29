@@ -210,7 +210,15 @@ const _: () = {
             }
         }
 
-        fn finish(self) -> crate::query::Result<Self::Output> {
+        fn finish(mut self) -> crate::query::Result<Self::Output> {
+            // ignore empty values. this is required for compatibility
+            if self.token.as_ref().map(|t| t.is_empty()).unwrap_or(false) {
+                self.token = None;
+            }
+            if self.salt.as_ref().map(|s| s.is_empty()).unwrap_or(false) {
+                self.salt = None;
+            }
+
             if let (Some(token), Some(salt)) = (self.token, self.salt) {
                 Ok(Authentication::Token { token, salt })
             } else if let Some(password) = self.password {
@@ -261,5 +269,15 @@ mod tests {
         };
         let query = test_request_encode(&req);
         assert_eq!(query, "u=user&p=password&v=1.16.1&c=test");
+    }
+
+    #[test]
+    fn authentication_with_empty_token_and_password() {
+        let query = "u=admin&s=&t=&p=test12345&v=1.15.0&c=app&f=json";
+        let ping = Request::<system::Ping>::from_query(query).unwrap();
+        assert_eq!(
+            ping.authentication,
+            Authentication::Password("test12345".into())
+        );
     }
 }
