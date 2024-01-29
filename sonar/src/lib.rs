@@ -32,6 +32,7 @@ pub use timestamp::*;
 pub mod bytestream;
 pub use bytestream::ByteStream;
 
+pub mod ext;
 pub mod metadata;
 pub mod scrobbler;
 
@@ -48,7 +49,7 @@ pub use property::{
 };
 
 pub(crate) mod user;
-pub use user::Username;
+pub use user::{InvalidUsernameError, Username};
 
 pub(crate) mod importer;
 pub use importer::Import;
@@ -395,6 +396,8 @@ pub struct PlaylistTrack {
     pub inserted_at: Timestamp,
 }
 
+// TODO: add duration
+// TODO: add created at
 #[derive(Debug, Clone)]
 pub struct Playlist {
     pub id: PlaylistId,
@@ -540,6 +543,15 @@ pub async fn user_delete(context: &Context, user_id: UserId) -> Result<()> {
     result
 }
 
+pub async fn user_authenticate(
+    context: &Context,
+    username: &Username,
+    password: &str,
+) -> Result<UserId> {
+    let mut conn = context.db.acquire().await?;
+    user::authenticate(&mut conn, username, password).await
+}
+
 pub async fn artist_list(context: &Context, params: ListParams) -> Result<Vec<Artist>> {
     let mut conn = context.db.acquire().await?;
     artist::list(&mut conn, params).await
@@ -548,6 +560,11 @@ pub async fn artist_list(context: &Context, params: ListParams) -> Result<Vec<Ar
 pub async fn artist_get(context: &Context, artist_id: ArtistId) -> Result<Artist> {
     let mut conn = context.db.acquire().await?;
     artist::get(&mut conn, artist_id).await
+}
+
+pub async fn artist_get_bulk(context: &Context, artist_ids: &[ArtistId]) -> Result<Vec<Artist>> {
+    let mut conn = context.db.acquire().await?;
+    artist::get_bulk(&mut conn, artist_ids).await
 }
 
 pub async fn artist_create(context: &Context, create: ArtistCreate) -> Result<Artist> {
@@ -594,6 +611,11 @@ pub async fn album_get(context: &Context, album_id: AlbumId) -> Result<Album> {
     album::get(&mut conn, album_id).await
 }
 
+pub async fn album_get_bulk(context: &Context, album_ids: &[AlbumId]) -> Result<Vec<Album>> {
+    let mut conn = context.db.acquire().await?;
+    album::get_bulk(&mut conn, album_ids).await
+}
+
 pub async fn album_create(context: &Context, create: AlbumCreate) -> Result<Album> {
     let mut tx = context.db.begin().await?;
     let result = album::create(&mut tx, create).await;
@@ -632,6 +654,11 @@ pub async fn track_list_by_album(
 pub async fn track_get(context: &Context, track_id: TrackId) -> Result<Track> {
     let mut conn = context.db.acquire().await?;
     track::get(&mut conn, track_id).await
+}
+
+pub async fn track_get_bulk(context: &Context, track_ids: &[TrackId]) -> Result<Vec<Track>> {
+    let mut conn = context.db.acquire().await?;
+    track::get_bulk(&mut conn, track_ids).await
 }
 
 pub async fn track_create(context: &Context, create: TrackCreate) -> Result<Track> {
@@ -677,6 +704,24 @@ pub async fn playlist_list(context: &Context, params: ListParams) -> Result<Vec<
 pub async fn playlist_get(context: &Context, playlist_id: PlaylistId) -> Result<Playlist> {
     let mut conn = context.db.acquire().await?;
     playlist::get(&mut conn, playlist_id).await
+}
+
+pub async fn playlist_get_by_name(
+    context: &Context,
+    user_id: UserId,
+    name: &str,
+) -> Result<Playlist> {
+    let mut conn = context.db.acquire().await?;
+    playlist::get_by_name(&mut conn, user_id, name).await
+}
+
+pub async fn playlist_find_by_name(
+    context: &Context,
+    user_id: UserId,
+    name: &str,
+) -> Result<Option<Playlist>> {
+    let mut conn = context.db.acquire().await?;
+    playlist::find_by_name(&mut conn, user_id, name).await
 }
 
 pub async fn playlist_create(context: &Context, create: PlaylistCreate) -> Result<Playlist> {

@@ -1,6 +1,6 @@
 use crate::{
-    property, DbC, ListParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack, PlaylistUpdate,
-    Properties, Result, Timestamp, TrackId, UserId, ValueUpdate,
+    property, DbC, Error, ListParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack,
+    PlaylistUpdate, Properties, Result, Timestamp, TrackId, UserId, ValueUpdate,
 };
 
 #[derive(Debug, sqlx::FromRow)]
@@ -74,6 +74,27 @@ pub async fn get(db: &mut DbC, playlist_id: PlaylistId) -> Result<Playlist> {
     let properties =
         crate::property::get(&mut *db, crate::property::Namespace::Playlist, playlist_id).await?;
     Ok(playlist_view.into_playlist(properties))
+}
+
+pub async fn get_by_name(db: &mut DbC, user_id: UserId, name: &str) -> Result<Playlist> {
+    match find_by_name(db, user_id, name).await? {
+        Some(playlist) => Ok(playlist),
+        None => Err(Error::new(crate::ErrorKind::NotFound, "playlist not found")),
+    }
+}
+
+pub async fn find_by_name(db: &mut DbC, user_id: UserId, name: &str) -> Result<Option<Playlist>> {
+    let playlist_id = sqlx::query_scalar!(
+        "SELECT id FROM playlist WHERE owner = ? AND name = ?",
+        user_id,
+        name
+    )
+    .fetch_optional(&mut *db)
+    .await?;
+    match playlist_id {
+        Some(playlist_id) => get(db, PlaylistId::from_db(playlist_id)).await.map(Some),
+        None => Ok(None),
+    }
 }
 
 pub async fn create(db: &mut DbC, create: PlaylistCreate) -> Result<Playlist> {

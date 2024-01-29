@@ -60,6 +60,12 @@ impl FromStr for Username {
     }
 }
 
+impl From<Username> for String {
+    fn from(username: Username) -> Self {
+        username.0.into_owned()
+    }
+}
+
 impl Username {
     pub fn new(username: impl AsRef<str>) -> Result<Self, InvalidUsernameError> {
         Self::from_str(username.as_ref())
@@ -154,6 +160,18 @@ pub async fn delete(db: &mut DbC, user_id: UserId) -> Result<()> {
     Ok(())
 }
 
+pub async fn authenticate(db: &mut DbC, username: &Username, password: &str) -> Result<UserId> {
+    let username = username.as_str();
+    let row = sqlx::query!(
+        "SELECT id, password_hash FROM user WHERE username = ?",
+        username
+    )
+    .fetch_one(db)
+    .await?;
+    verify_password(&row.password_hash, password)?;
+    Ok(UserId::from_db(row.id))
+}
+
 fn generate_initial_salt_and_hash(password: &str) -> Result<String> {
     use scrypt::password_hash::PasswordHasher;
     let salt =
@@ -162,6 +180,16 @@ fn generate_initial_salt_and_hash(password: &str) -> Result<String> {
         .hash_password(password.as_bytes(), &salt)
         .map_err(|e| Error::with_source(ErrorKind::Internal, "failed to hash password", e))?;
     Ok(password_hash.to_string())
+}
+
+fn verify_password(password_hash: &str, password: &str) -> Result<()> {
+    use scrypt::password_hash::PasswordVerifier;
+
+    let parsed_hash =
+        scrypt::password_hash::PasswordHash::new(password_hash).expect("invalid password hash");
+    scrypt::Scrypt
+        .verify_password(password.as_bytes(), &parsed_hash)
+        .map_err(|e| Error::with_source(ErrorKind::Unauthorized, "invalid password", e))
 }
 
 fn validate_password(password: &str) -> Result<()> {

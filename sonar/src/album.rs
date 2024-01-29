@@ -92,6 +92,14 @@ pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
     Ok(album_view.into_album(genres, properties))
 }
 
+pub async fn get_bulk(db: &mut DbC, album_ids: &[AlbumId]) -> Result<Vec<Album>> {
+    let mut albums = Vec::with_capacity(album_ids.len());
+    for album_id in album_ids {
+        albums.push(get(db, *album_id).await?);
+    }
+    Ok(albums)
+}
+
 pub async fn create(db: &mut DbC, create: AlbumCreate) -> Result<Album> {
     let artist_id = create.artist.to_db();
     let name = create.name;

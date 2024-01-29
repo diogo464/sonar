@@ -27,8 +27,15 @@ impl std::error::Error for InvalidGenreError {}
 ///
 /// A genre is an ASCII string of up to 24 lowercase characters.
 /// Only the characters `a-z`, `0-9` and ` ` are allowed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Genre([u8; 24]);
+
+impl std::fmt::Debug for Genre {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Genre").field(&self.as_str()).finish()
+    }
+}
+
 impl FromStr for Genre {
     type Err = InvalidGenreError;
 

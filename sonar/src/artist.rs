@@ -63,6 +63,14 @@ pub async fn get(db: &mut DbC, artist_id: ArtistId) -> Result<Artist> {
     Ok(artist_view.into_artist(genres, properties))
 }
 
+pub async fn get_bulk(db: &mut DbC, artist_ids: &[ArtistId]) -> Result<Vec<Artist>> {
+    let mut artists = Vec::with_capacity(artist_ids.len());
+    for artist_id in artist_ids {
+        artists.push(get(db, *artist_id).await?);
+    }
+    Ok(artists)
+}
+
 pub async fn create(db: &mut DbC, create: ArtistCreate) -> Result<Artist> {
     let cover_art = create.cover_art.map(|id| id.to_db());
     let artist_id = sqlx::query!(

@@ -2,6 +2,7 @@ use std::{collections::HashSet, net::SocketAddr, path::PathBuf, sync::OnceLock};
 
 use clap::Parser;
 use eyre::{Context, Result};
+use sonar::UserId;
 use tokio_stream::StreamExt;
 
 const IMPORT_FILETYPES: &[&str] = &["flac", "mp3", "ogg", "opus", "wav"];
@@ -27,9 +28,11 @@ struct Args {
 
 #[derive(Debug, Parser)]
 enum Command {
+    User(UserArgs),
     Artist(ArtistArgs),
     Import(ImportArgs),
     Server(ServerArgs),
+    Extractor(ExtractorArgs),
 }
 
 #[tokio::main]
@@ -42,6 +45,12 @@ async fn main() -> Result<()> {
     SERVER_ENDPOINT.set(args.server.clone()).unwrap();
 
     match args.command {
+        Command::User(cargs) => match cargs.command {
+            UserCommand::List(cargs) => cmd_user_list(cargs).await?,
+            UserCommand::Create(cargs) => cmd_user_create(cargs).await?,
+            UserCommand::Update(cargs) => cmd_user_update(cargs).await?,
+            UserCommand::Delete(cargs) => cmd_user_delete(cargs).await?,
+        },
         Command::Artist(cargs) => match cargs.command {
             ArtistCommand::List(cargs) => cmd_artist_list(cargs).await?,
             ArtistCommand::Create(cargs) => cmd_artist_create(cargs).await?,
@@ -50,6 +59,7 @@ async fn main() -> Result<()> {
         },
         Command::Import(cargs) => cmd_import(cargs).await?,
         Command::Server(cargs) => cmd_server(cargs).await?,
+        Command::Extractor(cargs) => cmd_extractor(cargs).await?,
     }
 
     Ok(())
@@ -60,6 +70,100 @@ async fn create_client() -> Result<sonar_grpc::Client> {
     sonar_grpc::client(&endpoint)
         .await
         .with_context(|| format!("connecting to grpc server at {}", endpoint))
+}
+
+#[derive(Debug, Parser)]
+struct UserArgs {
+    #[clap(subcommand)]
+    command: UserCommand,
+}
+
+#[derive(Debug, Parser)]
+enum UserCommand {
+    List(UserListArgs),
+    Create(UserCreateArgs),
+    Update(UserUpdateArgs),
+    Delete(UserDeleteArgs),
+}
+
+#[derive(Debug, Parser)]
+struct UserListArgs {
+    #[clap(flatten)]
+    params: ListParams,
+}
+
+async fn cmd_user_list(args: UserListArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .user_list(sonar_grpc::UserListRequest {
+            offset: args.params.offset,
+            count: args.params.limit,
+        })
+        .await?;
+    for user in response.into_inner().users {
+        println!("{:?}", user);
+    }
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct UserCreateArgs {
+    username: String,
+
+    password: String,
+
+    #[clap(long)]
+    avatar: Option<PathBuf>,
+}
+
+async fn cmd_user_create(args: UserCreateArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let image_id = match args.avatar {
+        Some(path) => {
+            tracing::info!("uploading avatar from {}", path.display());
+            let content = tokio::fs::read(path).await.context("reading avatar")?;
+            let response = client
+                .image_create(sonar_grpc::ImageCreateRequest { content })
+                .await
+                .context("uploading image")?;
+            Some(response.into_inner().image_id)
+        }
+        None => None,
+    };
+
+    let response = client
+        .user_create(sonar_grpc::UserCreateRequest {
+            username: args.username,
+            password: args.password,
+            avatar: image_id,
+        })
+        .await?;
+    println!("{:?}", response.into_inner());
+
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct UserUpdateArgs {}
+
+async fn cmd_user_update(_args: UserUpdateArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct UserDeleteArgs {
+    id: UserId,
+}
+
+async fn cmd_user_delete(args: UserDeleteArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .user_delete(sonar_grpc::UserDeleteRequest {
+            user_id: From::from(args.id),
+        })
+        .await?;
+    println!("{:?}", response.into_inner());
+    Ok(())
 }
 
 #[derive(Debug, Parser)]
@@ -243,6 +347,45 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     let (r0, r1) = tokio::try_join!(f0, f1)?;
     r0?;
     r1?;
+
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct ExtractorArgs {
+    files: Vec<PathBuf>,
+}
+
+async fn cmd_extractor(args: ExtractorArgs) -> Result<()> {
+    use sonar::metadata::Extractor;
+
+    let extractors = vec![(
+        "lofty",
+        Box::new(sonar_extractor_lofty::LoftyExtractor::default()),
+    )];
+
+    for file in args.files {
+        for extractor in extractors.iter() {
+            tracing::info!(
+                "extracting metadata from {} using {}",
+                file.display(),
+                extractor.0
+            );
+            let extracted = match extractor.1.extract(&file) {
+                Ok(extracted) => extracted,
+                Err(err) => {
+                    tracing::warn!(
+                        "failed to extract metadata from {}: {}",
+                        file.display(),
+                        err
+                    );
+                    continue;
+                }
+            };
+
+            tracing::info!("extracted metadata:\n{:#?}", extracted);
+        }
+    }
 
     Ok(())
 }

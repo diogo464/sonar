@@ -20,6 +20,50 @@ impl Server {
 
 #[tonic::async_trait]
 impl sonar_service_server::SonarService for Server {
+    async fn user_list(
+        &self,
+        request: tonic::Request<UserListRequest>,
+    ) -> std::result::Result<tonic::Response<UserListResponse>, tonic::Status> {
+        let request = request.into_inner();
+        let params = sonar::ListParams::from((request.offset, request.count));
+        let users = sonar::user_list(&self.context, params).await.m()?;
+        let users = users.into_iter().map(Into::into).collect();
+        Ok(tonic::Response::new(UserListResponse { users }))
+    }
+    async fn user_create(
+        &self,
+        request: tonic::Request<UserCreateRequest>,
+    ) -> std::result::Result<tonic::Response<User>, tonic::Status> {
+        let req = request.into_inner();
+        let username = req.username.parse::<sonar::Username>().m()?;
+        let avatar = req.avatar.map(sonar::ImageId::try_from).transpose().m()?;
+        let user = sonar::user_create(
+            &self.context,
+            sonar::UserCreate {
+                username,
+                password: req.password,
+                avatar,
+            },
+        )
+        .await
+        .m()?;
+        Ok(tonic::Response::new(user.into()))
+    }
+    async fn user_update(
+        &self,
+        request: tonic::Request<UserUpdateRequest>,
+    ) -> std::result::Result<tonic::Response<User>, tonic::Status> {
+        todo!()
+    }
+    async fn user_delete(
+        &self,
+        request: tonic::Request<UserDeleteRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let req = request.into_inner();
+        let user_id = sonar::UserId::try_from(req.user_id).m()?;
+        sonar::user_delete(&self.context, user_id).await.m()?;
+        Ok(tonic::Response::new(()))
+    }
     async fn image_create(
         &self,
         request: tonic::Request<ImageCreateRequest>,
@@ -163,6 +207,7 @@ impl<T> ResultExt<T> for sonar::Result<T> {
         self.map_err(|e| match e.kind() {
             sonar::ErrorKind::NotFound => tonic::Status::not_found(e.to_string()),
             sonar::ErrorKind::Invalid => tonic::Status::invalid_argument(e.to_string()),
+            sonar::ErrorKind::Unauthorized => tonic::Status::unauthenticated(e.to_string()),
             sonar::ErrorKind::Internal => tonic::Status::internal(e.to_string()),
         })
     }
@@ -189,6 +234,22 @@ impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidPropertyValueError> {
 impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidGenreError> {
     fn m(self) -> Result<T, tonic::Status> {
         self.map_err(|e| tonic::Status::invalid_argument(e.to_string()))
+    }
+}
+
+impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidUsernameError> {
+    fn m(self) -> Result<T, tonic::Status> {
+        self.map_err(|e| tonic::Status::invalid_argument(e.to_string()))
+    }
+}
+
+impl From<sonar::User> for User {
+    fn from(value: sonar::User) -> Self {
+        Self {
+            user_id: From::from(value.id),
+            username: From::from(value.username),
+            avatar: value.avatar.map(From::from),
+        }
     }
 }
 

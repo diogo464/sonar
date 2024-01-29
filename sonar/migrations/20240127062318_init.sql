@@ -76,7 +76,8 @@ CREATE TABLE playlist (
 	id			INTEGER PRIMARY KEY,
 	owner		INTEGER NOT NULL REFERENCES user(id),
 	name		TEXT NOT NULL DEFAULT '',
-	created_at	INTEGER NOT NULL DEFAULT (unixepoch())
+	created_at	INTEGER NOT NULL DEFAULT (unixepoch()),
+	UNIQUE(owner, name)
 );
 
 CREATE TABLE playlist_track (

@@ -8,9 +8,11 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/field_mask.proto";
 
 service SonarService {
-	// rpc UserList(UserListRequest) returns (UserListResponse);
-	// rpc UserCreate(UserCreateRequest) returns (UserCreateResponse);
-	// rpc UserDelete(UserDeleteRequest) returns (UserDeleteResponse);
+	rpc UserList(UserListRequest) returns (UserListResponse);
+	rpc UserCreate(UserCreateRequest) returns (User);
+	rpc UserUpdate(UserUpdateRequest) returns (User);
+	rpc UserDelete(UserDeleteRequest) returns (google.protobuf.Empty);
+
 	rpc ImageCreate(ImageCreateRequest) returns (ImageCreateResponse);
 	rpc ImageDelete(ImageDeleteRequest) returns (google.protobuf.Empty);
 	rpc ImageDownload(ImageDownloadRequest) returns (ImageDownloadResponse);
@@ -37,9 +39,34 @@ message GenresUpdate {
 }
 
 message User {
-	uint32 id = 1;
+	uint32 user_id = 1;
 	string username = 2;
 	optional uint32 avatar = 3;
+}
+
+message UserListRequest {
+	optional uint32 offset = 1;
+	optional uint32 count = 2;
+}
+
+message UserListResponse {
+	repeated User users = 1;
+}
+
+message UserCreateRequest {
+	string username = 1;
+	string password = 2;
+	optional uint32 avatar = 3;
+}
+
+message UserUpdateRequest {
+	uint32 user_id = 1;
+	optional string password = 2;
+	optional uint32 avatar = 3;
+}
+
+message UserDeleteRequest {
+	uint32 user_id = 1;
 }
 
 message ImageCreateRequest {

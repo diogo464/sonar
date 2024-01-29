@@ -1,4 +1,14 @@
+# sonar-cli
 /sonar-cli/storage
 /sonar-cli/spotify-music
+/sonar-cli/beets-music
+# subsonic api xml file
+/sonar-cli/*.xsd
+# beets config
+/sonar-cli/*.yaml
+
+# misc
 *.db
 *.png
+*.jpg
+*.jpeg

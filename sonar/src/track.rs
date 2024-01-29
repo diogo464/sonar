@@ -99,6 +99,17 @@ pub async fn get(db: &mut DbC, track_id: TrackId) -> Result<Track> {
     Ok(track_view.into_track(genres, properties))
 }
 
+pub async fn get_bulk(db: &mut DbC, track_ids: &[TrackId]) -> Result<Vec<Track>> {
+    // NOTE: sqlite doesn't support binding arrays. the alternative would be to generate a
+    // query string with all the ids or create a temporary table with those ids and then use a
+    // select
+    let mut tracks = Vec::with_capacity(track_ids.len());
+    for track_id in track_ids {
+        tracks.push(get(db, *track_id).await?);
+    }
+    Ok(tracks)
+}
+
 pub async fn create(db: &mut DbC, storage: &dyn BlobStorage, create: TrackCreate) -> Result<Track> {
     let blob_key = blob::random_key_with_prefix("audio");
     storage.write(&blob_key, create.audio_stream).await?;

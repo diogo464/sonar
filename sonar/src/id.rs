@@ -1,5 +1,7 @@
 use std::str::FromStr;
 
+use sqlx::Row;
+
 pub(crate) const ID_TYPE_MASK: u32 = 0xFF00_0000;
 pub(crate) const ID_TYPE_SHIFT: u32 = 24;
 
@@ -84,6 +86,35 @@ macro_rules! impl_id {
         impl std::fmt::Display for $t {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 SonarId::from(*self).fmt(f)
+            }
+        }
+
+        impl sqlx::Type<sqlx::Sqlite> for $t {
+            fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
+                <i64 as sqlx::Type<sqlx::Sqlite>>::type_info()
+            }
+        }
+
+        impl<'a> sqlx::Encode<'a, sqlx::Sqlite> for $t {
+            fn encode_by_ref(
+                &self,
+                buf: &mut <sqlx::Sqlite as sqlx::database::HasArguments<'a>>::ArgumentBuffer,
+            ) -> sqlx::encode::IsNull {
+                let db_id = self.to_db();
+                <i64 as sqlx::Encode<'a, sqlx::Sqlite>>::encode_by_ref(&db_id, buf)
+            }
+        }
+
+        impl<'r, DB> sqlx::Decode<'r, DB> for $t
+        where
+            DB: sqlx::Database,
+            i64: sqlx::Decode<'r, DB>,
+        {
+            fn decode(
+                value: <DB as sqlx::database::HasValueRef<'r>>::ValueRef,
+            ) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
+                let id = <i64 as sqlx::Decode<'r, DB>>::decode(value)?;
+                Ok(Self::from_db(id))
             }
         }
     };

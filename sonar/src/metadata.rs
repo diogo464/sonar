@@ -2,10 +2,19 @@ use std::{path::Path, sync::Arc, time::Duration};
 
 use crate::{DateTime, Genres};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ExtractedImage {
     pub mime_type: String,
     pub data: Vec<u8>,
+}
+
+impl std::fmt::Debug for ExtractedImage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExtractedImage")
+            .field("mime_type", &self.mime_type)
+            .field("data", &self.data.len())
+            .finish()
+    }
 }
 
 #[derive(Debug, Default, Clone)]
