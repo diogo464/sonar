@@ -614,6 +614,7 @@ where
     }
 
     fn response_from_error(&self, error: Error) -> HttpResponse {
+        tracing::error!("error: {:?}", error);
         self.response_from_response(
             Response::failed(
                 Self::VERSION,
