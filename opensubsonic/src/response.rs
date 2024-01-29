@@ -638,7 +638,7 @@ pub enum PodcastStatus {
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InternetRadioStations {
     pub internet_radio_station: Vec<InternetRadioStation>,
