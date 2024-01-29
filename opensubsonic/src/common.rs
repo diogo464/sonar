@@ -9,7 +9,7 @@ use tokio_stream::Stream;
 use crate::{impl_from_query_value_for_parse, impl_to_query_value_for_display};
 
 pub struct ByteStream {
-    mime_type: String,
+    mime_type: Option<String>,
     stream: Box<dyn Stream<Item = std::io::Result<bytes::Bytes>> + Unpin + Send + 'static>,
 }
 
@@ -27,13 +27,22 @@ impl ByteStream {
         stream: impl Stream<Item = std::io::Result<bytes::Bytes>> + Unpin + Send + 'static,
     ) -> Self {
         Self {
-            mime_type: mime_type.into(),
+            mime_type: Some(mime_type.into()),
             stream: Box::new(stream),
         }
     }
 
-    pub fn mime_type(&self) -> &str {
-        &self.mime_type
+    pub fn new_without_mime_type(
+        stream: impl Stream<Item = std::io::Result<bytes::Bytes>> + Unpin + Send + 'static,
+    ) -> Self {
+        Self {
+            mime_type: None,
+            stream: Box::new(stream),
+        }
+    }
+
+    pub fn mime_type(&self) -> Option<&str> {
+        self.mime_type.as_deref()
     }
 }
 

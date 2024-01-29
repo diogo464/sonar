@@ -595,12 +595,13 @@ where
     }
 
     fn response_from_byte_stream(&self, stream: ByteStream) -> HttpResponse {
-        let mime_type = match stream.mime_type().parse() {
-            Ok(mime_type) => mime_type,
-            Err(err) => {
+        let mime_type = match stream.mime_type().map(|m| m.parse()) {
+            Some(Ok(mime_type)) => mime_type,
+            Some(Err(err)) => {
                 tracing::warn!("failed to parse mime type: {}", err);
                 http::HeaderValue::from_static("application/octet-stream")
             }
+            None => http::HeaderValue::from_static("application/octet-stream"),
         };
         let mut response = http::Response::new(http_body_util::StreamBody::new(
             OpenSubsonicBodyStream::ByteStream(stream),
