@@ -1,6 +1,6 @@
 use crate::{
-    property, DbC, Error, ListParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack,
-    PlaylistUpdate, Properties, Result, Timestamp, TrackId, UserId, ValueUpdate,
+    DbC, Error, ListParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack, PlaylistUpdate,
+    Properties, Result, Timestamp, TrackId, UserId, ValueUpdate,
 };
 
 #[derive(Debug, sqlx::FromRow)]
@@ -26,18 +26,20 @@ struct PlaylistView {
     name: String,
     duration_ms: i64,
     owner: i64,
+    properties: Option<Vec<u8>>,
     track_count: i64,
+    created_at: i64,
 }
 
 impl PlaylistView {
-    fn into_playlist(self, properties: Properties) -> Playlist {
+    fn into_playlist(self) -> Playlist {
         Playlist {
             id: PlaylistId::from_db(self.id),
             name: self.name,
             owner: UserId::from_db(self.owner),
             track_count: self.track_count as u32,
-            properties,
-            created_at: Timestamp::from_seconds(self.id as u64),
+            properties: Properties::deserialize_unchecked(&self.properties.unwrap_or_default()),
+            created_at: Timestamp::from_seconds(self.created_at as u64),
         }
     }
 }
@@ -52,19 +54,10 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Playlist>> {
     )
     .fetch_all(&mut *db)
     .await?;
-
-    let mut playlists = Vec::with_capacity(views.len());
-    for view in views {
-        let properties =
-            crate::property::get(&mut *db, crate::property::Namespace::Playlist, view.id).await?;
-        playlists.push(view.into_playlist(properties));
-    }
-
-    Ok(playlists)
+    Ok(views.into_iter().map(PlaylistView::into_playlist).collect())
 }
 
 pub async fn get(db: &mut DbC, playlist_id: PlaylistId) -> Result<Playlist> {
-    let playlist_id = playlist_id.to_db();
     let playlist_view = sqlx::query_as!(
         PlaylistView,
         "SELECT * FROM playlist_view WHERE id = ?",
@@ -72,10 +65,7 @@ pub async fn get(db: &mut DbC, playlist_id: PlaylistId) -> Result<Playlist> {
     )
     .fetch_one(&mut *db)
     .await?;
-
-    let properties =
-        crate::property::get(&mut *db, crate::property::Namespace::Playlist, playlist_id).await?;
-    Ok(playlist_view.into_playlist(properties))
+    Ok(playlist_view.into_playlist())
 }
 
 pub async fn get_by_name(db: &mut DbC, user_id: UserId, name: &str) -> Result<Playlist> {
@@ -102,22 +92,16 @@ pub async fn find_by_name(db: &mut DbC, user_id: UserId, name: &str) -> Result<O
 pub async fn create(db: &mut DbC, create: PlaylistCreate) -> Result<Playlist> {
     let name = create.name.as_str();
     let owner = create.owner.to_db();
+    let properties = create.properties.serialize();
     let playlist_id = sqlx::query!(
-        "INSERT INTO playlist(name, owner) VALUES (?, ?) RETURNING id",
+        "INSERT INTO playlist(name, owner, properties) VALUES (?, ?, ?) RETURNING id",
         name,
-        owner
+        owner,
+        properties
     )
     .fetch_one(&mut *db)
     .await?
     .id;
-
-    property::set(
-        &mut *db,
-        property::Namespace::Playlist,
-        playlist_id,
-        &create.properties,
-    )
-    .await?;
 
     let playlist_id = PlaylistId::from_db(playlist_id);
     insert_tracks(db, playlist_id, &create.tracks).await?;
@@ -141,13 +125,22 @@ pub async fn update(
             .await?;
     }
 
-    property::update(
-        &mut *db,
-        property::Namespace::Playlist,
-        db_id,
-        &update.properties,
-    )
-    .await?;
+    if update.properties.len() > 0 {
+        let properties = sqlx::query_scalar!("SELECT properties FROM playlist WHERE id = ?", db_id)
+            .fetch_one(&mut *db)
+            .await?
+            .unwrap_or_default();
+        let mut properties = Properties::deserialize_unchecked(&properties);
+        properties.apply_updates(&update.properties);
+        let properties = properties.serialize();
+        sqlx::query!(
+            "UPDATE playlist SET properties = ? WHERE id = ?",
+            properties,
+            db_id
+        )
+        .execute(&mut *db)
+        .await?;
+    }
 
     get(db, playlist_id).await
 }

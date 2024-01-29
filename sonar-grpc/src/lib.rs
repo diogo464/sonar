@@ -119,9 +119,7 @@ impl sonar_service_server::SonarService for Server {
             &self.context,
             sonar::ArtistCreate {
                 name: req.name,
-                description: None,
                 cover_art: req.coverart.map(sonar::ImageId::try_from).transpose().m()?,
-                genres: sonar::Genres::try_from(req.genres).m()?,
                 properties: convert_properties_from_pb(req.properties)?,
             },
         )
@@ -261,7 +259,6 @@ impl From<sonar::Artist> for Artist {
             name: value.name,
             album_count: value.album_count as u32,
             listen_count: value.listen_count as u32,
-            genres: From::from(value.genres),
             coverart: value.cover_art.map(From::from),
             properties: convert_properties_to_pb(value.properties),
         }
@@ -275,12 +272,9 @@ impl From<sonar::Track> for Track {
             name: value.name,
             artist_id: From::from(value.artist),
             album_id: From::from(value.album),
-            disc_number: value.disc_number as u32,
-            track_number: value.track_number as u32,
             duration: Some(TryFrom::try_from(value.duration).expect("failed to convert duration")),
             listen_count: value.listen_count as u32,
             cover_art_id: value.cover_art.map(From::from),
-            genres: From::from(value.genres),
             properties: convert_properties_to_pb(value.properties),
         }
     }

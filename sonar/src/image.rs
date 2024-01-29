@@ -1,6 +1,6 @@
 use crate::{
     blob::{self, BlobStorage},
-    DbC, ImageCreate, ImageId, ImageDownload, Result,
+    DbC, ImageCreate, ImageDownload, ImageId, Result,
 };
 
 pub async fn download(

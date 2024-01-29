@@ -50,11 +50,7 @@ async fn import_simple() {
     let track = &tracks[0];
     assert_eq!(track.name, metadata.title.unwrap());
     assert_eq!(track.album, album.id);
-    assert_eq!(track.disc_number, metadata.disc_number.unwrap());
-    assert_eq!(track.track_number, metadata.track_number.unwrap());
     assert_eq!(track.duration, metadata.duration.unwrap());
-    assert_eq!(track.genres.len(), 1);
-    assert_eq!(track.genres[0].as_str(), "edm");
 }
 
 #[tokio::test]
@@ -118,9 +114,5 @@ async fn import_merge_metadata() {
     let track = &tracks[0];
     assert_eq!(track.name, metadata2.title.unwrap());
     assert_eq!(track.album, album.id);
-    assert_eq!(track.disc_number, metadata1.disc_number.unwrap());
-    assert_eq!(track.track_number, metadata2.track_number.unwrap());
     assert_eq!(track.duration, metadata1.duration.unwrap());
-    assert_eq!(track.genres.len(), 1);
-    assert_eq!(track.genres[0].as_str(), "edm");
 }

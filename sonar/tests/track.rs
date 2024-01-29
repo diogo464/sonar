@@ -16,11 +16,8 @@ async fn track_create_one() {
     let create = sonar::TrackCreate {
         name: "Track".to_string(),
         album: album.id,
-        disc_number: Some(1),
-        track_number: Some(1),
         cover_art: None,
         duration: std::time::Duration::from_secs(60),
-        genres: sonar::test::create_simple_genres(),
         lyrics: None,
         properties: sonar::test::create_simple_properties(),
         audio_stream: data,
@@ -28,7 +25,6 @@ async fn track_create_one() {
     };
     let track = sonar::track_create(&ctx, create).await.unwrap();
     assert_eq!(track.name, "Track");
-    assert_eq!(track.genres.len(), 2);
     assert_eq!(track.properties.len(), 2);
 }
 

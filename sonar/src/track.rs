@@ -2,41 +2,35 @@ use std::time::Duration;
 
 use crate::{
     blob::{self, BlobStorage},
-    genre, property, AlbumId, ArtistId, ByteRange, ByteStream, DbC, Error, ErrorKind, Genres,
-    ImageId, ListParams, Lyrics, LyricsKind, LyricsLine, Properties, Result, Timestamp, Track,
-    TrackCreate, TrackId, TrackLyrics, TrackUpdate, ValueUpdate,
+    AlbumId, ArtistId, ByteRange, ByteStream, DbC, Error, ErrorKind, ImageId, ListParams, Lyrics,
+    LyricsKind, LyricsLine, Properties, Result, Timestamp, Track, TrackCreate, TrackId,
+    TrackLyrics, TrackUpdate, ValueUpdate,
 };
 
 #[derive(sqlx::FromRow)]
 struct TrackView {
     id: i64,
     name: String,
-    description: Option<String>,
     artist: i64,
     album: i64,
-    disc_number: i64,
-    track_number: i64,
     duration_ms: i64,
     listen_count: i64,
     cover_art: Option<i64>,
+    properties: Option<Vec<u8>>,
     created_at: i64,
 }
 
 impl TrackView {
-    fn into_track(self, genres: Genres, properties: Properties) -> Track {
+    fn into_track(self) -> Track {
         Track {
             id: TrackId::from_db(self.id),
             name: self.name,
-            description: self.description,
             artist: ArtistId::from_db(self.artist),
             album: AlbumId::from_db(self.album),
-            disc_number: self.disc_number as u32,
-            track_number: self.track_number as u32,
             duration: Duration::from_millis(self.duration_ms as u64),
             listen_count: self.listen_count as u32,
             cover_art: self.cover_art.map(ImageId::from_db),
-            genres,
-            properties,
+            properties: Properties::deserialize_unchecked(&self.properties.unwrap_or_default()),
             created_at: Timestamp::from_seconds(self.created_at as u64),
         }
     }
@@ -52,16 +46,7 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Track>> {
     )
     .fetch_all(&mut *db)
     .await?;
-
-    let mut tracks = Vec::with_capacity(views.len());
-    for view in views {
-        let genres = crate::genre::get(&mut *db, crate::genre::Namespace::Track, view.id).await?;
-        let properties =
-            crate::property::get(&mut *db, crate::property::Namespace::Track, view.id).await?;
-        tracks.push(view.into_track(genres, properties));
-    }
-
-    Ok(tracks)
+    Ok(views.into_iter().map(TrackView::into_track).collect())
 }
 
 pub async fn list_by_album(
@@ -80,16 +65,7 @@ pub async fn list_by_album(
     )
     .fetch_all(&mut *db)
     .await?;
-
-    let mut tracks = Vec::with_capacity(views.len());
-    for view in views {
-        let genres = crate::genre::get(&mut *db, crate::genre::Namespace::Track, view.id).await?;
-        let properties =
-            crate::property::get(&mut *db, crate::property::Namespace::Track, view.id).await?;
-        tracks.push(view.into_track(genres, properties));
-    }
-
-    Ok(tracks)
+    Ok(views.into_iter().map(TrackView::into_track).collect())
 }
 
 pub async fn get(db: &mut DbC, track_id: TrackId) -> Result<Track> {
@@ -97,10 +73,7 @@ pub async fn get(db: &mut DbC, track_id: TrackId) -> Result<Track> {
     let track_view = sqlx::query_as!(TrackView, "SELECT * FROM track_view WHERE id = ?", track_id)
         .fetch_one(&mut *db)
         .await?;
-
-    let genres = genre::get(&mut *db, crate::genre::Namespace::Track, track_id).await?;
-    let properties = property::get(&mut *db, crate::property::Namespace::Track, track_id).await?;
-    Ok(track_view.into_track(genres, properties))
+    Ok(track_view.into_track())
 }
 
 pub async fn get_bulk(db: &mut DbC, track_ids: &[TrackId]) -> Result<Vec<Track>> {
@@ -120,40 +93,24 @@ pub async fn create(db: &mut DbC, storage: &dyn BlobStorage, create: TrackCreate
 
     let album_id = create.album.to_db();
     let cover_art = create.cover_art.map(|id| id.to_db());
-    let disc_number = create.disc_number.unwrap_or(1) as i64;
-    let track_number = create.track_number.unwrap_or(1) as i64;
     let duration_ms = create.duration.as_millis() as i64;
+    let properties = create.properties.serialize();
     let track_id = sqlx::query!(
-        "INSERT INTO track (name, album, cover_art, disc_number, track_number, duration_ms, audio_blob_key, audio_filename)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        "INSERT INTO track (name, album, cover_art, duration_ms, audio_blob_key, audio_filename, properties)
+        VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
         create.name,
         album_id,
         cover_art,
-        disc_number,
-        track_number,
         duration_ms,
         blob_key,
         create.audio_filename,
+        properties
     )
     .fetch_one(&mut *db)
     .await?
     .id;
 
-    genre::set(&mut *db, genre::Namespace::Track, track_id, &create.genres).await?;
-    property::set(
-        &mut *db,
-        property::Namespace::Track,
-        track_id,
-        &create.properties,
-    )
-    .await?;
-
-    let track_id = TrackId::from_db(track_id);
-    if let Some(lyrics) = create.lyrics {
-        set_lyrics(db, track_id, lyrics).await?;
-    }
-
-    get(db, track_id).await
+    get(db, TrackId::from_db(track_id)).await
 }
 
 pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Result<Track> {
@@ -209,14 +166,22 @@ pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Res
         ValueUpdate::Unchanged => {}
     }
 
-    genre::update(&mut *db, genre::Namespace::Track, db_id, &update.genres).await?;
-    property::update(
-        &mut *db,
-        property::Namespace::Track,
-        db_id,
-        &update.properties,
-    )
-    .await?;
+    if update.properties.len() > 0 {
+        let properties = sqlx::query_scalar!("SELECT properties FROM track WHERE id = ?", db_id)
+            .fetch_one(&mut *db)
+            .await?
+            .unwrap_or_default();
+        let mut properties = Properties::deserialize_unchecked(&properties);
+        properties.apply_updates(&update.properties);
+        let properties = properties.serialize();
+        sqlx::query!(
+            "UPDATE track SET properties = ? WHERE id = ?",
+            properties,
+            db_id
+        )
+        .execute(&mut *db)
+        .await?;
+    }
 
     get(db, track_id).await
 }

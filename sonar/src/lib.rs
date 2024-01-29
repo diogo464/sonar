@@ -268,11 +268,9 @@ pub struct UserUpdate {
 pub struct Artist {
     pub id: ArtistId,
     pub name: String,
-    pub description: Option<String>,
     pub album_count: u32,
     pub listen_count: u32,
     pub cover_art: Option<ImageId>,
-    pub genres: Genres,
     pub properties: Properties,
     pub created_at: Timestamp,
 }
@@ -280,18 +278,14 @@ pub struct Artist {
 #[derive(Debug, Clone)]
 pub struct ArtistCreate {
     pub name: String,
-    pub description: Option<String>,
     pub cover_art: Option<ImageId>,
-    pub genres: Genres,
     pub properties: Properties,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct ArtistUpdate {
     pub name: ValueUpdate<String>,
-    pub description: ValueUpdate<String>,
     pub cover_art: ValueUpdate<ImageId>,
-    pub genres: Vec<GenreUpdate>,
     pub properties: Vec<PropertyUpdate>,
 }
 
@@ -300,14 +294,11 @@ pub struct ArtistUpdate {
 pub struct Album {
     pub id: AlbumId,
     pub name: String,
-    pub description: Option<String>,
     pub duration: Duration,
     pub artist: ArtistId,
-    pub release_date: DateTime,
     pub track_count: u32,
     pub listen_count: u32,
     pub cover_art: Option<ImageId>,
-    pub genres: Genres,
     pub properties: Properties,
     pub created_at: Timestamp,
 }
@@ -318,18 +309,15 @@ pub struct AlbumCreate {
     pub artist: ArtistId,
     pub cover_art: Option<ImageId>,
     pub release_date: DateTime,
-    pub genres: Genres,
     pub properties: Properties,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct AlbumUpdate {
     pub name: ValueUpdate<String>,
-    pub description: ValueUpdate<String>,
     pub artist: ValueUpdate<ArtistId>,
     pub release_date: ValueUpdate<DateTime>,
     pub cover_art: ValueUpdate<ImageId>,
-    pub genres: Vec<GenreUpdate>,
     pub properties: Vec<PropertyUpdate>,
 }
 
@@ -337,15 +325,11 @@ pub struct AlbumUpdate {
 pub struct Track {
     pub id: TrackId,
     pub name: String,
-    pub description: Option<String>,
     pub artist: ArtistId,
     pub album: AlbumId,
-    pub disc_number: u32,
-    pub track_number: u32,
     pub duration: Duration,
     pub listen_count: u32,
     pub cover_art: Option<ImageId>,
-    pub genres: Genres,
     pub properties: Properties,
     pub created_at: Timestamp,
 }
@@ -358,13 +342,9 @@ pub struct TrackLyrics {
 
 pub struct TrackCreate {
     pub name: String,
-    pub description: Option<String>,
     pub album: AlbumId,
-    pub disc_number: Option<u32>,
-    pub track_number: Option<u32>,
     pub duration: Duration,
     pub cover_art: Option<ImageId>,
-    pub genres: Genres,
     pub lyrics: Option<TrackLyrics>,
     pub properties: Properties,
     pub audio_stream: ByteStream,
@@ -375,13 +355,9 @@ impl std::fmt::Debug for TrackCreate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TrackCreate")
             .field("name", &self.name)
-            .field("description", &self.description)
             .field("album", &self.album)
-            .field("disc_number", &self.disc_number)
-            .field("track_number", &self.track_number)
             .field("duration", &self.duration)
             .field("cover_art", &self.cover_art)
-            .field("genres", &self.genres)
             .field("lyrics", &self.lyrics)
             .field("properties", &self.properties)
             .field("audio_filename", &self.audio_filename)
@@ -392,12 +368,10 @@ impl std::fmt::Debug for TrackCreate {
 #[derive(Debug, Clone)]
 pub struct TrackUpdate {
     pub name: ValueUpdate<String>,
-    pub description: ValueUpdate<String>,
     pub album: ValueUpdate<AlbumId>,
     pub disc_number: ValueUpdate<u32>,
     pub track_number: ValueUpdate<u32>,
     pub cover_art: ValueUpdate<ImageId>,
-    pub genres: Vec<GenreUpdate>,
     pub lyrics: ValueUpdate<TrackLyrics>,
     pub properties: Vec<PropertyUpdate>,
 }

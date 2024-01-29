@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use crate::{
-    property, DbC, ListParams, Properties, Result, Scrobble, ScrobbleCreate, ScrobbleId,
-    ScrobbleUpdate, Timestamp, TrackId, UserId,
+    DbC, ListParams, Properties, Result, Scrobble, ScrobbleCreate, ScrobbleId, ScrobbleUpdate,
+    Timestamp, TrackId, UserId,
 };
 
 #[derive(Debug, sqlx::FromRow)]
@@ -13,11 +13,12 @@ struct ScrobbleView {
     listen_at: i64,
     listen_secs: i64,
     listen_device: String,
+    properties: Option<Vec<u8>>,
     created_at: i64,
 }
 
 impl ScrobbleView {
-    fn into_scrobble(self, properties: Properties) -> Scrobble {
+    fn into_scrobble(self) -> Scrobble {
         Scrobble {
             id: ScrobbleId::from_db(self.id),
             user: UserId::from_db(self.user),
@@ -25,8 +26,8 @@ impl ScrobbleView {
             listen_at: Timestamp::from_seconds(self.listen_at as u64),
             listen_duration: Duration::from_secs(self.listen_secs as u64),
             listen_device: self.listen_device,
+            properties: Properties::deserialize_unchecked(&self.properties.unwrap_or_default()),
             created_at: Timestamp::from_seconds(self.created_at as u64),
-            properties,
         }
     }
 }
@@ -41,15 +42,7 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Scrobble>> {
     )
     .fetch_all(&mut *db)
     .await?;
-
-    let mut scrobbles = Vec::with_capacity(views.len());
-    for view in views {
-        let properties =
-            crate::property::get(&mut *db, crate::property::Namespace::Scrobble, view.id).await?;
-        scrobbles.push(view.into_scrobble(properties));
-    }
-
-    Ok(scrobbles)
+    Ok(views.into_iter().map(ScrobbleView::into_scrobble).collect())
 }
 
 pub async fn get(db: &mut DbC, scrobble_id: ScrobbleId) -> Result<Scrobble> {
@@ -61,10 +54,7 @@ pub async fn get(db: &mut DbC, scrobble_id: ScrobbleId) -> Result<Scrobble> {
     )
     .fetch_one(&mut *db)
     .await?;
-
-    let properties =
-        crate::property::get(&mut *db, crate::property::Namespace::Scrobble, scrobble_id).await?;
-    Ok(scrobble_view.into_scrobble(properties))
+    Ok(scrobble_view.into_scrobble())
 }
 
 pub async fn create(db: &mut DbC, create: ScrobbleCreate) -> Result<Scrobble> {
@@ -92,13 +82,22 @@ pub async fn update(
     scrobble_id: ScrobbleId,
     update: ScrobbleUpdate,
 ) -> Result<Scrobble> {
-    property::update(
-        db,
-        property::Namespace::Scrobble,
-        scrobble_id.to_db(),
-        &update.properties,
-    )
-    .await?;
+    if update.properties.len() > 0 {
+        let properties =
+            sqlx::query_scalar!("SELECT properties FROM scrobble WHERE id = ?", scrobble_id)
+                .fetch_one(&mut *db)
+                .await?;
+        let mut properties = Properties::deserialize_unchecked(&properties.unwrap_or_default());
+        properties.apply_updates(&update.properties);
+        let properties = properties.serialize();
+        sqlx::query!(
+            "UPDATE scrobble SET properties = ? WHERE id = ?",
+            properties,
+            scrobble_id
+        )
+        .execute(&mut *db)
+        .await?;
+    }
     get(db, scrobble_id).await
 }
 

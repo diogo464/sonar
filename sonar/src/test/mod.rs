@@ -5,7 +5,7 @@ use rand::RngCore;
 
 use crate::{
     extractor::{ExtractedMetadata, Extractor},
-    Album, AlbumId, Artist, ArtistId, ByteStream, Context, Track, User, UserId, Playlist,
+    Album, AlbumId, Artist, ArtistId, ByteStream, Context, Playlist, Track, User, UserId,
 };
 
 #[derive(Debug, Clone)]
@@ -60,7 +60,6 @@ pub async fn create_artist(ctx: &Context, name: &str) -> Artist {
         crate::ArtistCreate {
             name: name.to_string(),
             cover_art: None,
-            genres: Default::default(),
             properties: Default::default(),
         },
     )
@@ -75,7 +74,6 @@ pub async fn create_album(ctx: &Context, artist: ArtistId, name: &str) -> Album 
             artist,
             name: name.to_string(),
             cover_art: None,
-            genres: Default::default(),
             properties: Default::default(),
             release_date: "2020-01-01T00:00:00Z".parse().unwrap(),
         },
@@ -102,11 +100,8 @@ pub async fn create_track_with_data(
         crate::TrackCreate {
             name: name.to_string(),
             album,
-            disc_number: Some(1),
-            track_number: Some(1),
             duration: Duration::from_secs(60),
             cover_art: None,
-            genres: Default::default(),
             lyrics: None,
             properties: Default::default(),
             audio_stream: crate::bytestream::from_bytes(track_data),

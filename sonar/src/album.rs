@@ -2,36 +2,32 @@ use std::time::Duration;
 
 use crate::{
     genre, property, Album, AlbumCreate, AlbumId, AlbumUpdate, ArtistId, DbC, Error, ErrorKind,
-    Genres, ImageId, ListParams, Properties, Result, Timestamp, ValueUpdate,
+    ImageId, ListParams, Properties, Result, Timestamp, ValueUpdate,
 };
 
 #[derive(sqlx::FromRow)]
 struct AlbumView {
     id: i64,
     name: String,
-    description: Option<String>,
     duration_ms: i64,
     artist: i64,
-    release_date: String,
     listen_count: i64,
     cover_art: Option<i64>,
     track_count: i64,
+    properties: Option<Vec<u8>>,
     created_at: i64,
 }
 
 impl AlbumView {
-    fn into_album(self, genres: Genres, properties: Properties) -> Album {
+    fn into_album(self) -> Album {
         Album {
             id: AlbumId::from_db(self.id),
             name: self.name,
-            description: self.description,
             duration: Duration::from_millis(self.duration_ms as u64),
             artist: ArtistId::from_db(self.artist),
-            release_date: self.release_date.parse().unwrap(),
             listen_count: self.listen_count as u32,
             cover_art: self.cover_art.map(ImageId::from_db),
-            genres,
-            properties,
+            properties: Properties::deserialize_unchecked(&self.properties.unwrap_or_default()),
             track_count: self.track_count as u32,
             created_at: Timestamp::from_seconds(self.created_at as u64),
         }
@@ -48,16 +44,7 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Album>> {
     )
     .fetch_all(&mut *db)
     .await?;
-
-    let mut albums = Vec::with_capacity(views.len());
-    for view in views {
-        let genres = crate::genre::get(&mut *db, crate::genre::Namespace::Album, view.id).await?;
-        let properties =
-            crate::property::get(&mut *db, crate::property::Namespace::Album, view.id).await?;
-        albums.push(view.into_album(genres, properties));
-    }
-
-    Ok(albums)
+    Ok(views.into_iter().map(AlbumView::into_album).collect())
 }
 
 pub async fn list_by_artist(
@@ -76,16 +63,7 @@ pub async fn list_by_artist(
     )
     .fetch_all(&mut *db)
     .await?;
-
-    let mut albums = Vec::with_capacity(views.len());
-    for view in views {
-        let genres = crate::genre::get(&mut *db, crate::genre::Namespace::Album, view.id).await?;
-        let properties =
-            crate::property::get(&mut *db, crate::property::Namespace::Album, view.id).await?;
-        albums.push(view.into_album(genres, properties));
-    }
-
-    Ok(albums)
+    Ok(views.into_iter().map(AlbumView::into_album).collect())
 }
 
 pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
@@ -93,11 +71,7 @@ pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
     let album_view = sqlx::query_as!(AlbumView, "SELECT * FROM album_view WHERE id = ?", album_id)
         .fetch_one(&mut *db)
         .await?;
-
-    let genres = crate::genre::get(&mut *db, crate::genre::Namespace::Album, album_id).await?;
-    let properties =
-        crate::property::get(&mut *db, crate::property::Namespace::Album, album_id).await?;
-    Ok(album_view.into_album(genres, properties))
+    Ok(album_view.into_album())
 }
 
 pub async fn get_bulk(db: &mut DbC, album_ids: &[AlbumId]) -> Result<Vec<Album>> {
@@ -112,29 +86,18 @@ pub async fn create(db: &mut DbC, create: AlbumCreate) -> Result<Album> {
     let artist_id = create.artist.to_db();
     let name = create.name;
     let cover_art = create.cover_art.map(|id| id.to_db());
-    let genres = create.genres;
-    let properties = create.properties;
-    let release_date = create.release_date.to_rfc3339();
+    let properties = create.properties.serialize();
 
     let album_id = sqlx::query!(
-        "INSERT INTO album (artist, name, cover_art, release_date) VALUES (?, ?, ?, ?) RETURNING id",
+        "INSERT INTO album (artist, name, cover_art, properties) VALUES (?, ?, ?, ?) RETURNING id",
         artist_id,
         name,
         cover_art,
-        release_date,
+        properties,
     )
     .fetch_one(&mut *db)
     .await?
     .id;
-
-    crate::genre::set(&mut *db, crate::genre::Namespace::Album, album_id, &genres).await?;
-    crate::property::set(
-        &mut *db,
-        crate::property::Namespace::Album,
-        album_id,
-        &properties,
-    )
-    .await?;
 
     get(db, AlbumId::from_db(album_id)).await
 }
@@ -190,14 +153,22 @@ pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Res
         ValueUpdate::Unchanged => {}
     }
 
-    genre::update(&mut *db, genre::Namespace::Album, db_id, &update.genres).await?;
-    property::update(
-        &mut *db,
-        property::Namespace::Album,
-        db_id,
-        &update.properties,
-    )
-    .await?;
+    if update.properties.len() > 0 {
+        let properties = sqlx::query_scalar!("SELECT properties FROM album WHERE id = ?", db_id)
+            .fetch_one(&mut *db)
+            .await?
+            .unwrap_or_default();
+        let mut properties = Properties::deserialize_unchecked(&properties);
+        properties.apply_updates(&update.properties);
+        let properties = properties.serialize();
+        sqlx::query!(
+            "UPDATE album SET properties = ? WHERE id = ?",
+            properties,
+            db_id
+        )
+        .execute(&mut *db)
+        .await?;
+    }
 
     get(db, album_id).await
 }

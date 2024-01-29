@@ -1,6 +1,8 @@
 use std::{borrow::Cow, collections::HashMap, str::FromStr};
 
-use crate::{DbC, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::Result;
 
 const PROPERTY_KEY_MAX_LENGTH: usize = 64;
 const PROPERT_VALUE_MAX_LENGTH: usize = 128;
@@ -63,7 +65,7 @@ impl std::error::Error for InvalidPropertyValueError {}
 ///
 /// A property key is a lower case asccii string with a maximum length of 64 characters.
 /// Only the characters `a-z`, `0-9`, `-`, `_` , `/` and `.` are allowed.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PropertyKey(Cow<'static, str>);
 
 impl FromStr for PropertyKey {
@@ -144,7 +146,7 @@ const fn property_key_check(s: &str) -> Option<&'static str> {
 /// A property value.
 ///
 /// A property value is an ascii string with a maximum length of 128 characters.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PropertyValue(Cow<'static, str>);
 
 impl FromStr for PropertyValue {
@@ -201,7 +203,7 @@ impl PropertyValue {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Properties(HashMap<Cow<'static, str>, Cow<'static, str>>);
 
 impl Properties {
@@ -243,6 +245,31 @@ impl Properties {
 
     pub fn values(&self) -> impl Iterator<Item = PropertyValue> + '_ {
         self.0.values().map(|v| PropertyValue(v.clone()))
+    }
+
+    pub(crate) fn serialize(&self) -> Vec<u8> {
+        bincode::serialize(&self).expect("failed to serialize properties")
+    }
+
+    pub(crate) fn deserialize(value: &[u8]) -> Result<Self, bincode::Error> {
+        bincode::deserialize(value)
+    }
+
+    pub(crate) fn deserialize_unchecked(value: &[u8]) -> Self {
+        Self::deserialize(value).expect("failed to deserialize properties")
+    }
+
+    pub(crate) fn apply_updates(&mut self, updates: &[PropertyUpdate]) {
+        for update in updates {
+            match &update.action {
+                PropertyUpdateAction::Set(value) => {
+                    self.insert(update.key.clone(), value.clone());
+                }
+                PropertyUpdateAction::Remove => {
+                    self.remove(&update.key);
+                }
+            }
+        }
     }
 }
 
@@ -297,113 +324,4 @@ impl PropertyUpdate {
             action: PropertyUpdateAction::Remove,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Namespace {
-    Artist = 0,
-    Album = 1,
-    Track = 2,
-    Playlist = 3,
-    Scrobble = 4,
-}
-
-pub async fn set(
-    db: &mut DbC,
-    namespace: Namespace,
-    id: i64,
-    properties: &Properties,
-) -> Result<()> {
-    debug_assert_eq!(id & (crate::id::ID_TYPE_MASK as i64), 0);
-    clear(db, namespace, id).await?;
-
-    let namespace = namespace as i64;
-    for (key, value) in properties.0.iter() {
-        let key = key.as_ref();
-        let value = value.as_ref();
-        sqlx::query!(
-            "INSERT INTO property (namespace, id, key, value) VALUES (?, ?, ?, ?)",
-            namespace,
-            id,
-            key,
-            value
-        )
-        .execute(&mut *db)
-        .await?;
-    }
-
-    Ok(())
-}
-
-pub async fn get(db: &mut DbC, namespace: Namespace, id: i64) -> Result<Properties> {
-    debug_assert_eq!(id & (crate::id::ID_TYPE_MASK as i64), 0);
-    let namespace = namespace as i64;
-    let rows = sqlx::query!(
-        "SELECT key, value FROM property WHERE namespace = ? AND id = ?",
-        namespace,
-        id
-    )
-    .fetch_all(&mut *db)
-    .await?;
-
-    let mut properties = Properties::with_capacity(rows.len());
-    for row in rows {
-        properties.insert(
-            PropertyKey::new_uncheked(row.key),
-            PropertyValue::new_uncheked(row.value),
-        );
-    }
-
-    Ok(properties)
-}
-
-pub async fn update(
-    db: &mut DbC,
-    namespace: Namespace,
-    id: i64,
-    update: &[PropertyUpdate],
-) -> Result<()> {
-    debug_assert_eq!(id & (crate::id::ID_TYPE_MASK as i64), 0);
-    let namespace = namespace as i64;
-    for update in update {
-        let key = update.key.as_ref();
-        match update.action {
-            PropertyUpdateAction::Set(ref value) => {
-                let value = value.as_ref();
-                sqlx::query!(
-                    "INSERT INTO property (namespace, id, key, value) VALUES (?, ?, ?, ?)",
-                    namespace,
-                    id,
-                    key,
-                    value
-                )
-                .execute(&mut *db)
-                .await?;
-            }
-            PropertyUpdateAction::Remove => {
-                sqlx::query!(
-                    "DELETE FROM property WHERE namespace = ? AND id = ? AND key = ?",
-                    namespace,
-                    id,
-                    key
-                )
-                .execute(&mut *db)
-                .await?;
-            }
-        }
-    }
-    Ok(())
-}
-
-pub async fn clear(db: &mut DbC, namespace: Namespace, id: i64) -> Result<()> {
-    debug_assert_eq!(id & (crate::id::ID_TYPE_MASK as i64), 0);
-    let namespace = namespace as i64;
-    sqlx::query!(
-        "DELETE FROM property WHERE namespace = ? AND id = ?",
-        namespace,
-        id
-    )
-    .execute(&mut *db)
-    .await?;
-    Ok(())
 }

@@ -230,7 +230,6 @@ async fn cmd_artist_create(args: ArtistCreateArgs) -> Result<()> {
         .artist_create(sonar_grpc::ArtistCreateRequest {
             name: args.name,
             coverart: image_id,
-            genres: args.genres.into(),
             ..Default::default()
         })
         .await?;

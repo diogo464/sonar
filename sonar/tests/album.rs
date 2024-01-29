@@ -17,14 +17,11 @@ async fn album_create_one() {
         artist: artist.id,
         cover_art: None,
         release_date,
-        genres: sonar::test::create_simple_genres(),
         properties: sonar::test::create_simple_properties(),
     };
     let album = sonar::album_create(&ctx, create).await.unwrap();
     assert_eq!(album.name, "Album");
-    assert_eq!(album.genres.len(), 2);
     assert_eq!(album.properties.len(), 2);
-    assert_eq!(album.release_date, release_date);
 }
 
 #[tokio::test]

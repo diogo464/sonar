@@ -111,10 +111,9 @@ pub async fn import(
         }
     };
 
+    // TODO: convert these to properties
     let disc_number = metadatas.iter().find_map(|metadata| metadata.disc_number);
-
     let track_number = metadatas.iter().find_map(|metadata| metadata.track_number);
-
     let release_date = metadatas
         .iter()
         .find_map(|metadata| metadata.release_date)
@@ -132,6 +131,7 @@ pub async fn import(
             )
         })?;
 
+    // TODO: convert genres to properties
     let genres = metadatas
         .iter()
         .filter(|metadata| !metadata.genres.is_empty())
@@ -158,9 +158,7 @@ pub async fn import(
 
         let artist_create = ArtistCreate {
             name: artist_name.to_owned(),
-            description: None,
             cover_art: Default::default(),
-            genres: Default::default(),
             properties: Default::default(),
         };
 
@@ -193,7 +191,6 @@ pub async fn import(
             artist: artist_id,
             cover_art: Default::default(),
             release_date,
-            genres: Default::default(),
             properties: Default::default(),
         };
 
@@ -208,13 +205,9 @@ pub async fn import(
     let audio_stream = bytestream::from_file(&tmp_filepath).await?;
     let track_create = TrackCreate {
         name: track_name.to_owned(),
-        description: None,
         album: album_id,
-        disc_number,
-        track_number,
         cover_art: None, // TODO: extract cover art
         duration,
-        genres,
         lyrics: None, // TODO: extract lyrics
         properties: Default::default(),
         audio_stream,
