@@ -1,7 +1,5 @@
 use std::str::FromStr;
 
-use sqlx::Row;
-
 pub(crate) const ID_TYPE_MASK: u32 = 0xFF00_0000;
 pub(crate) const ID_TYPE_SHIFT: u32 = 24;
 

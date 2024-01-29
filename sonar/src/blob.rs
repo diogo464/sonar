@@ -9,7 +9,7 @@ pub use memory::MemoryBlobStorage;
 mod filesystem;
 pub use filesystem::FilesystemBlobStorage;
 
-use crate::ByteStream;
+use crate::bytestream::ByteStream;
 
 // TODO: remove this in favor of ByteRange
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]

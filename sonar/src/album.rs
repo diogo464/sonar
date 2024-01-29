@@ -1,9 +1,40 @@
 use std::time::Duration;
 
 use crate::{
-    genre, property, Album, AlbumCreate, AlbumId, AlbumUpdate, ArtistId, DbC, Error, ErrorKind,
-    ImageId, ListParams, Properties, Result, Timestamp, ValueUpdate,
+    db::DbC, AlbumId, ArtistId, DateTime, Error, ErrorKind, ImageId, ListParams, Properties,
+    PropertyUpdate, Result, Timestamp, ValueUpdate,
 };
+
+#[derive(Debug, Clone)]
+pub struct Album {
+    pub id: AlbumId,
+    pub name: String,
+    pub duration: Duration,
+    pub artist: ArtistId,
+    pub track_count: u32,
+    pub listen_count: u32,
+    pub cover_art: Option<ImageId>,
+    pub properties: Properties,
+    pub created_at: Timestamp,
+}
+
+#[derive(Debug, Clone)]
+pub struct AlbumCreate {
+    pub name: String,
+    pub artist: ArtistId,
+    pub cover_art: Option<ImageId>,
+    pub release_date: DateTime,
+    pub properties: Properties,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct AlbumUpdate {
+    pub name: ValueUpdate<String>,
+    pub artist: ValueUpdate<ArtistId>,
+    pub release_date: ValueUpdate<DateTime>,
+    pub cover_art: ValueUpdate<ImageId>,
+    pub properties: Vec<PropertyUpdate>,
+}
 
 #[derive(sqlx::FromRow)]
 struct AlbumView {
@@ -18,18 +49,18 @@ struct AlbumView {
     created_at: i64,
 }
 
-impl AlbumView {
-    fn into_album(self) -> Album {
+impl From<AlbumView> for Album {
+    fn from(value: AlbumView) -> Self {
         Album {
-            id: AlbumId::from_db(self.id),
-            name: self.name,
-            duration: Duration::from_millis(self.duration_ms as u64),
-            artist: ArtistId::from_db(self.artist),
-            listen_count: self.listen_count as u32,
-            cover_art: self.cover_art.map(ImageId::from_db),
-            properties: Properties::deserialize_unchecked(&self.properties.unwrap_or_default()),
-            track_count: self.track_count as u32,
-            created_at: Timestamp::from_seconds(self.created_at as u64),
+            id: AlbumId::from_db(value.id),
+            name: value.name,
+            duration: Duration::from_millis(value.duration_ms as u64),
+            artist: ArtistId::from_db(value.artist),
+            listen_count: value.listen_count as u32,
+            cover_art: value.cover_art.map(ImageId::from_db),
+            properties: Properties::deserialize_unchecked(&value.properties.unwrap_or_default()),
+            track_count: value.track_count as u32,
+            created_at: Timestamp::from_seconds(value.created_at as u64),
         }
     }
 }
@@ -44,7 +75,7 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Album>> {
     )
     .fetch_all(&mut *db)
     .await?;
-    Ok(views.into_iter().map(AlbumView::into_album).collect())
+    Ok(views.into_iter().map(Album::from).collect())
 }
 
 pub async fn list_by_artist(
@@ -63,7 +94,7 @@ pub async fn list_by_artist(
     )
     .fetch_all(&mut *db)
     .await?;
-    Ok(views.into_iter().map(AlbumView::into_album).collect())
+    Ok(views.into_iter().map(Album::from).collect())
 }
 
 pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
@@ -71,7 +102,7 @@ pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
     let album_view = sqlx::query_as!(AlbumView, "SELECT * FROM album_view WHERE id = ?", album_id)
         .fetch_one(&mut *db)
         .await?;
-    Ok(album_view.into_album())
+    Ok(From::from(album_view))
 }
 
 pub async fn get_bulk(db: &mut DbC, album_ids: &[AlbumId]) -> Result<Vec<Album>> {

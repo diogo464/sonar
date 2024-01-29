@@ -2,10 +2,85 @@ use std::time::Duration;
 
 use crate::{
     blob::{self, BlobStorage},
-    AlbumId, ArtistId, ByteRange, ByteStream, DbC, Error, ErrorKind, ImageId, ListParams, Lyrics,
-    LyricsKind, LyricsLine, Properties, Result, Timestamp, Track, TrackCreate, TrackId,
-    TrackLyrics, TrackUpdate, ValueUpdate,
+    bytestream::ByteStream,
+    db::DbC,
+    AlbumId, ArtistId, ByteRange, Error, ErrorKind, ImageId, ListParams, Properties,
+    PropertyUpdate, Result, Timestamp, TrackId, ValueUpdate,
 };
+
+#[derive(Debug, Clone)]
+pub struct Track {
+    pub id: TrackId,
+    pub name: String,
+    pub artist: ArtistId,
+    pub album: AlbumId,
+    pub duration: Duration,
+    pub listen_count: u32,
+    pub cover_art: Option<ImageId>,
+    pub properties: Properties,
+    pub created_at: Timestamp,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrackLyrics {
+    pub kind: LyricsKind,
+    pub lines: Vec<LyricsLine>,
+}
+
+pub struct TrackCreate {
+    pub name: String,
+    pub album: AlbumId,
+    pub duration: Duration,
+    pub cover_art: Option<ImageId>,
+    pub lyrics: Option<TrackLyrics>,
+    pub properties: Properties,
+    pub audio_stream: ByteStream,
+    pub audio_filename: String,
+}
+
+impl std::fmt::Debug for TrackCreate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TrackCreate")
+            .field("name", &self.name)
+            .field("album", &self.album)
+            .field("duration", &self.duration)
+            .field("cover_art", &self.cover_art)
+            .field("lyrics", &self.lyrics)
+            .field("properties", &self.properties)
+            .field("audio_filename", &self.audio_filename)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TrackUpdate {
+    pub name: ValueUpdate<String>,
+    pub album: ValueUpdate<AlbumId>,
+    pub disc_number: ValueUpdate<u32>,
+    pub track_number: ValueUpdate<u32>,
+    pub cover_art: ValueUpdate<ImageId>,
+    pub lyrics: ValueUpdate<TrackLyrics>,
+    pub properties: Vec<PropertyUpdate>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LyricsKind {
+    Synced,
+    Unsynced,
+}
+
+#[derive(Debug, Clone)]
+pub struct LyricsLine {
+    pub offset: Duration,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Lyrics {
+    pub track: TrackId,
+    pub kind: LyricsKind,
+    pub lines: Vec<LyricsLine>,
+}
 
 #[derive(sqlx::FromRow)]
 struct TrackView {

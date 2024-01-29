@@ -1,6 +1,6 @@
 use std::{borrow::Cow, str::FromStr};
 
-use crate::{DbC, Result};
+use crate::Result;
 
 #[derive(Debug)]
 pub struct InvalidGenreError {

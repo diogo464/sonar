@@ -1,9 +1,33 @@
 use std::time::Duration;
 
-use crate::{
-    DbC, ListParams, Properties, Result, Scrobble, ScrobbleCreate, ScrobbleId, ScrobbleUpdate,
-    Timestamp, TrackId, UserId,
-};
+use crate::{db::DbC, ListParams, Properties, Result, ScrobbleId, Timestamp, TrackId, UserId, PropertyUpdate};
+
+#[derive(Debug, Clone)]
+pub struct Scrobble {
+    pub id: ScrobbleId,
+    pub user: UserId,
+    pub track: TrackId,
+    pub listen_at: Timestamp,
+    pub listen_duration: Duration,
+    pub listen_device: String,
+    pub created_at: Timestamp,
+    pub properties: Properties,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScrobbleCreate {
+    pub user: UserId,
+    pub track: TrackId,
+    pub listen_at: Timestamp,
+    pub listen_duration: Duration,
+    pub listen_device: String,
+    pub properties: Properties,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScrobbleUpdate {
+    pub properties: Vec<PropertyUpdate>,
+}
 
 #[derive(Debug, sqlx::FromRow)]
 struct ScrobbleView {

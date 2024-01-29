@@ -1,7 +1,32 @@
 use crate::{
-    Artist, ArtistCreate, ArtistId, ArtistUpdate, DbC, ImageId, ListParams, Properties, Result,
-    Timestamp,
+    db::DbC, ArtistId, ImageId, ListParams, Properties, PropertyUpdate, Result, Timestamp,
+    ValueUpdate,
 };
+
+#[derive(Debug, Clone)]
+pub struct Artist {
+    pub id: ArtistId,
+    pub name: String,
+    pub album_count: u32,
+    pub listen_count: u32,
+    pub cover_art: Option<ImageId>,
+    pub properties: Properties,
+    pub created_at: Timestamp,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArtistCreate {
+    pub name: String,
+    pub cover_art: Option<ImageId>,
+    pub properties: Properties,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ArtistUpdate {
+    pub name: ValueUpdate<String>,
+    pub cover_art: ValueUpdate<ImageId>,
+    pub properties: Vec<PropertyUpdate>,
+}
 
 #[derive(sqlx::FromRow)]
 struct ArtistView {
@@ -14,16 +39,16 @@ struct ArtistView {
     created_at: i64,
 }
 
-impl ArtistView {
-    fn into_artist(self) -> Artist {
+impl From<ArtistView> for Artist {
+    fn from(value: ArtistView) -> Self {
         Artist {
-            id: ArtistId::from_db(self.id),
-            name: self.name,
-            listen_count: self.listen_count as u32,
-            cover_art: self.cover_art.map(ImageId::from_db),
-            properties: Properties::deserialize_unchecked(&self.properties.unwrap_or_default()),
-            album_count: self.album_count as u32,
-            created_at: Timestamp::from_seconds(self.created_at as u64),
+            id: ArtistId::from_db(value.id),
+            name: value.name,
+            listen_count: value.listen_count as u32,
+            cover_art: value.cover_art.map(ImageId::from_db),
+            properties: Properties::deserialize_unchecked(&value.properties.unwrap_or_default()),
+            album_count: value.album_count as u32,
+            created_at: Timestamp::from_seconds(value.created_at as u64),
         }
     }
 }
@@ -38,7 +63,7 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Artist>> {
     )
     .fetch_all(&mut *db)
     .await?;
-    Ok(views.into_iter().map(ArtistView::into_artist).collect())
+    Ok(views.into_iter().map(Artist::from).collect())
 }
 
 pub async fn get(db: &mut DbC, artist_id: ArtistId) -> Result<Artist> {
@@ -50,7 +75,7 @@ pub async fn get(db: &mut DbC, artist_id: ArtistId) -> Result<Artist> {
     )
     .fetch_one(&mut *db)
     .await?;
-    Ok(artist_view.into_artist())
+    Ok(From::from(artist_view))
 }
 
 pub async fn get_bulk(db: &mut DbC, artist_ids: &[ArtistId]) -> Result<Vec<Artist>> {

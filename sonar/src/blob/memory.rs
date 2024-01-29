@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::Result, sync::Mutex};
 use bytes::{Bytes, BytesMut};
 use tokio_stream::StreamExt;
 
-use crate::{bytestream, ByteStream};
+use crate::bytestream::{self, ByteStream};
 
 use super::{BlobRange, BlobStorage};
 

@@ -9,6 +9,8 @@
 
 # misc
 *.db
+*.db-wal
+*.db-shm
 *.png
 *.jpg
 *.jpeg

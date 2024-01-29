@@ -1,7 +1,6 @@
 use crate::{
-    album, artist, blob::BlobStorage, bytestream, extractor::SonarExtractor, track, AlbumCreate,
-    AlbumId, ArtistCreate, ArtistId, ByteStream, DateTime, Db, Error, ErrorKind, Result, Track,
-    TrackCreate,
+    album, artist, blob::BlobStorage, bytestream::{self, ByteStream}, extractor::SonarExtractor, track, AlbumCreate,
+    AlbumId, ArtistCreate, ArtistId, DateTime, Error, ErrorKind, Result, Track, TrackCreate, db::Db,
 };
 
 #[derive(Debug)]

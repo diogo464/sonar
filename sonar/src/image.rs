@@ -1,7 +1,45 @@
+use bytes::Bytes;
+
 use crate::{
     blob::{self, BlobStorage},
-    DbC, ImageCreate, ImageDownload, ImageId, Result,
+    bytestream::ByteStream,
+    db::DbC,
+    ImageId, Result,
 };
+
+pub struct ImageCreate {
+    pub data: ByteStream,
+}
+
+pub struct ImageDownload {
+    mime_type: String,
+    stream: ByteStream,
+}
+
+impl ImageDownload {
+    pub(crate) fn new(mime_type: String, stream: ByteStream) -> Self {
+        Self { mime_type, stream }
+    }
+}
+
+impl std::fmt::Debug for ImageDownload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ImageDownload")
+            .field("mime_type", &self.mime_type)
+            .finish()
+    }
+}
+
+impl tokio_stream::Stream for ImageDownload {
+    type Item = std::io::Result<Bytes>;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        std::pin::Pin::new(&mut *self.get_mut().stream).poll_next(cx)
+    }
+}
 
 pub async fn download(
     db: &mut DbC,

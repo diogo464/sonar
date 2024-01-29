@@ -1,7 +1,39 @@
 use crate::{
-    DbC, Error, ListParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack, PlaylistUpdate,
-    Properties, Result, Timestamp, TrackId, UserId, ValueUpdate,
+    db::DbC, Error, ListParams, PlaylistId, Properties, Result, Timestamp, TrackId, UserId,
+    ValueUpdate, PropertyUpdate,
 };
+
+#[derive(Debug, Clone)]
+pub struct PlaylistTrack {
+    pub playlist: PlaylistId,
+    pub track: TrackId,
+    pub inserted_at: Timestamp,
+}
+
+// TODO: add duration
+#[derive(Debug, Clone)]
+pub struct Playlist {
+    pub id: PlaylistId,
+    pub name: String,
+    pub owner: UserId,
+    pub track_count: u32,
+    pub properties: Properties,
+    pub created_at: Timestamp,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlaylistCreate {
+    pub name: String,
+    pub owner: UserId,
+    pub tracks: Vec<TrackId>,
+    pub properties: Properties,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlaylistUpdate {
+    pub name: ValueUpdate<String>,
+    pub properties: Vec<PropertyUpdate>,
+}
 
 #[derive(Debug, sqlx::FromRow)]
 struct PlaylistTrackView {
