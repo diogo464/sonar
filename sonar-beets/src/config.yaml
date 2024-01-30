@@ -1,0 +1,7 @@
+library: {{LIBRARY_PATH}}
+directory: {{DIRECTORY_PATH}}
+plugins: {{PLUGINS}}
+import:
+  copy: no
+  move: no
+  quiet: yes

@@ -1,57 +1,186 @@
-//"title": "Your Time",
-//"artist": "Savoy feat. KIELY",
-//"track": "2/4",
-//"album": "1000 Years EP",
-//"disc": "1/1",
-//"date": "2015-12-02",
-//"genre": "complextro",
-//"TBPM": "0",
-//"compilation": "0",
-//"language": "eng",
-//"lyrics-XXX": "",
-//"album_artist": "Savoy",
-//"TLEN": "276486",
-//"TIPL": "arranger",
-//"TDOR": "2015-12-02",
-//"publisher": "Monstercat",
-//"Script": "Latn",
-//"TSRC": "CA6D21500408",
-//"TMED": "Digital Media",
-//"encoder": "Lavf60.16.100",
-//"artist-sort": "Savoy feat. KIELY",
-//"ALBUMARTISTSORT": "Savoy",
-//"CATALOGNUMBER": "MCEP086",
-//"Album Artist Credit": "Savoy",
-//"MusicBrainz Album Type": "e",
-//"Artist Credit": "Savoy feat. KIELY",
-//"MusicBrainz Album Status": "Official",
-//"MusicBrainz Album Release Country": "XW",
-//"spotify_album_id": "4frUzLfeOhJxIGZVG5n1iK",
-//"spotify_track_id": "496lkFmrm4eXHCXifwqOGW",
-//"spotify_artist_id": "25vU5DYwHIHhg1ViWV3SJq",
-//"MusicBrainz Album Id": "2ce0cb4b-7958-455e-b6f9-e3d500fd1a99",
-//"MusicBrainz Artist Id": "89d03474-2f5f-45fe-839e-209a2728dc9c",
-//"MusicBrainz Album Artist Id": "89d03474-2f5f-45fe-839e-209a2728dc9c",
-//"MusicBrainz Release Group Id": "836b2d7f-189a-4e99-8c19-22c1545ea7ef",
-//"MusicBrainz Release Track Id": "c70dbc1a-6dea-4090-b998-4de2a06c0700"
+use std::{collections::HashMap, sync::Arc};
 
-use crate::{Genre, Genres, Properties};
+use bytes::Bytes;
+
+use crate::{
+    async_trait, Album, Artist, Context, Error, ErrorKind, Properties, Result, Track, TrackId,
+};
+
+pub mod prelude {
+    pub use super::{
+        AlbumMetadata, AlbumMetadataRequest, AlbumTracksMetadata, AlbumTracksMetadataRequest,
+        ArtistMetadata, ArtistMetadataRequest, MetadataRequestKind, TrackMetadata,
+        TrackMetadataRequest,
+    };
+    pub use crate::{
+        Album, AlbumId, Artist, ArtistId, Error, ErrorKind, Properties, Result, Track, TrackId,
+    };
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MetadataRequestKind {
+    Artist,
+    Album,
+    AlbumTracks,
+    Track,
+}
 
 #[derive(Debug, Clone)]
+pub struct ArtistMetadataRequest {
+    pub artist: Artist,
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct ArtistMetadata {
     pub name: Option<String>,
-    pub genres: Genres,
     pub properties: Properties,
+    pub cover: Option<Bytes>,
 }
 
+#[derive(Debug, Clone)]
+pub struct AlbumMetadataRequest {
+    pub artist: Artist,
+    pub album: Album,
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct AlbumMetadata {
     pub name: Option<String>,
-    pub genres: Genres,
     pub properties: Properties,
+    pub cover: Option<Bytes>,
 }
 
+#[derive(Debug, Clone)]
+pub struct AlbumTracksMetadataRequest {
+    pub artist: Artist,
+    pub album: Album,
+    pub tracks: Vec<Track>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct AlbumTracksMetadata {
+    pub tracks: HashMap<TrackId, TrackMetadata>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrackMetadataRequest {
+    pub artist: Artist,
+    pub album: Album,
+    pub track: Track,
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct TrackMetadata {
     pub name: Option<String>,
-    pub genres: Genres,
     pub properties: Properties,
+    pub cover: Option<Bytes>,
+}
+
+#[async_trait]
+#[allow(unused_variables)]
+pub trait MetadataProvider: Send + Sync + 'static {
+    fn supports(&self, kind: MetadataRequestKind) -> bool;
+    async fn artist_metadata(
+        &self,
+        context: &Context,
+        request: &ArtistMetadataRequest,
+    ) -> Result<ArtistMetadata> {
+        Err(Error::new(
+            ErrorKind::Internal,
+            "metadata provider does not support artist metadata",
+        ))
+    }
+    async fn album_metadata(
+        &self,
+        context: &Context,
+        request: &AlbumMetadataRequest,
+    ) -> Result<AlbumMetadata> {
+        Err(Error::new(
+            ErrorKind::Internal,
+            "metadata provider does not support album metadata",
+        ))
+    }
+    async fn album_tracks_metadata(
+        &self,
+        context: &Context,
+        request: &AlbumTracksMetadataRequest,
+    ) -> Result<AlbumTracksMetadata> {
+        Err(Error::new(
+            ErrorKind::Internal,
+            "metadata provider does not support album tracks metadata",
+        ))
+    }
+    async fn track_metadata(
+        &self,
+        context: &Context,
+        request: &TrackMetadataRequest,
+    ) -> Result<TrackMetadata> {
+        Err(Error::new(
+            ErrorKind::Internal,
+            "metadata provider does not support track metadata",
+        ))
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct SonarMetadataProvider {
+    name: String,
+    provider: Arc<dyn MetadataProvider>,
+}
+
+impl std::fmt::Debug for SonarMetadataProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SonarMetadataProvider")
+            .field("name", &self.name)
+            .finish()
+    }
+}
+
+impl SonarMetadataProvider {
+    pub fn new(name: impl Into<String>, provider: impl MetadataProvider + 'static) -> Self {
+        Self {
+            name: name.into(),
+            provider: Arc::new(provider),
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn supports(&self, kind: MetadataRequestKind) -> bool {
+        self.provider.supports(kind)
+    }
+
+    pub async fn artist_metadata(
+        &self,
+        context: &Context,
+        request: &ArtistMetadataRequest,
+    ) -> Result<ArtistMetadata> {
+        self.provider.artist_metadata(context, request).await
+    }
+
+    pub async fn album_metadata(
+        &self,
+        context: &Context,
+        request: &AlbumMetadataRequest,
+    ) -> Result<AlbumMetadata> {
+        self.provider.album_metadata(context, request).await
+    }
+
+    pub async fn album_tracks_metadata(
+        &self,
+        context: &Context,
+        request: &AlbumTracksMetadataRequest,
+    ) -> Result<AlbumTracksMetadata> {
+        self.provider.album_tracks_metadata(context, request).await
+    }
+
+    pub async fn track_metadata(
+        &self,
+        context: &Context,
+        request: &TrackMetadataRequest,
+    ) -> Result<TrackMetadata> {
+        self.provider.track_metadata(context, request).await
+    }
 }

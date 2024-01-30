@@ -2,6 +2,7 @@
 /sonar-cli/storage
 /sonar-cli/spotify-music
 /sonar-cli/beets-music
+/sonar-cli/t
 # subsonic api xml file
 /sonar-cli/*.xsd
 # beets config

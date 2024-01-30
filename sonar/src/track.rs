@@ -52,7 +52,7 @@ impl std::fmt::Debug for TrackCreate {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct TrackUpdate {
     pub name: ValueUpdate<String>,
     pub album: ValueUpdate<AlbumId>,
@@ -189,13 +189,13 @@ pub async fn create(db: &mut DbC, storage: &dyn BlobStorage, create: TrackCreate
 }
 
 pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Result<Track> {
-    let db_id = track_id.to_db();
+    tracing::info!("updating track {} with {:?}", track_id, update);
     if let Some(new_name) = match update.name {
         ValueUpdate::Set(name) => Some(name),
         ValueUpdate::Unset => Some("".to_owned()),
         ValueUpdate::Unchanged => None,
     } {
-        sqlx::query!("UPDATE track SET name = ? WHERE id = ?", new_name, db_id)
+        sqlx::query!("UPDATE track SET name = ? WHERE id = ?", new_name, track_id)
             .execute(&mut *db)
             .await?;
     }
@@ -203,9 +203,13 @@ pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Res
     match update.album {
         ValueUpdate::Set(album_id) => {
             let album_id = album_id.to_db();
-            sqlx::query!("UPDATE track SET album = ? WHERE id = ?", album_id, db_id)
-                .execute(&mut *db)
-                .await?;
+            sqlx::query!(
+                "UPDATE track SET album = ? WHERE id = ?",
+                album_id,
+                track_id
+            )
+            .execute(&mut *db)
+            .await?;
         }
         ValueUpdate::Unset => {
             return Err(Error::new(
@@ -222,13 +226,13 @@ pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Res
             sqlx::query!(
                 "UPDATE track SET cover_art = ? WHERE id = ?",
                 cover_art_id,
-                db_id
+                track_id
             )
             .execute(&mut *db)
             .await?;
         }
         ValueUpdate::Unset => {
-            sqlx::query!("UPDATE track SET cover_art = NULL WHERE id = ?", db_id)
+            sqlx::query!("UPDATE track SET cover_art = NULL WHERE id = ?", track_id)
                 .execute(&mut *db)
                 .await?;
         }
@@ -242,7 +246,7 @@ pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Res
     }
 
     if update.properties.len() > 0 {
-        let properties = sqlx::query_scalar!("SELECT properties FROM track WHERE id = ?", db_id)
+        let properties = sqlx::query_scalar!("SELECT properties FROM track WHERE id = ?", track_id)
             .fetch_one(&mut *db)
             .await?
             .unwrap_or_default();
@@ -252,7 +256,7 @@ pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Res
         sqlx::query!(
             "UPDATE track SET properties = ? WHERE id = ?",
             properties,
-            db_id
+            track_id
         )
         .execute(&mut *db)
         .await?;

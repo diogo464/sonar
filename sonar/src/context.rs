@@ -1,22 +1,27 @@
 use std::{path::PathBuf, sync::Arc};
 
+use bytes::Bytes;
 use sqlx::Executor;
 
 use crate::{
     album, artist,
     blob::{self, BlobStorage},
-    bytestream::ByteStream,
+    bytestream::{self, ByteStream},
     db::Db,
     extractor::{Extractor, SonarExtractor},
     image,
     importer::{self, Importer},
+    metadata::{
+        AlbumMetadata, AlbumMetadataRequest, AlbumTracksMetadata, AlbumTracksMetadataRequest,
+        MetadataProvider, MetadataRequestKind, SonarMetadataProvider,
+    },
     playlist, scrobble,
     scrobbler::{self, SonarScrobbler},
     track, user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId,
     ArtistUpdate, ByteRange, Error, ErrorKind, ImageCreate, ImageDownload, ImageId, Import,
     ListParams, Lyrics, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack, PlaylistUpdate,
     Result, Scrobble, ScrobbleCreate, ScrobbleId, ScrobbleUpdate, Track, TrackCreate, TrackId,
-    TrackUpdate, User, UserCreate, UserId, Username,
+    TrackUpdate, User, UserCreate, UserId, Username, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -31,6 +36,7 @@ pub struct Config {
     storage_backend: StorageBackend,
     extractors: Vec<SonarExtractor>,
     scrobblers: Vec<SonarScrobbler>,
+    providers: Vec<SonarMetadataProvider>,
     max_import_size: usize,
     max_parallel_imports: usize,
 }
@@ -42,6 +48,7 @@ impl Config {
             storage_backend,
             extractors: Vec::new(),
             scrobblers: Vec::new(),
+            providers: Vec::new(),
             max_import_size: 1024 * 1024 * 1024,
             max_parallel_imports: 8,
         }
@@ -79,6 +86,23 @@ impl Config {
             .push(SonarScrobbler::new(identifier, scrobbler));
         Ok(())
     }
+
+    pub fn register_provider(
+        &mut self,
+        name: impl Into<String>,
+        provider: impl MetadataProvider,
+    ) -> Result<()> {
+        let name = name.into();
+        if self.providers.iter().any(|p| p.name() == name) {
+            return Err(Error::new(
+                ErrorKind::Invalid,
+                "provider already registered",
+            ));
+        }
+        self.providers
+            .push(SonarMetadataProvider::new(name, provider));
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -88,6 +112,7 @@ pub struct Context {
     importer: Arc<Importer>,
     extractors: Arc<Vec<SonarExtractor>>,
     scrobblers: Arc<Vec<SonarScrobbler>>,
+    providers: Arc<Vec<SonarMetadataProvider>>,
 }
 
 pub async fn new(config: Config) -> Result<Context> {
@@ -120,6 +145,7 @@ pub async fn new(config: Config) -> Result<Context> {
         importer: Arc::new(importer),
         extractors: Arc::new(config.extractors),
         scrobblers: Arc::new(config.scrobblers),
+        providers: Arc::new(config.providers),
     })
 }
 
@@ -454,4 +480,106 @@ pub async fn import(context: &Context, import: Import) -> Result<Track> {
         import,
     )
     .await
+}
+
+pub async fn metadata_fetch_album(context: &Context, album_id: AlbumId) -> Result<()> {
+    let metadata = metadata_view_album(context, album_id).await?;
+
+    let image_id = if let Some(cover) = metadata.cover {
+        match image_create(
+            context,
+            ImageCreate {
+                data: bytestream::from_bytes(cover),
+            },
+        )
+        .await
+        {
+            Ok(image_id) => Some(image_id),
+            Err(err) => {
+                tracing::warn!("failed to create image: {}", err);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let mut update = AlbumUpdate::default();
+    update.name = ValueUpdate::from_option_unchanged(metadata.name);
+    update.properties = metadata.properties.into_property_updates();
+    update.cover_art = ValueUpdate::from_option_unchanged(image_id);
+    album_update(context, album_id, update).await?;
+    Ok(())
+}
+
+pub async fn metadata_fetch_album_tracks(context: &Context, album_id: AlbumId) -> Result<()> {
+    let metadata = metadata_view_album_tracks(context, album_id).await?;
+    for (track_id, track_metadata) in metadata.tracks {
+        let mut update = TrackUpdate::default();
+        // TODO: update cover
+        update.name = ValueUpdate::from_option_unchanged(track_metadata.name);
+        update.properties = track_metadata.properties.into_property_updates();
+        track_update(context, track_id, update).await?;
+    }
+    Ok(())
+}
+
+pub async fn metadata_view_artist(context: &Context, artist_id: ArtistId) -> Result<()> {
+    todo!()
+}
+
+pub async fn metadata_view_album(context: &Context, album_id: AlbumId) -> Result<AlbumMetadata> {
+    let album = album_get(context, album_id).await?;
+    let artist = artist_get(context, album.artist).await?;
+    let request = AlbumMetadataRequest { artist, album };
+    for fetcher in context.providers.iter().cloned() {
+        if !fetcher.supports(MetadataRequestKind::Album) {
+            continue;
+        }
+        match fetcher.album_metadata(context, &request).await {
+            Ok(metadata) => return Ok(metadata),
+            Err(err) => {
+                tracing::warn!(
+                    "failed to fetch album metadata from provider '{}': {}",
+                    fetcher.name(),
+                    err
+                );
+            }
+        }
+    }
+    Ok(Default::default())
+}
+
+pub async fn metadata_view_album_tracks(
+    context: &Context,
+    album_id: AlbumId,
+) -> Result<AlbumTracksMetadata> {
+    let album = album_get(context, album_id).await?;
+    let artist = artist_get(context, album.artist).await?;
+    let tracks = track_list_by_album(context, album_id, ListParams::default()).await?;
+    let request = AlbumTracksMetadataRequest {
+        artist,
+        album,
+        tracks,
+    };
+    for fetcher in context.providers.iter().cloned() {
+        if !fetcher.supports(MetadataRequestKind::AlbumTracks) {
+            continue;
+        }
+        match fetcher.album_tracks_metadata(context, &request).await {
+            Ok(metadata) => return Ok(metadata),
+            Err(err) => {
+                tracing::warn!(
+                    "failed to fetch album tracks metadata from provider '{}': {}",
+                    fetcher.name(),
+                    err
+                );
+            }
+        }
+    }
+    Ok(Default::default())
+}
+
+pub async fn metadata_view_track(context: &Context, track_id: TrackId) -> Result<()> {
+    todo!()
 }

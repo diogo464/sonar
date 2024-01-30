@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
@@ -36,6 +36,25 @@ impl Properties {
         self.0.get(key.as_ref()).map(|v| PropertyValue(v.clone()))
     }
 
+    pub fn get_parsed<T>(&self, key: impl AsRef<str>) -> Option<T>
+    where
+        T: FromStr,
+        <T as FromStr>::Err: std::fmt::Display,
+    {
+        let value = self.get(key.as_ref())?;
+        match T::from_str(value.as_ref()) {
+            Ok(value) => Some(value),
+            Err(err) => {
+                tracing::warn!(
+                    "property {} existed but failed to parse: {}",
+                    key.as_ref(),
+                    err
+                );
+                None
+            }
+        }
+    }
+
     pub fn insert(&mut self, key: PropertyKey, value: PropertyValue) -> Option<PropertyValue> {
         self.0.insert(key.0, value.0).map(|v| PropertyValue(v))
     }
@@ -50,6 +69,20 @@ impl Properties {
 
     pub fn values(&self) -> impl Iterator<Item = PropertyValue> + '_ {
         self.0.values().map(|v| PropertyValue(v.clone()))
+    }
+
+    pub fn into_property_updates(self) -> Vec<PropertyUpdate> {
+        self.into_iter()
+            .map(|(key, value)| PropertyUpdate::set(key, value))
+            .collect()
+    }
+
+    pub fn merge(primary: &mut Self, secondary: &Self) {
+        for (key, value) in secondary {
+            if !primary.contains_key(&key) {
+                primary.insert(key.clone(), value.clone());
+            }
+        }
     }
 
     pub(crate) fn serialize(&self) -> Vec<u8> {
@@ -99,6 +132,31 @@ impl IntoIterator for Properties {
     fn into_iter(self) -> Self::IntoIter {
         PropertiesIntoIter {
             inner: self.0.into_iter(),
+        }
+    }
+}
+
+pub struct PropertiesIter<'a> {
+    inner: std::collections::hash_map::Iter<'a, Cow<'static, str>, Cow<'static, str>>,
+}
+
+impl<'a> Iterator for PropertiesIter<'a> {
+    type Item = (PropertyKey, PropertyValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next()
+            .map(|(k, v)| (PropertyKey(k.clone()), PropertyValue(v.clone())))
+    }
+}
+
+impl<'a> IntoIterator for &'a Properties {
+    type Item = (PropertyKey, PropertyValue);
+    type IntoIter = PropertiesIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        PropertiesIter {
+            inner: self.0.iter(),
         }
     }
 }

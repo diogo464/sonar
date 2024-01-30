@@ -139,6 +139,16 @@ impl sonar_service_server::SonarService for Server {
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         todo!()
     }
+    async fn album_list(
+        &self,
+        request: tonic::Request<AlbumListRequest>,
+    ) -> std::result::Result<tonic::Response<AlbumListResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let params = sonar::ListParams::from((req.offset, req.count));
+        let albums = sonar::album_list(&self.context, params).await.m()?;
+        let albums = albums.into_iter().map(Into::into).collect();
+        Ok(tonic::Response::new(AlbumListResponse { albums }))
+    }
     async fn import(
         &self,
         request: tonic::Request<tonic::Streaming<ImportRequest>>,
@@ -174,6 +184,52 @@ impl sonar_service_server::SonarService for Server {
         .await
         .m()?;
         Ok(tonic::Response::new(track.into()))
+    }
+    async fn metadata_fetch(
+        &self,
+        request: tonic::Request<MetadataFetchRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let req = request.into_inner();
+        match req.kind {
+            _ if req.kind == MetadataFetchKind::Artist as i32 => {
+                let artist_id = sonar::ArtistId::try_from(req.item_id).m()?;
+                unimplemented!()
+            }
+            _ if req.kind == MetadataFetchKind::Album as i32 => {
+                let album_id = sonar::AlbumId::try_from(req.item_id).m()?;
+                sonar::metadata_fetch_album(&self.context, album_id)
+                    .await
+                    .m()?;
+            }
+            _ if req.kind == MetadataFetchKind::Albumtracks as i32 => {
+                let album_id = sonar::AlbumId::try_from(req.item_id).m()?;
+                sonar::metadata_fetch_album_tracks(&self.context, album_id)
+                    .await
+                    .m()?;
+            }
+            _ if req.kind == MetadataFetchKind::Track as i32 => {
+                let track_id = sonar::TrackId::try_from(req.item_id).m()?;
+                unimplemented!()
+            }
+            _ => {
+                return Err(tonic::Status::invalid_argument(format!(
+                    "invalid metadata fetch kind: {}",
+                    req.kind
+                )))
+            }
+        }
+        Ok(tonic::Response::new(()))
+    }
+    async fn metadata_album_tracks(
+        &self,
+        request: tonic::Request<MetadataAlbumTracksRequest>,
+    ) -> std::result::Result<tonic::Response<MetadataAlbumTracksResponse>, tonic::Status> {
+        let request = request.into_inner();
+        let album_id = sonar::AlbumId::try_from(request.album_id).m()?;
+        let metadata = sonar::metadata_view_album_tracks(&self.context, album_id)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(metadata.into()))
     }
 }
 
@@ -265,6 +321,21 @@ impl From<sonar::Artist> for Artist {
     }
 }
 
+impl From<sonar::Album> for Album {
+    fn from(value: sonar::Album) -> Self {
+        Self {
+            id: From::from(value.id),
+            name: value.name,
+            track_count: value.track_count as u32,
+            duration: Some(TryFrom::try_from(value.duration).expect("failed to convert duration")),
+            listen_count: value.listen_count as u32,
+            artists: vec![From::from(value.artist)],
+            coverart: value.cover_art.map(From::from),
+            properties: convert_properties_to_pb(value.properties),
+        }
+    }
+}
+
 impl From<sonar::Track> for Track {
     fn from(value: sonar::Track) -> Self {
         Self {
@@ -276,6 +347,28 @@ impl From<sonar::Track> for Track {
             listen_count: value.listen_count as u32,
             cover_art_id: value.cover_art.map(From::from),
             properties: convert_properties_to_pb(value.properties),
+        }
+    }
+}
+
+impl From<sonar::metadata::TrackMetadata> for TrackMetadata {
+    fn from(value: sonar::metadata::TrackMetadata) -> Self {
+        Self {
+            name: value.name,
+            properties: convert_properties_to_pb(value.properties),
+            cover: value.cover.map(From::from),
+        }
+    }
+}
+
+impl From<sonar::metadata::AlbumTracksMetadata> for MetadataAlbumTracksResponse {
+    fn from(value: sonar::metadata::AlbumTracksMetadata) -> Self {
+        Self {
+            tracks: value
+                .tracks
+                .into_iter()
+                .map(|(id, v)| (From::from(id), From::from(v)))
+                .collect(),
         }
     }
 }

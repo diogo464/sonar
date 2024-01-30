@@ -102,10 +102,11 @@ pub async fn create(db: &mut DbC, create: ArtistCreate) -> Result<Artist> {
 }
 
 pub async fn update(db: &mut DbC, artist_id: ArtistId, update: ArtistUpdate) -> Result<Artist> {
+    tracing::info!("updating artist {} with {:?}", artist_id, update);
     let new_name = match update.name {
-        crate::ValueUpdate::Set(name) => Some(name),
-        crate::ValueUpdate::Unset => Some("".to_string()),
-        crate::ValueUpdate::Unchanged => None,
+        ValueUpdate::Set(name) => Some(name),
+        ValueUpdate::Unset => Some("".to_string()),
+        ValueUpdate::Unchanged => None,
     };
     if let Some(name) = new_name {
         sqlx::query!("UPDATE artist SET name = ? WHERE id = ?", name, artist_id)

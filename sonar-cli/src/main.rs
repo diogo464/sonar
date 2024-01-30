@@ -30,7 +30,10 @@ struct Args {
 enum Command {
     User(UserArgs),
     Artist(ArtistArgs),
+    Album(AlbumArgs),
+    //Track(TrackArgs),
     Import(ImportArgs),
+    Metadata(MetadataArgs),
     Server(ServerArgs),
     Extractor(ExtractorArgs),
 }
@@ -57,7 +60,19 @@ async fn main() -> Result<()> {
             ArtistCommand::Update(cargs) => cmd_artist_update(cargs).await?,
             ArtistCommand::Delete(cargs) => cmd_artist_delete(cargs).await?,
         },
+        Command::Album(cargs) => match cargs.command {
+            AlbumCommand::List(cargs) => cmd_album_list(cargs).await?,
+            AlbumCommand::Create(cargs) => cmd_album_create(cargs).await?,
+            AlbumCommand::Update(cargs) => cmd_album_update(cargs).await?,
+            AlbumCommand::Delete(cargs) => cmd_album_delete(cargs).await?,
+        },
         Command::Import(cargs) => cmd_import(cargs).await?,
+        Command::Metadata(margs) => match margs.command {
+            MetadataCommand::Album(cargs) => cmd_metadata_album(cargs, margs.view).await?,
+            MetadataCommand::AlbumTracks(cargs) => {
+                cmd_metadata_album_tracks(cargs, margs.view).await?
+            }
+        },
         Command::Server(cargs) => cmd_server(cargs).await?,
         Command::Extractor(cargs) => cmd_extractor(cargs).await?,
     }
@@ -253,6 +268,73 @@ async fn cmd_artist_delete(args: ArtistDeleteArgs) -> Result<()> {
 }
 
 #[derive(Debug, Parser)]
+struct AlbumArgs {
+    #[clap(subcommand)]
+    command: AlbumCommand,
+}
+
+#[derive(Debug, Parser)]
+enum AlbumCommand {
+    List(AlbumListArgs),
+    Create(AlbumCreateArgs),
+    Update(AlbumUpdateArgs),
+    Delete(AlbumDeleteArgs),
+}
+
+#[derive(Debug, Parser)]
+struct AlbumListArgs {
+    #[clap(flatten)]
+    params: ListParams,
+}
+
+async fn cmd_album_list(args: AlbumListArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .album_list(sonar_grpc::AlbumListRequest {
+            offset: args.params.offset,
+            count: args.params.limit,
+        })
+        .await?;
+    for album in response.into_inner().albums {
+        let album_id = sonar::AlbumId::try_from(album.id)?;
+        let album_name = album.name;
+        println!("{}\t{}", album_id, album_name);
+    }
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct AlbumCreateArgs {
+    artist_id: sonar::ArtistId,
+
+    name: String,
+
+    #[clap(long)]
+    cover_art: Option<PathBuf>,
+
+    #[clap(long, default_value = "")]
+    genres: sonar::Genres,
+}
+
+async fn cmd_album_create(args: AlbumCreateArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct AlbumUpdateArgs {}
+
+async fn cmd_album_update(args: AlbumUpdateArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct AlbumDeleteArgs {}
+
+async fn cmd_album_delete(args: AlbumDeleteArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
 struct ServerArgs {
     #[clap(long, default_value = "0.0.0.0:3000", env = "SONAR_ADDRESS")]
     address: SocketAddr,
@@ -305,6 +387,73 @@ async fn cmd_import(args: ImportArgs) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Parser)]
+struct MetadataArgs {
+    #[clap(long)]
+    view: bool,
+
+    #[clap(subcommand)]
+    command: MetadataCommand,
+}
+
+#[derive(Debug, Parser)]
+enum MetadataCommand {
+    Album(MetadataAlbumArgs),
+    AlbumTracks(MetadataAlbumTracksArgs),
+}
+
+#[derive(Debug, Parser)]
+struct MetadataAlbumArgs {
+    album_id: sonar::AlbumId,
+}
+
+async fn cmd_metadata_album(args: MetadataAlbumArgs, view: bool) -> Result<()> {
+    let mut client = create_client().await?;
+    let _response = client
+        .metadata_fetch(sonar_grpc::MetadataFetchRequest {
+            kind: sonar_grpc::MetadataFetchKind::Album as i32,
+            item_id: From::from(args.album_id),
+        })
+        .await?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct MetadataAlbumTracksArgs {
+    album_id: sonar::AlbumId,
+}
+
+async fn cmd_metadata_album_tracks(args: MetadataAlbumTracksArgs, view: bool) -> Result<()> {
+    let mut client = create_client().await?;
+    if view {
+        let response = client
+            .metadata_album_tracks(sonar_grpc::MetadataAlbumTracksRequest {
+                album_id: From::from(args.album_id),
+            })
+            .await?;
+        for track in response.into_inner().tracks {
+            let track_id = sonar::TrackId::try_from(track.0)?;
+            let metadata = track.1;
+            println!("Track: {}", track_id);
+            println!("\tName: {:?}", metadata.name);
+            for property in metadata.properties {
+                println!("\t{}: {}", property.key, property.value);
+            }
+            if let Some(cover) = metadata.cover {
+                println!("\tCover: {} bytes", cover.len());
+            }
+        }
+    } else {
+        let _response = client
+            .metadata_fetch(sonar_grpc::MetadataFetchRequest {
+                kind: sonar_grpc::MetadataFetchKind::Albumtracks as i32,
+                item_id: From::from(args.album_id),
+            })
+            .await?;
+    }
+    Ok(())
+}
+
 async fn cmd_server(args: ServerArgs) -> Result<()> {
     let data_dir = args
         .data_dir
@@ -325,6 +474,9 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     config
         .register_extractor("lofty", sonar_extractor_lofty::LoftyExtractor::default())
         .context("registering lofty extractor")?;
+    config
+        .register_provider("beets", sonar_beets::BeetsMetadataImporter)
+        .context("registering beets metadata importer")?;
     let context = sonar::new(config).await.context("creating sonar context")?;
 
     let grpc_context = context.clone();

@@ -77,6 +77,42 @@ impl From<PropertyValue> for String {
     }
 }
 
+impl From<u16> for PropertyValue {
+    fn from(value: u16) -> Self {
+        Self::new_uncheked(value.to_string())
+    }
+}
+
+impl From<i16> for PropertyValue {
+    fn from(value: i16) -> Self {
+        Self::new_uncheked(value.to_string())
+    }
+}
+
+impl From<u32> for PropertyValue {
+    fn from(value: u32) -> Self {
+        Self::new_uncheked(value.to_string())
+    }
+}
+
+impl From<i32> for PropertyValue {
+    fn from(value: i32) -> Self {
+        Self::new_uncheked(value.to_string())
+    }
+}
+
+impl From<u64> for PropertyValue {
+    fn from(value: u64) -> Self {
+        Self::new_uncheked(value.to_string())
+    }
+}
+
+impl From<i64> for PropertyValue {
+    fn from(value: i64) -> Self {
+        Self::new_uncheked(value.to_string())
+    }
+}
+
 impl PropertyValue {
     pub fn new(value: impl AsRef<str>) -> Result<Self, InvalidPropertyValueError> {
         Self::from_str(value.as_ref())

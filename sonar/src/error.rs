@@ -40,6 +40,15 @@ impl Error {
         }
     }
 
+    pub fn wrap(err: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self {
+            backtrace: std::backtrace::Backtrace::force_capture(),
+            source: Some(Box::new(err)),
+            kind: ErrorKind::Internal,
+            message: "internal error".into(),
+        }
+    }
+
     pub fn kind(&self) -> ErrorKind {
         self.kind
     }

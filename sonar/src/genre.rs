@@ -26,7 +26,7 @@ impl std::error::Error for InvalidGenreError {}
 /// A genre of music.
 ///
 /// A genre is an ASCII string of up to 24 lowercase characters.
-/// Only the characters `a-z`, `0-9` and ` ` are allowed.
+/// Only the characters `a-z`, `0-9`, `-` and `_` are allowed.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Genre([u8; 24]);
 
@@ -59,7 +59,7 @@ impl FromStr for Genre {
 }
 
 const fn is_valid_genre_char(c: u8) -> bool {
-    matches!(c, b'a'..=b'z' | b'0'..=b'9' | b' ')
+    matches!(c, b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_')
 }
 
 impl std::fmt::Display for Genre {

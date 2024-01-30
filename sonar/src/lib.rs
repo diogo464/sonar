@@ -19,6 +19,7 @@ pub mod bytestream;
 pub mod ext;
 pub mod extractor;
 pub mod metadata;
+pub mod prop;
 pub mod scrobbler;
 
 #[doc(hidden)]
@@ -51,3 +52,4 @@ pub use track::{Lyrics, LyricsKind, Track, TrackCreate, TrackLyrics, TrackUpdate
 pub use user::{InvalidUsernameError, User, UserCreate, UserUpdate, Username};
 
 pub use async_trait::async_trait;
+pub use bytes;

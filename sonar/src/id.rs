@@ -13,6 +13,16 @@ pub(crate) const ID_TYPE_USER: u32 = 7;
 pub(crate) const ID_TYPE_LYRICS: u32 = 8;
 pub(crate) const ID_TYPE_SCROBBLE: u32 = 9;
 
+const ID_TYPE_ARTIST_STR: &str = "artist";
+const ID_TYPE_ALBUM_STR: &str = "album";
+const ID_TYPE_TRACK_STR: &str = "track";
+const ID_TYPE_PLAYLIST_STR: &str = "playlist";
+const ID_TYPE_AUDIO_STR: &str = "audio";
+const ID_TYPE_IMAGE_STR: &str = "image";
+const ID_TYPE_USER_STR: &str = "user";
+const ID_TYPE_LYRICS_STR: &str = "lyrics";
+const ID_TYPE_SCROBBLE_STR: &str = "scrobble";
+
 #[derive(Debug)]
 pub struct InvalidIdError {
     id: u32,
@@ -34,7 +44,7 @@ impl std::fmt::Display for InvalidIdError {
 impl std::error::Error for InvalidIdError {}
 
 macro_rules! impl_id {
-    ($t:ident, $k:expr) => {
+    ($t:ident, $v:ident, $n:literal, $k:expr) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub struct $t(u32);
 
@@ -49,6 +59,12 @@ macro_rules! impl_id {
             }
         }
 
+        impl From<$t> for SonarId {
+            fn from(id: $t) -> Self {
+                Self::$v(id)
+            }
+        }
+
         impl TryFrom<u32> for $t {
             type Error = InvalidIdError;
 
@@ -56,7 +72,7 @@ macro_rules! impl_id {
                 if id & ID_TYPE_MASK == $k << ID_TYPE_SHIFT {
                     Ok(Self(id))
                 } else {
-                    Err(InvalidIdError::new(id, "not an artist ID"))
+                    Err(InvalidIdError::new(id, std::concat!("not an ", $n, " ID")))
                 }
             }
         }
@@ -71,13 +87,11 @@ macro_rules! impl_id {
             type Err = InvalidIdError;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
-                let id = u32::from_str_radix(s, 16).map_err(|_| {
-                    InvalidIdError::new(
-                        0,
-                        "failed to parse artist ID: must be a 32-bit hexadecimal number",
-                    )
-                })?;
-                Self::try_from(id)
+                let id = s.parse::<SonarId>()?;
+                match id {
+                    SonarId::$v(id) => Ok(id),
+                    _ => Err(InvalidIdError::new(0, std::concat!("not an ", $n, " ID"))),
+                }
             }
         }
 
@@ -118,15 +132,15 @@ macro_rules! impl_id {
     };
 }
 
-impl_id!(ArtistId, ID_TYPE_ARTIST);
-impl_id!(AlbumId, ID_TYPE_ALBUM);
-impl_id!(TrackId, ID_TYPE_TRACK);
-impl_id!(PlaylistId, ID_TYPE_PLAYLIST);
-impl_id!(AudioId, ID_TYPE_AUDIO);
-impl_id!(ImageId, ID_TYPE_IMAGE);
-impl_id!(UserId, ID_TYPE_USER);
-impl_id!(LyricsId, ID_TYPE_LYRICS);
-impl_id!(ScrobbleId, ID_TYPE_SCROBBLE);
+impl_id!(ArtistId, Artist, "artist", ID_TYPE_ARTIST);
+impl_id!(AlbumId, Album, "album", ID_TYPE_ALBUM);
+impl_id!(TrackId, Track, "track", ID_TYPE_TRACK);
+impl_id!(PlaylistId, Playlist, "playlist", ID_TYPE_PLAYLIST);
+impl_id!(AudioId, Audio, "audio", ID_TYPE_AUDIO);
+impl_id!(ImageId, Image, "image", ID_TYPE_IMAGE);
+impl_id!(UserId, User, "user", ID_TYPE_USER);
+impl_id!(LyricsId, Lyrics, "lyrics", ID_TYPE_LYRICS);
+impl_id!(ScrobbleId, Scrobble, "scrobble", ID_TYPE_SCROBBLE);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SonarId {
@@ -144,7 +158,20 @@ pub enum SonarId {
 impl std::fmt::Display for SonarId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let id = u32::from(*self);
-        write!(f, "{:x}", id)
+        f.write_str("sonar:")?;
+        match (id & ID_TYPE_MASK) >> ID_TYPE_SHIFT {
+            ID_TYPE_ARTIST => write!(f, "{}", ID_TYPE_ARTIST_STR)?,
+            ID_TYPE_ALBUM => write!(f, "{}", ID_TYPE_ALBUM_STR)?,
+            ID_TYPE_TRACK => write!(f, "{}", ID_TYPE_TRACK_STR)?,
+            ID_TYPE_PLAYLIST => write!(f, "{}", ID_TYPE_PLAYLIST_STR)?,
+            ID_TYPE_AUDIO => write!(f, "{}", ID_TYPE_AUDIO_STR)?,
+            ID_TYPE_IMAGE => write!(f, "{}", ID_TYPE_IMAGE_STR)?,
+            ID_TYPE_USER => write!(f, "{}", ID_TYPE_USER_STR)?,
+            ID_TYPE_LYRICS => write!(f, "{}", ID_TYPE_LYRICS_STR)?,
+            ID_TYPE_SCROBBLE => write!(f, "{}", ID_TYPE_SCROBBLE_STR)?,
+            _ => unreachable!(),
+        };
+        write!(f, ":{:x}", id)
     }
 }
 
@@ -152,7 +179,7 @@ impl TryFrom<u32> for SonarId {
     type Error = InvalidIdError;
 
     fn try_from(id: u32) -> Result<Self, Self::Error> {
-        match id & ID_TYPE_MASK {
+        match (id & ID_TYPE_MASK) >> ID_TYPE_SHIFT {
             ID_TYPE_ARTIST => Ok(Self::Artist(ArtistId::try_from(id)?)),
             ID_TYPE_ALBUM => Ok(Self::Album(AlbumId::try_from(id)?)),
             ID_TYPE_TRACK => Ok(Self::Track(TrackId::try_from(id)?)),
@@ -187,77 +214,29 @@ impl FromStr for SonarId {
     type Err = InvalidIdError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let id = u32::from_str_radix(s, 16).map_err(|_| {
+        let s = s
+            .strip_prefix("sonar:")
+            .ok_or_else(|| InvalidIdError::new(0, "not a sonar ID"))?;
+        let (kind, value) = s
+            .split_once(":")
+            .ok_or_else(|| InvalidIdError::new(0, "not a sonar ID"))?;
+        let id = u32::from_str_radix(value, 16).map_err(|_| {
             InvalidIdError::new(
                 0,
-                "failed to parse artist ID: must be a 32-bit hexadecimal number",
+                "failed to parse ID value: must be a 32-bit hexadecimal number",
             )
         })?;
-        match id & ID_TYPE_MASK {
-            ID_TYPE_ARTIST => Ok(Self::Artist(ArtistId::try_from(id)?)),
-            ID_TYPE_ALBUM => Ok(Self::Album(AlbumId::try_from(id)?)),
-            ID_TYPE_TRACK => Ok(Self::Track(TrackId::try_from(id)?)),
-            ID_TYPE_PLAYLIST => Ok(Self::Playlist(PlaylistId::try_from(id)?)),
-            ID_TYPE_AUDIO => Ok(Self::Audio(AudioId::try_from(id)?)),
-            ID_TYPE_IMAGE => Ok(Self::Image(ImageId::try_from(id)?)),
-            ID_TYPE_USER => Ok(Self::User(UserId::try_from(id)?)),
-            ID_TYPE_LYRICS => Ok(Self::Lyrics(LyricsId::try_from(id)?)),
-            ID_TYPE_SCROBBLE => Ok(Self::Scrobble(ScrobbleId::try_from(id)?)),
+        match kind {
+            ID_TYPE_ARTIST_STR => Ok(Self::Artist(ArtistId::try_from(id)?)),
+            ID_TYPE_ALBUM_STR => Ok(Self::Album(AlbumId::try_from(id)?)),
+            ID_TYPE_TRACK_STR => Ok(Self::Track(TrackId::try_from(id)?)),
+            ID_TYPE_PLAYLIST_STR => Ok(Self::Playlist(PlaylistId::try_from(id)?)),
+            ID_TYPE_AUDIO_STR => Ok(Self::Audio(AudioId::try_from(id)?)),
+            ID_TYPE_IMAGE_STR => Ok(Self::Image(ImageId::try_from(id)?)),
+            ID_TYPE_USER_STR => Ok(Self::User(UserId::try_from(id)?)),
+            ID_TYPE_LYRICS_STR => Ok(Self::Lyrics(LyricsId::try_from(id)?)),
+            ID_TYPE_SCROBBLE_STR => Ok(Self::Scrobble(ScrobbleId::try_from(id)?)),
             _ => Err(InvalidIdError::new(id, "unknown ID type")),
         }
-    }
-}
-
-impl From<ArtistId> for SonarId {
-    fn from(id: ArtistId) -> Self {
-        Self::Artist(id)
-    }
-}
-
-impl From<AlbumId> for SonarId {
-    fn from(id: AlbumId) -> Self {
-        Self::Album(id)
-    }
-}
-
-impl From<TrackId> for SonarId {
-    fn from(id: TrackId) -> Self {
-        Self::Track(id)
-    }
-}
-
-impl From<PlaylistId> for SonarId {
-    fn from(id: PlaylistId) -> Self {
-        Self::Playlist(id)
-    }
-}
-
-impl From<AudioId> for SonarId {
-    fn from(id: AudioId) -> Self {
-        Self::Audio(id)
-    }
-}
-
-impl From<ImageId> for SonarId {
-    fn from(id: ImageId) -> Self {
-        Self::Image(id)
-    }
-}
-
-impl From<UserId> for SonarId {
-    fn from(id: UserId) -> Self {
-        Self::User(id)
-    }
-}
-
-impl From<LyricsId> for SonarId {
-    fn from(id: LyricsId) -> Self {
-        Self::Lyrics(id)
-    }
-}
-
-impl From<ScrobbleId> for SonarId {
-    fn from(id: ScrobbleId) -> Self {
-        Self::Scrobble(id)
     }
 }

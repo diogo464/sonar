@@ -134,14 +134,13 @@ pub async fn create(db: &mut DbC, create: AlbumCreate) -> Result<Album> {
 }
 
 pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Result<Album> {
-    let db_id = album_id.to_db();
-
+    tracing::info!("updating album {} with {:?}", album_id, update);
     if let Some(new_name) = match update.name {
         ValueUpdate::Set(name) => Some(name),
         ValueUpdate::Unset => Some("".to_owned()),
         ValueUpdate::Unchanged => None,
     } {
-        sqlx::query!("UPDATE album SET name = ? WHERE id = ?", new_name, db_id)
+        sqlx::query!("UPDATE album SET name = ? WHERE id = ?", new_name, album_id)
             .execute(&mut *db)
             .await?;
     }
@@ -159,7 +158,7 @@ pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Res
         sqlx::query!(
             "UPDATE album SET artist = ? WHERE id = ?",
             new_artist,
-            db_id
+            album_id
         )
         .execute(&mut *db)
         .await?;
@@ -171,13 +170,13 @@ pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Res
             sqlx::query!(
                 "UPDATE album SET cover_art = ? WHERE id = ?",
                 image_id,
-                db_id
+                album_id
             )
             .execute(&mut *db)
             .await?;
         }
         ValueUpdate::Unset => {
-            sqlx::query!("UPDATE album SET cover_art = NULL WHERE id = ?", db_id)
+            sqlx::query!("UPDATE album SET cover_art = NULL WHERE id = ?", album_id)
                 .execute(&mut *db)
                 .await?;
         }
@@ -185,7 +184,7 @@ pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Res
     }
 
     if update.properties.len() > 0 {
-        let properties = sqlx::query_scalar!("SELECT properties FROM album WHERE id = ?", db_id)
+        let properties = sqlx::query_scalar!("SELECT properties FROM album WHERE id = ?", album_id)
             .fetch_one(&mut *db)
             .await?
             .unwrap_or_default();
@@ -195,7 +194,7 @@ pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Res
         sqlx::query!(
             "UPDATE album SET properties = ? WHERE id = ?",
             properties,
-            db_id
+            album_id
         )
         .execute(&mut *db)
         .await?;
