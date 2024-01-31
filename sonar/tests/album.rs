@@ -11,12 +11,10 @@ async fn album_list_empty() {
 async fn album_create_one() {
     let ctx = sonar::test::create_context_memory().await;
     let artist = sonar::test::create_artist(&ctx, "artist").await;
-    let release_date = "2020-01-01T00:00:00Z".parse().unwrap();
     let create = sonar::AlbumCreate {
         name: "Album".to_string(),
         artist: artist.id,
         cover_art: None,
-        release_date,
         properties: sonar::test::create_simple_properties(),
     };
     let album = sonar::album_create(&ctx, create).await.unwrap();

@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use crate::{
-    blob::{self, BlobStorage},
-    bytestream::ByteStream,
+    audio::{self, AudioDownload},
+    blob::BlobStorage,
     db::DbC,
-    AlbumId, ArtistId, ByteRange, Error, ErrorKind, ImageId, ListParams, Properties,
-    PropertyUpdate, Result, Timestamp, TrackId, ValueUpdate,
+    property, AlbumId, ArtistId, AudioId, ByteRange, Error, ErrorKind, ImageId, ListParams,
+    Properties, PropertyUpdate, Result, Timestamp, TrackId, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -16,6 +16,7 @@ pub struct Track {
     pub album: AlbumId,
     pub duration: Duration,
     pub listen_count: u32,
+    pub audio: Option<AudioId>,
     pub cover_art: Option<ImageId>,
     pub properties: Properties,
     pub created_at: Timestamp,
@@ -30,12 +31,10 @@ pub struct TrackLyrics {
 pub struct TrackCreate {
     pub name: String,
     pub album: AlbumId,
-    pub duration: Duration,
     pub cover_art: Option<ImageId>,
     pub lyrics: Option<TrackLyrics>,
+    pub audio: Option<AudioId>,
     pub properties: Properties,
-    pub audio_stream: ByteStream,
-    pub audio_filename: String,
 }
 
 impl std::fmt::Debug for TrackCreate {
@@ -43,11 +42,8 @@ impl std::fmt::Debug for TrackCreate {
         f.debug_struct("TrackCreate")
             .field("name", &self.name)
             .field("album", &self.album)
-            .field("duration", &self.duration)
             .field("cover_art", &self.cover_art)
             .field("lyrics", &self.lyrics)
-            .field("properties", &self.properties)
-            .field("audio_filename", &self.audio_filename)
             .finish()
     }
 }
@@ -56,8 +52,6 @@ impl std::fmt::Debug for TrackCreate {
 pub struct TrackUpdate {
     pub name: ValueUpdate<String>,
     pub album: ValueUpdate<AlbumId>,
-    pub disc_number: ValueUpdate<u32>,
-    pub track_number: ValueUpdate<u32>,
     pub cover_art: ValueUpdate<ImageId>,
     pub lyrics: ValueUpdate<TrackLyrics>,
     pub properties: Vec<PropertyUpdate>,
@@ -88,25 +82,26 @@ struct TrackView {
     name: String,
     artist: i64,
     album: i64,
-    duration_ms: i64,
-    listen_count: i64,
+    duration_ms: Option<i64>,
+    audio: Option<i64>,
+    listen_count: Option<i64>,
     cover_art: Option<i64>,
-    properties: Option<Vec<u8>>,
     created_at: i64,
 }
 
-impl TrackView {
-    fn into_track(self) -> Track {
-        Track {
-            id: TrackId::from_db(self.id),
-            name: self.name,
-            artist: ArtistId::from_db(self.artist),
-            album: AlbumId::from_db(self.album),
-            duration: Duration::from_millis(self.duration_ms as u64),
-            listen_count: self.listen_count as u32,
-            cover_art: self.cover_art.map(ImageId::from_db),
-            properties: Properties::deserialize_unchecked(&self.properties.unwrap_or_default()),
-            created_at: Timestamp::from_seconds(self.created_at as u64),
+impl From<(TrackView, Properties)> for Track {
+    fn from((value, properties): (TrackView, Properties)) -> Self {
+        Self {
+            id: TrackId::from_db(value.id),
+            name: value.name,
+            artist: ArtistId::from_db(value.artist),
+            album: AlbumId::from_db(value.album),
+            duration: Duration::from_millis(value.duration_ms.unwrap_or_default() as u64),
+            audio: value.audio.map(AudioId::from_db),
+            listen_count: value.listen_count.unwrap_or_default() as u32,
+            cover_art: value.cover_art.map(ImageId::from_db),
+            properties,
+            created_at: Timestamp::from_seconds(value.created_at as u64),
         }
     }
 }
@@ -115,13 +110,19 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Track>> {
     let (offset, limit) = params.to_db_offset_limit();
     let views = sqlx::query_as!(
         TrackView,
-        "SELECT * FROM track_view ORDER BY id ASC LIMIT ? OFFSET ?",
+        "SELECT * FROM sqlx_track ORDER BY id ASC LIMIT ? OFFSET ?",
         limit,
         offset
     )
     .fetch_all(&mut *db)
     .await?;
-    Ok(views.into_iter().map(TrackView::into_track).collect())
+    let properties =
+        property::get_bulk(db, views.iter().map(|view| TrackId::from_db(view.id))).await?;
+    Ok(views
+        .into_iter()
+        .zip(properties.into_iter())
+        .map(Track::from)
+        .collect())
 }
 
 pub async fn list_by_album(
@@ -133,22 +134,28 @@ pub async fn list_by_album(
     let (offset, limit) = params.to_db_offset_limit();
     let views = sqlx::query_as!(
         TrackView,
-        "SELECT * FROM track_view WHERE album = ? ORDER BY id ASC LIMIT ? OFFSET ?",
+        "SELECT * FROM sqlx_track WHERE album = ? ORDER BY id ASC LIMIT ? OFFSET ?",
         album_id,
         limit,
         offset
     )
     .fetch_all(&mut *db)
     .await?;
-    Ok(views.into_iter().map(TrackView::into_track).collect())
+    let properties =
+        property::get_bulk(db, views.iter().map(|view| TrackId::from_db(view.id))).await?;
+    Ok(views
+        .into_iter()
+        .zip(properties.into_iter())
+        .map(Track::from)
+        .collect())
 }
 
 pub async fn get(db: &mut DbC, track_id: TrackId) -> Result<Track> {
-    let track_id = track_id.to_db();
-    let track_view = sqlx::query_as!(TrackView, "SELECT * FROM track_view WHERE id = ?", track_id)
+    let track_view = sqlx::query_as!(TrackView, "SELECT * FROM sqlx_track WHERE id = ?", track_id)
         .fetch_one(&mut *db)
         .await?;
-    Ok(track_view.into_track())
+    let properties = property::get(db, track_id).await?;
+    Ok(Track::from((track_view, properties)))
 }
 
 pub async fn get_bulk(db: &mut DbC, track_ids: &[TrackId]) -> Result<Vec<Track>> {
@@ -162,30 +169,27 @@ pub async fn get_bulk(db: &mut DbC, track_ids: &[TrackId]) -> Result<Vec<Track>>
     Ok(tracks)
 }
 
-pub async fn create(db: &mut DbC, storage: &dyn BlobStorage, create: TrackCreate) -> Result<Track> {
-    let blob_key = blob::random_key_with_prefix("audio");
-    storage.write(&blob_key, create.audio_stream).await?;
-
+pub async fn create(db: &mut DbC, create: TrackCreate) -> Result<Track> {
     let album_id = create.album.to_db();
     let cover_art = create.cover_art.map(|id| id.to_db());
-    let duration_ms = create.duration.as_millis() as i64;
-    let properties = create.properties.serialize();
     let track_id = sqlx::query!(
-        "INSERT INTO track (name, album, cover_art, duration_ms, audio_blob_key, audio_filename, properties)
-        VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        "INSERT INTO track (name, album, cover_art)
+        VALUES (?, ?, ?) RETURNING id",
         create.name,
         album_id,
         cover_art,
-        duration_ms,
-        blob_key,
-        create.audio_filename,
-        properties
     )
     .fetch_one(&mut *db)
     .await?
     .id;
 
-    get(db, TrackId::from_db(track_id)).await
+    let track_id = TrackId::from_db(track_id);
+    property::set(db, track_id, &create.properties).await?;
+    if let Some(audio_id) = create.audio {
+        audio::set_preferred(db, audio_id, track_id).await?;
+    }
+
+    get(db, track_id).await
 }
 
 pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Result<Track> {
@@ -244,32 +248,16 @@ pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Res
         ValueUpdate::Unset => clear_lyrics(db, track_id).await?,
         ValueUpdate::Unchanged => {}
     }
-
-    if update.properties.len() > 0 {
-        let properties = sqlx::query_scalar!("SELECT properties FROM track WHERE id = ?", track_id)
-            .fetch_one(&mut *db)
-            .await?
-            .unwrap_or_default();
-        let mut properties = Properties::deserialize_unchecked(&properties);
-        properties.apply_updates(&update.properties);
-        let properties = properties.serialize();
-        sqlx::query!(
-            "UPDATE track SET properties = ? WHERE id = ?",
-            properties,
-            track_id
-        )
-        .execute(&mut *db)
-        .await?;
-    }
+    property::update(db, track_id, &update.properties).await?;
 
     get(db, track_id).await
 }
 
 pub async fn delete(db: &mut DbC, track_id: TrackId) -> Result<()> {
-    let track_id = track_id.to_db();
     sqlx::query!("DELETE FROM track WHERE id = ?", track_id)
         .execute(&mut *db)
         .await?;
+    property::clear(db, track_id).await?;
     Ok(())
 }
 
@@ -278,19 +266,16 @@ pub async fn download(
     storage: &dyn BlobStorage,
     track_id: TrackId,
     range: ByteRange,
-) -> Result<ByteStream> {
-    let track_id = track_id.to_db();
-    let blob_key = sqlx::query_scalar!("SELECT audio_blob_key FROM track WHERE id = ?", track_id)
+) -> Result<AudioDownload> {
+    let audio_id = sqlx::query_scalar!("SELECT audio FROM sqlx_track WHERE id = ?", track_id)
         .fetch_one(&mut *db)
         .await?;
-    Ok(storage
-        .read(&blob_key, blob::BlobRange::from(range))
-        .await?)
+    let audio_id = AudioId::from_db(audio_id);
+    audio::download(db, storage, audio_id, range).await
 }
 
 pub async fn get_lyrics(db: &mut DbC, track_id: TrackId) -> Result<Lyrics> {
-    let db_id = track_id.to_db();
-    let lyrics_kind = sqlx::query_scalar!("SELECT lyrics_kind FROM track WHERE id = ?", db_id)
+    let lyrics_kind = sqlx::query_scalar!("SELECT lyrics_kind FROM track WHERE id = ?", track_id)
         .fetch_one(&mut *db)
         .await?;
 
@@ -308,7 +293,7 @@ pub async fn get_lyrics(db: &mut DbC, track_id: TrackId) -> Result<Lyrics> {
 
     let line_rows = sqlx::query!(
         "SELECT offset, text FROM track_lyrics_line WHERE track = ? ORDER BY offset ASC",
-        db_id
+        track_id
     )
     .fetch_all(&mut *db)
     .await?;
@@ -329,7 +314,6 @@ pub async fn get_lyrics(db: &mut DbC, track_id: TrackId) -> Result<Lyrics> {
 }
 
 async fn set_lyrics(db: &mut DbC, track_id: TrackId, lyrics: TrackLyrics) -> Result<()> {
-    let db_id = track_id.to_db();
     let kind = match lyrics.kind {
         LyricsKind::Synced => "S",
         LyricsKind::Unsynced => "U",
@@ -337,15 +321,19 @@ async fn set_lyrics(db: &mut DbC, track_id: TrackId, lyrics: TrackLyrics) -> Res
 
     clear_lyrics(db, track_id).await?;
 
-    sqlx::query!("UPDATE track SET lyrics_kind = ? WHERE id = ?", kind, db_id)
-        .execute(&mut *db)
-        .await?;
+    sqlx::query!(
+        "UPDATE track SET lyrics_kind = ? WHERE id = ?",
+        kind,
+        track_id
+    )
+    .execute(&mut *db)
+    .await?;
 
     for line in lyrics.lines {
         let offset = line.offset.as_secs() as i64;
         sqlx::query!(
             "INSERT INTO track_lyrics_line (track, offset, text) VALUES (?, ?, ?)",
-            db_id,
+            track_id,
             offset,
             line.text,
         )
@@ -357,12 +345,10 @@ async fn set_lyrics(db: &mut DbC, track_id: TrackId, lyrics: TrackLyrics) -> Res
 }
 
 async fn clear_lyrics(db: &mut DbC, track_id: TrackId) -> Result<()> {
-    let db_id = track_id.to_db();
-    sqlx::query!("UPDATE track SET lyrics_kind = NULL WHERE id = ?", db_id)
+    sqlx::query!("UPDATE track SET lyrics_kind = NULL WHERE id = ?", track_id)
         .execute(&mut *db)
         .await?;
-
-    sqlx::query!("DELETE FROM track_lyrics_line WHERE track = ?", db_id)
+    sqlx::query!("DELETE FROM track_lyrics_line WHERE track = ?", track_id)
         .execute(&mut *db)
         .await?;
     Ok(())

@@ -2,9 +2,9 @@ use bytes::Bytes;
 
 use crate::{
     blob::{self, BlobStorage},
-    bytestream::ByteStream,
+    bytestream::{self, ByteStream},
     db::DbC,
-    ImageId, Result,
+    ks, Error, ErrorKind, ImageId, Result,
 };
 
 pub struct ImageCreate {
@@ -12,8 +12,8 @@ pub struct ImageCreate {
 }
 
 pub struct ImageDownload {
-    mime_type: String,
-    stream: ByteStream,
+    pub mime_type: String,
+    pub stream: ByteStream,
 }
 
 impl ImageDownload {
@@ -47,9 +47,12 @@ pub async fn download(
     image_id: ImageId,
 ) -> Result<ImageDownload> {
     let db_id = image_id.to_db();
-    let row = sqlx::query!("SELECT mime_type, blob_key FROM image WHERE id = ?", db_id)
-        .fetch_one(db)
-        .await?;
+    let row = sqlx::query!(
+        "SELECT mime_type, blob_key FROM sqlx_image WHERE id = ?",
+        db_id
+    )
+    .fetch_one(db)
+    .await?;
     let stream = storage.read(&row.blob_key, Default::default()).await?;
     Ok(ImageDownload::new(row.mime_type, stream))
 }
@@ -60,16 +63,43 @@ pub async fn create(
     create: ImageCreate,
 ) -> Result<ImageId> {
     let blob_key = blob::random_key_with_prefix("image");
-    storage.write(&blob_key, create.data).await?;
-    // TODO: infer mime type from blob
+    let img_file = tempfile::NamedTempFile::new()?;
+    bytestream::to_file(create.data, img_file.path()).await?;
+    let blob_sha256 = ks::sha256_file(img_file.path()).await?;
+    let blob_size = img_file.path().metadata()?.len() as u32;
+
+    let mime_type = match infer::get_from_path(img_file.path())? {
+        Some(ty) => match ty.extension() {
+            "jpg" | "jpeg" | "png" => Some(ty.mime_type()),
+            _ => None,
+        },
+        None => None,
+    };
+    if !mime_type.is_some() {
+        return Err(Error::new(ErrorKind::Invalid, "invalid image type"));
+    }
+
+    let stream = bytestream::from_file(img_file.path()).await?;
+    storage.write(&blob_key, stream).await?;
+    let blob_id = sqlx::query!(
+        "INSERT INTO blob (key, size, sha256) VALUES (?, ?, ?) RETURNING id",
+        blob_key,
+        blob_size,
+        blob_sha256
+    )
+    .fetch_one(&mut *db)
+    .await?
+    .id;
+
     let db_id = sqlx::query!(
-        "INSERT INTO image (mime_type, blob_key) VALUES (?, ?) RETURNING id",
-        "image/jpeg",
-        blob_key
+        "INSERT INTO image (mime_type, blob) VALUES (?, ?) RETURNING id",
+        mime_type,
+        blob_id
     )
     .fetch_one(db)
     .await?
     .id;
+
     Ok(ImageId::from_db(db_id))
 }
 

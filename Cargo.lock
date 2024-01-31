@@ -1999,10 +1999,13 @@ dependencies = [
  "bincode",
  "bytes",
  "chrono",
+ "hex",
  "infer",
+ "lofty",
  "rand",
  "scrypt",
  "serde",
+ "sha2",
  "sonar",
  "sqlx",
  "tempfile",
@@ -2042,6 +2045,19 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "sonar-experimental"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "color-eyre",
+ "eyre",
+ "lofty",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]

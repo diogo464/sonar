@@ -1,6 +1,6 @@
 use crate::{
-    db::DbC, ArtistId, ImageId, ListParams, Properties, PropertyUpdate, Result, Timestamp,
-    ValueUpdate,
+    db::DbC, property, ArtistId, ImageId, ListParams, Properties, PropertyUpdate, Result,
+    Timestamp, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -35,18 +35,17 @@ struct ArtistView {
     listen_count: i64,
     cover_art: Option<i64>,
     album_count: i64,
-    properties: Option<Vec<u8>>,
     created_at: i64,
 }
 
-impl From<ArtistView> for Artist {
-    fn from(value: ArtistView) -> Self {
+impl From<(ArtistView, Properties)> for Artist {
+    fn from((value, properties): (ArtistView, Properties)) -> Self {
         Artist {
             id: ArtistId::from_db(value.id),
             name: value.name,
             listen_count: value.listen_count as u32,
             cover_art: value.cover_art.map(ImageId::from_db),
-            properties: Properties::deserialize_unchecked(&value.properties.unwrap_or_default()),
+            properties,
             album_count: value.album_count as u32,
             created_at: Timestamp::from_seconds(value.created_at as u64),
         }
@@ -57,25 +56,32 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Artist>> {
     let (offset, limit) = params.to_db_offset_limit();
     let views = sqlx::query_as!(
         ArtistView,
-        "SELECT * FROM artist_view ORDER BY id ASC LIMIT ? OFFSET ?",
+        "SELECT * FROM sqlx_artist ORDER BY id ASC LIMIT ? OFFSET ?",
         limit,
         offset
     )
     .fetch_all(&mut *db)
     .await?;
-    Ok(views.into_iter().map(Artist::from).collect())
+    let properties =
+        property::get_bulk(db, views.iter().map(|view| ArtistId::from_db(view.id))).await?;
+    Ok(views
+        .into_iter()
+        .zip(properties.into_iter())
+        .map(Artist::from)
+        .collect())
 }
 
 pub async fn get(db: &mut DbC, artist_id: ArtistId) -> Result<Artist> {
     let artist_id = artist_id.to_db();
     let artist_view = sqlx::query_as!(
         ArtistView,
-        "SELECT * FROM artist_view WHERE id = ?",
+        "SELECT * FROM sqlx_artist WHERE id = ?",
         artist_id
     )
     .fetch_one(&mut *db)
     .await?;
-    Ok(From::from(artist_view))
+    let properties = property::get(db, ArtistId::from_db(artist_id)).await?;
+    Ok(From::from((artist_view, properties)))
 }
 
 pub async fn get_bulk(db: &mut DbC, artist_ids: &[ArtistId]) -> Result<Vec<Artist>> {
@@ -87,18 +93,18 @@ pub async fn get_bulk(db: &mut DbC, artist_ids: &[ArtistId]) -> Result<Vec<Artis
 }
 
 pub async fn create(db: &mut DbC, create: ArtistCreate) -> Result<Artist> {
-    let properties = create.properties.serialize();
     let cover_art = create.cover_art.map(|id| id.to_db());
     let artist_id = sqlx::query!(
-        r#"INSERT INTO artist (name, cover_art, properties) VALUES (?, ?, ?) RETURNING id"#,
+        r#"INSERT INTO artist (name, cover_art) VALUES (?, ?) RETURNING id"#,
         create.name,
         cover_art,
-        properties
     )
     .fetch_one(&mut *db)
     .await?
     .id;
-    get(db, ArtistId::from_db(artist_id)).await
+    let artist_id = ArtistId::from_db(artist_id);
+    property::set(db, artist_id, &create.properties).await?;
+    get(db, artist_id).await
 }
 
 pub async fn update(db: &mut DbC, artist_id: ArtistId, update: ArtistUpdate) -> Result<Artist> {
@@ -113,25 +119,7 @@ pub async fn update(db: &mut DbC, artist_id: ArtistId, update: ArtistUpdate) -> 
             .execute(&mut *db)
             .await?;
     }
-
-    if update.properties.len() > 0 {
-        let properties =
-            sqlx::query_scalar!("SELECT properties FROM artist WHERE id = ?", artist_id)
-                .fetch_one(&mut *db)
-                .await?
-                .unwrap_or_default();
-        let mut properties = Properties::deserialize_unchecked(&properties);
-        properties.apply_updates(&update.properties);
-        let properties = properties.serialize();
-        sqlx::query!(
-            "UPDATE artist SET properties = ? WHERE id = ?",
-            properties,
-            artist_id
-        )
-        .execute(&mut *db)
-        .await?;
-    }
-
+    property::update(db, artist_id, &update.properties).await?;
     Ok(get(db, artist_id).await?)
 }
 
@@ -140,6 +128,7 @@ pub async fn delete(db: &mut DbC, artist_id: ArtistId) -> Result<()> {
     sqlx::query!("DELETE FROM artist WHERE id = ?", artist_id)
         .execute(&mut *db)
         .await?;
+    property::clear(db, ArtistId::from_db(artist_id)).await?;
     Ok(())
 }
 

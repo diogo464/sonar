@@ -1,6 +1,11 @@
 use crate::{
-    album, artist, blob::BlobStorage, bytestream::{self, ByteStream}, extractor::SonarExtractor, track, AlbumCreate,
-    AlbumId, ArtistCreate, ArtistId, DateTime, Error, ErrorKind, Result, Track, TrackCreate, db::Db,
+    album, artist, audio,
+    blob::BlobStorage,
+    bytestream::{self, ByteStream},
+    db::Db,
+    extractor::SonarExtractor,
+    track, AlbumCreate, AlbumId, ArtistCreate, ArtistId, AudioCreate, Error, ErrorKind, Result,
+    Track, TrackCreate,
 };
 
 #[derive(Debug)]
@@ -110,34 +115,6 @@ pub async fn import(
         }
     };
 
-    // TODO: convert these to properties
-    let disc_number = metadatas.iter().find_map(|metadata| metadata.disc_number);
-    let track_number = metadatas.iter().find_map(|metadata| metadata.track_number);
-    let release_date = metadatas
-        .iter()
-        .find_map(|metadata| metadata.release_date)
-        .unwrap_or_else(|| {
-            DateTime::from_timestamp(0, 0).expect("failed to create default DateTime")
-        });
-
-    let duration = metadatas
-        .iter()
-        .find_map(|metadata| metadata.duration)
-        .ok_or_else(|| {
-            Error::new(
-                ErrorKind::Invalid,
-                format!("unable to find duration for file: {:?}", import.filepath),
-            )
-        })?;
-
-    // TODO: convert genres to properties
-    let genres = metadatas
-        .iter()
-        .filter(|metadata| !metadata.genres.is_empty())
-        .map(|metadata| metadata.genres.clone())
-        .next()
-        .unwrap_or_default();
-
     // find or create matching artist
     let artist_id = if let Some(artist_id) = import.artist {
         artist_id
@@ -189,7 +166,6 @@ pub async fn import(
             name: album_name.to_owned(),
             artist: artist_id,
             cover_art: Default::default(),
-            release_date,
             properties: Default::default(),
         };
 
@@ -200,20 +176,28 @@ pub async fn import(
             .id
     };
 
-    // create track
+    let mut conn = db.begin().await?;
     let audio_stream = bytestream::from_file(&tmp_filepath).await?;
+    let audio = audio::create(
+        &mut *conn,
+        storage,
+        AudioCreate {
+            stream: audio_stream,
+            filename: import.filepath,
+        },
+    )
+    .await?;
+
+    // create track
     let track_create = TrackCreate {
         name: track_name.to_owned(),
         album: album_id,
         cover_art: None, // TODO: extract cover art
-        duration,
-        lyrics: None, // TODO: extract lyrics
+        lyrics: None,    // TODO: extract lyrics
+        audio: Some(audio.id),
         properties: Default::default(),
-        audio_stream,
-        audio_filename: import.filepath.unwrap_or_default(),
     };
-
-    // TODO: add _tx methods
-    let mut conn = db.acquire().await?;
-    track::create(&mut conn, storage, track_create).await
+    let track = track::create(&mut conn, track_create).await?;
+    conn.commit().await?;
+    Ok(track)
 }

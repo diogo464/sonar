@@ -28,6 +28,7 @@ pub mod test;
 
 pub(crate) mod album;
 pub(crate) mod artist;
+pub(crate) mod audio;
 pub(crate) mod blob;
 pub(crate) mod db;
 pub(crate) mod genre;
@@ -42,6 +43,7 @@ pub(crate) mod user;
 
 pub use album::{Album, AlbumCreate, AlbumUpdate};
 pub use artist::{Artist, ArtistCreate, ArtistUpdate};
+pub use audio::{Audio, AudioCreate, AudioDownload};
 pub use genre::{Genre, GenreUpdateAction, Genres, InvalidGenreError};
 pub use image::{ImageCreate, ImageDownload};
 pub use importer::Import;

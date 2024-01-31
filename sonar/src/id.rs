@@ -43,10 +43,30 @@ impl std::fmt::Display for InvalidIdError {
 
 impl std::error::Error for InvalidIdError {}
 
+pub(crate) trait SonarIdentifier: Sized + Clone + Copy + 'static {
+    fn name(&self) -> &'static str;
+    fn namespace(&self) -> u32;
+    fn identifier(&self) -> u32;
+}
+
 macro_rules! impl_id {
     ($t:ident, $v:ident, $n:literal, $k:expr) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub struct $t(u32);
+
+        impl SonarIdentifier for $t {
+            fn name(&self) -> &'static str {
+                $n
+            }
+
+            fn namespace(&self) -> u32 {
+                $k
+            }
+
+            fn identifier(&self) -> u32 {
+                self.0 & !ID_TYPE_MASK
+            }
+        }
 
         #[allow(dead_code)]
         impl $t {

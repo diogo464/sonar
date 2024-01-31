@@ -253,7 +253,7 @@ mod test {
 
     #[test]
     fn genre_parse() {
-        "heavy metal".parse::<Genre>().unwrap();
+        "heavy-metal".parse::<Genre>().unwrap();
         "electronic".parse::<Genre>().unwrap();
 
         "Heavy Metal".parse::<Genre>().unwrap_err();
@@ -262,13 +262,13 @@ mod test {
 
     #[test]
     fn genre_as_str() {
-        let genre = Genre::new_unchecked("heavy metal");
-        assert_eq!(genre.as_str(), "heavy metal");
+        let genre = Genre::new_unchecked("heavy-metal");
+        assert_eq!(genre.as_str(), "heavy-metal");
     }
 
     #[test]
     fn genres_display() {
-        let genres = Genres::new(vec!["heavy metal", "electronic"]).unwrap();
-        assert_eq!(genres.to_string(), "electronic,heavy metal");
+        let genres = Genres::new(vec!["heavy-metal", "electronic"]).unwrap();
+        assert_eq!(genres.to_string(), "electronic,heavy-metal");
     }
 }

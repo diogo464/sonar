@@ -8,6 +8,11 @@ pub use property_key::*;
 mod property_value;
 pub use property_value::*;
 
+mod property_update;
+pub use property_update::*;
+
+use crate::{db::DbC, Result, SonarIdentifier};
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Properties(HashMap<Cow<'static, str>, Cow<'static, str>>);
 
@@ -85,18 +90,6 @@ impl Properties {
         }
     }
 
-    pub(crate) fn serialize(&self) -> Vec<u8> {
-        bincode::serialize(&self).expect("failed to serialize properties")
-    }
-
-    pub(crate) fn deserialize(value: &[u8]) -> Result<Self, bincode::Error> {
-        bincode::deserialize(value)
-    }
-
-    pub(crate) fn deserialize_unchecked(value: &[u8]) -> Self {
-        Self::deserialize(value).expect("failed to deserialize properties")
-    }
-
     pub(crate) fn apply_updates(&mut self, updates: &[PropertyUpdate]) {
         for update in updates {
             match &update.action {
@@ -161,30 +154,103 @@ impl<'a> IntoIterator for &'a Properties {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum PropertyUpdateAction {
-    Set(PropertyValue),
-    Remove,
-}
+pub async fn set(db: &mut DbC, id: impl SonarIdentifier, properties: &Properties) -> Result<()> {
+    clear(db, id).await?;
 
-#[derive(Debug, Clone)]
-pub struct PropertyUpdate {
-    pub key: PropertyKey,
-    pub action: PropertyUpdateAction,
-}
-
-impl PropertyUpdate {
-    pub fn set(key: PropertyKey, value: PropertyValue) -> Self {
-        Self {
+    let namespace = id.namespace();
+    let identifier = id.identifier();
+    for (key, value) in properties {
+        let key = key.as_str();
+        let value = value.as_str();
+        sqlx::query!(
+            "INSERT INTO property (namespace, identifier, key, value) VALUES (?, ?, ?, ?)",
+            namespace,
+            identifier,
             key,
-            action: PropertyUpdateAction::Set(value),
-        }
+            value
+        )
+        .execute(&mut *db)
+        .await?;
     }
 
-    pub fn remove(key: PropertyKey) -> Self {
-        Self {
-            key,
-            action: PropertyUpdateAction::Remove,
+    Ok(())
+}
+
+pub async fn get(db: &mut DbC, id: impl SonarIdentifier) -> Result<Properties> {
+    let namespace = id.namespace();
+    let identifier = id.identifier();
+    let rows = sqlx::query!(
+        "SELECT key, value FROM property WHERE namespace = ? AND identifier = ?",
+        namespace,
+        identifier
+    )
+    .fetch_all(&mut *db)
+    .await?;
+    let mut properties = Properties::with_capacity(rows.len());
+    for row in rows {
+        properties.insert(PropertyKey(row.key.into()), PropertyValue(row.value.into()));
+    }
+    Ok(properties)
+}
+
+pub async fn get_bulk(
+    db: &mut DbC,
+    ids: impl Iterator<Item = impl SonarIdentifier>,
+) -> Result<Vec<Properties>> {
+    let mut properties = Vec::new();
+    for id in ids {
+        properties.push(get(db, id).await?);
+    }
+    Ok(properties)
+}
+
+pub async fn update(
+    db: &mut DbC,
+    id: impl SonarIdentifier,
+    updates: &[PropertyUpdate],
+) -> Result<()> {
+    let namespace = id.namespace();
+    let identifier = id.identifier();
+    for update in updates {
+        match &update.action {
+            PropertyUpdateAction::Set(value) => {
+                let key = update.key.as_str();
+                let value = value.as_str();
+                sqlx::query!(
+                    "INSERT OR REPLACE INTO property (namespace, identifier, key, value) VALUES (?, ?, ?, ?)",
+                    namespace,
+                    identifier,
+                    key,
+                    value
+                )
+                .execute(&mut *db)
+                .await?;
+            }
+            PropertyUpdateAction::Remove => {
+                let key = update.key.as_str();
+                sqlx::query!(
+                    "DELETE FROM property WHERE namespace = ? AND identifier = ? AND key = ?",
+                    namespace,
+                    identifier,
+                    key
+                )
+                .execute(&mut *db)
+                .await?;
+            }
         }
     }
+    Ok(())
+}
+
+pub async fn clear(db: &mut DbC, id: impl SonarIdentifier) -> Result<()> {
+    let namespace = id.namespace();
+    let identifier = id.identifier();
+    sqlx::query!(
+        "DELETE FROM property WHERE namespace = ? AND identifier = ?",
+        namespace,
+        identifier
+    )
+    .execute(&mut *db)
+    .await?;
+    Ok(())
 }

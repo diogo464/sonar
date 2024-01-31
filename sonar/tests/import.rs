@@ -10,7 +10,7 @@ async fn import_simple() {
         artist: Some("artist".to_string()),
         track_number: Some(4),
         disc_number: Some(2),
-        duration: Some(Duration::from_secs(60)),
+        duration: None,
         release_date: None,
         cover_art: None,
         genres: Genres::new(vec!["edm"]).unwrap(),
@@ -26,7 +26,7 @@ async fn import_simple() {
             artist: None,
             album: None,
             filepath: Some("test.mp3".to_string()),
-            stream: sonar::test::create_stream(b"music data"),
+            stream: sonar::test::create_stream(sonar::test::SMALL_AUDIO_MP3),
         },
     )
     .await
@@ -50,7 +50,7 @@ async fn import_simple() {
     let track = &tracks[0];
     assert_eq!(track.name, metadata.title.unwrap());
     assert_eq!(track.album, album.id);
-    assert_eq!(track.duration, metadata.duration.unwrap());
+    assert_eq!(track.duration, sonar::test::SMALL_AUDIO_MP3_DURATION);
 }
 
 #[tokio::test]
@@ -59,7 +59,7 @@ async fn import_merge_metadata() {
         album: Some("album".to_string()),
         artist: Some("artist".to_string()),
         disc_number: Some(2),
-        duration: Some(Duration::from_secs(60)),
+        duration: None,
         release_date: None,
         cover_art: None,
         title: Default::default(),
@@ -90,7 +90,7 @@ async fn import_merge_metadata() {
             artist: None,
             album: None,
             filepath: Some("test.mp3".to_string()),
-            stream: sonar::test::create_stream(b"music data"),
+            stream: sonar::test::create_stream(sonar::test::SMALL_AUDIO_MP3),
         },
     )
     .await
@@ -114,5 +114,5 @@ async fn import_merge_metadata() {
     let track = &tracks[0];
     assert_eq!(track.name, metadata2.title.unwrap());
     assert_eq!(track.album, album.id);
-    assert_eq!(track.duration, metadata1.duration.unwrap());
+    assert_eq!(track.duration, sonar::test::SMALL_AUDIO_MP3_DURATION);
 }

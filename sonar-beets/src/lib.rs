@@ -199,9 +199,9 @@ async fn prepare_directory(
     for track in tracks.iter() {
         let track_name = &track.name;
         let track_path = album_directory.join(track_name);
-        let stream = sonar::track_download(context, track.id, Default::default()).await?;
+        let download = sonar::track_download(context, track.id, Default::default()).await?;
         tracing::debug!("downloading track {} to {}", track.id, track_path.display());
-        sonar::bytestream::to_file(stream, &track_path).await?;
+        sonar::bytestream::to_file(download.stream, &track_path).await?;
         tracks_paths.push((track.id, track_path));
     }
 

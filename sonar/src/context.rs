@@ -1,12 +1,11 @@
 use std::{path::PathBuf, sync::Arc};
 
-use bytes::Bytes;
 use sqlx::Executor;
 
 use crate::{
-    album, artist,
+    album, artist, audio,
     blob::{self, BlobStorage},
-    bytestream::{self, ByteStream},
+    bytestream::{self},
     db::Db,
     extractor::{Extractor, SonarExtractor},
     image,
@@ -18,10 +17,11 @@ use crate::{
     playlist, scrobble,
     scrobbler::{self, SonarScrobbler},
     track, user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId,
-    ArtistUpdate, ByteRange, Error, ErrorKind, ImageCreate, ImageDownload, ImageId, Import,
-    ListParams, Lyrics, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack, PlaylistUpdate,
-    Result, Scrobble, ScrobbleCreate, ScrobbleId, ScrobbleUpdate, Track, TrackCreate, TrackId,
-    TrackUpdate, User, UserCreate, UserId, Username, ValueUpdate,
+    ArtistUpdate, Audio, AudioCreate, AudioDownload, AudioId, ByteRange, Error, ErrorKind,
+    ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics, Playlist, PlaylistCreate,
+    PlaylistId, PlaylistTrack, PlaylistUpdate, Result, Scrobble, ScrobbleCreate, ScrobbleId,
+    ScrobbleUpdate, Track, TrackCreate, TrackId, TrackUpdate, User, UserCreate, UserId, Username,
+    ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -312,7 +312,7 @@ pub async fn track_get_bulk(context: &Context, track_ids: &[TrackId]) -> Result<
 
 pub async fn track_create(context: &Context, create: TrackCreate) -> Result<Track> {
     let mut tx = context.db.begin().await?;
-    let result = track::create(&mut tx, &*context.storage, create).await;
+    let result = track::create(&mut tx, create).await;
     tx.commit().await?;
     result
 }
@@ -335,7 +335,7 @@ pub async fn track_download(
     context: &Context,
     track_id: TrackId,
     range: ByteRange,
-) -> Result<ByteStream> {
+) -> Result<AudioDownload> {
     let mut conn = context.db.acquire().await?;
     track::download(&mut conn, &*context.storage, track_id, range).await
 }
@@ -343,6 +343,45 @@ pub async fn track_download(
 pub async fn track_get_lyrics(context: &Context, track_id: TrackId) -> Result<Lyrics> {
     let mut conn = context.db.acquire().await?;
     track::get_lyrics(&mut conn, track_id).await
+}
+
+pub async fn audio_create(context: &Context, create: AudioCreate) -> Result<Audio> {
+    let mut tx = context.db.begin().await?;
+    let result = audio::create(&mut tx, &*context.storage, create).await;
+    tx.commit().await?;
+    result
+}
+
+pub async fn audio_delete(context: &Context, audio_id: AudioId) -> Result<()> {
+    let mut tx = context.db.begin().await?;
+    let result = audio::delete(&mut tx, audio_id).await;
+    tx.commit().await?;
+    result
+}
+
+pub async fn audio_link(context: &Context, audio_id: AudioId, track_id: TrackId) -> Result<()> {
+    let mut tx = context.db.begin().await?;
+    let result = audio::link(&mut tx, audio_id, track_id).await;
+    tx.commit().await?;
+    result
+}
+
+pub async fn audio_unlink(context: &Context, audio_id: AudioId, track_id: TrackId) -> Result<()> {
+    let mut tx = context.db.begin().await?;
+    let result = audio::unlink(&mut tx, audio_id, track_id).await;
+    tx.commit().await?;
+    result
+}
+
+pub async fn audio_set_preferred(
+    context: &Context,
+    audio_id: AudioId,
+    track_id: TrackId,
+) -> Result<()> {
+    let mut tx = context.db.begin().await?;
+    let result = audio::set_preferred(&mut tx, audio_id, track_id).await;
+    tx.commit().await?;
+    result
 }
 
 pub async fn playlist_list(context: &Context, params: ListParams) -> Result<Vec<Playlist>> {

@@ -269,7 +269,10 @@ impl OpenSubsonicServer for Server {
     async fn get_cover_art(&self, request: Request<GetCoverArt>) -> Result<ByteStream> {
         let image_id = request.body.id.parse::<sonar::ImageId>().m()?;
         let download = sonar::image_download(&self.context, image_id).await.m()?;
-        Ok(opensubsonic::common::ByteStream::new("image/png", download))
+        Ok(opensubsonic::common::ByteStream::new(
+            download.mime_type,
+            download.stream,
+        ))
     }
     async fn scrobble(&self, request: Request<Scrobble>) -> Result<()> {
         // TODO: implement
@@ -277,10 +280,13 @@ impl OpenSubsonicServer for Server {
     }
     async fn stream(&self, request: Request<Stream>) -> Result<ByteStream> {
         let track_id = request.body.id.parse::<sonar::TrackId>().m()?;
-        let stream = sonar::track_download(&self.context, track_id, Default::default())
+        let download = sonar::track_download(&self.context, track_id, Default::default())
             .await
             .m()?;
-        Ok(opensubsonic::common::ByteStream::new("audio/mp3", stream))
+        Ok(opensubsonic::common::ByteStream::new(
+            download.mime_type,
+            download.stream,
+        ))
     }
     async fn get_music_folders(&self, request: Request<GetMusicFolders>) -> Result<MusicFolders> {
         Ok(Default::default())

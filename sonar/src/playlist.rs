@@ -1,6 +1,6 @@
 use crate::{
-    db::DbC, Error, ListParams, PlaylistId, Properties, Result, Timestamp, TrackId, UserId,
-    ValueUpdate, PropertyUpdate,
+    db::DbC, property, Error, ListParams, PlaylistId, Properties, PropertyUpdate, Result,
+    Timestamp, TrackId, UserId, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -58,20 +58,19 @@ struct PlaylistView {
     name: String,
     duration_ms: i64,
     owner: i64,
-    properties: Option<Vec<u8>>,
     track_count: i64,
     created_at: i64,
 }
 
-impl PlaylistView {
-    fn into_playlist(self) -> Playlist {
-        Playlist {
-            id: PlaylistId::from_db(self.id),
-            name: self.name,
-            owner: UserId::from_db(self.owner),
-            track_count: self.track_count as u32,
-            properties: Properties::deserialize_unchecked(&self.properties.unwrap_or_default()),
-            created_at: Timestamp::from_seconds(self.created_at as u64),
+impl From<(PlaylistView, Properties)> for Playlist {
+    fn from((value, properties): (PlaylistView, Properties)) -> Self {
+        Self {
+            id: PlaylistId::from_db(value.id),
+            name: value.name,
+            owner: UserId::from_db(value.owner),
+            track_count: value.track_count as u32,
+            properties,
+            created_at: Timestamp::from_seconds(value.created_at as u64),
         }
     }
 }
@@ -80,24 +79,31 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Playlist>> {
     let (offset, limit) = params.to_db_offset_limit();
     let views = sqlx::query_as!(
         PlaylistView,
-        "SELECT * FROM playlist_view ORDER BY id ASC LIMIT ? OFFSET ?",
+        "SELECT * FROM sqlx_playlist ORDER BY id ASC LIMIT ? OFFSET ?",
         limit,
         offset
     )
     .fetch_all(&mut *db)
     .await?;
-    Ok(views.into_iter().map(PlaylistView::into_playlist).collect())
+    let properties =
+        property::get_bulk(db, views.iter().map(|v| PlaylistId::from_db(v.id))).await?;
+    Ok(views
+        .into_iter()
+        .zip(properties.into_iter())
+        .map(Playlist::from)
+        .collect())
 }
 
 pub async fn get(db: &mut DbC, playlist_id: PlaylistId) -> Result<Playlist> {
     let playlist_view = sqlx::query_as!(
         PlaylistView,
-        "SELECT * FROM playlist_view WHERE id = ?",
+        "SELECT * FROM sqlx_playlist WHERE id = ?",
         playlist_id
     )
     .fetch_one(&mut *db)
     .await?;
-    Ok(playlist_view.into_playlist())
+    let properties = property::get(db, playlist_id).await?;
+    Ok(Playlist::from((playlist_view, properties)))
 }
 
 pub async fn get_by_name(db: &mut DbC, user_id: UserId, name: &str) -> Result<Playlist> {
@@ -123,13 +129,10 @@ pub async fn find_by_name(db: &mut DbC, user_id: UserId, name: &str) -> Result<O
 
 pub async fn create(db: &mut DbC, create: PlaylistCreate) -> Result<Playlist> {
     let name = create.name.as_str();
-    let owner = create.owner.to_db();
-    let properties = create.properties.serialize();
     let playlist_id = sqlx::query!(
-        "INSERT INTO playlist(name, owner, properties) VALUES (?, ?, ?) RETURNING id",
+        "INSERT INTO playlist(name, owner) VALUES (?, ?) RETURNING id",
         name,
-        owner,
-        properties
+        create.owner,
     )
     .fetch_one(&mut *db)
     .await?
@@ -137,6 +140,7 @@ pub async fn create(db: &mut DbC, create: PlaylistCreate) -> Result<Playlist> {
 
     let playlist_id = PlaylistId::from_db(playlist_id);
     insert_tracks(db, playlist_id, &create.tracks).await?;
+    property::set(db, playlist_id, &create.properties).await?;
 
     get(db, playlist_id).await
 }
@@ -146,42 +150,29 @@ pub async fn update(
     playlist_id: PlaylistId,
     update: PlaylistUpdate,
 ) -> Result<Playlist> {
-    let db_id = playlist_id.to_db();
     if let Some(new_name) = match update.name {
         ValueUpdate::Set(name) => Some(name),
         ValueUpdate::Unset => Some("".to_owned()),
         ValueUpdate::Unchanged => None,
     } {
-        sqlx::query!("UPDATE playlist SET name = ? WHERE id = ?", new_name, db_id)
-            .execute(&mut *db)
-            .await?;
-    }
-
-    if update.properties.len() > 0 {
-        let properties = sqlx::query_scalar!("SELECT properties FROM playlist WHERE id = ?", db_id)
-            .fetch_one(&mut *db)
-            .await?
-            .unwrap_or_default();
-        let mut properties = Properties::deserialize_unchecked(&properties);
-        properties.apply_updates(&update.properties);
-        let properties = properties.serialize();
         sqlx::query!(
-            "UPDATE playlist SET properties = ? WHERE id = ?",
-            properties,
-            db_id
+            "UPDATE playlist SET name = ? WHERE id = ?",
+            new_name,
+            playlist_id
         )
         .execute(&mut *db)
         .await?;
     }
+    property::update(db, playlist_id, &update.properties).await?;
 
     get(db, playlist_id).await
 }
 
 pub async fn delete(db: &mut DbC, playlist_id: PlaylistId) -> Result<()> {
-    let playlist_id = playlist_id.to_db();
     sqlx::query!("DELETE FROM playlist WHERE id = ?", playlist_id)
         .execute(&mut *db)
         .await?;
+    property::clear(db, playlist_id).await?;
     Ok(())
 }
 
@@ -190,7 +181,6 @@ pub async fn list_tracks(
     playlist_id: PlaylistId,
     params: ListParams,
 ) -> Result<Vec<PlaylistTrack>> {
-    let playlist_id = playlist_id.to_db();
     let (offset, limit) = params.to_db_offset_limit();
     let tracks = sqlx::query_as!(
         PlaylistTrackView,
@@ -208,7 +198,6 @@ pub async fn list_tracks(
 }
 
 pub async fn clear_tracks(db: &mut DbC, playlist_id: PlaylistId) -> Result<()> {
-    let playlist_id = playlist_id.to_db();
     sqlx::query!("DELETE FROM playlist_track WHERE playlist = ?", playlist_id)
         .execute(&mut *db)
         .await?;
@@ -220,9 +209,7 @@ pub async fn insert_tracks(
     playlist_id: PlaylistId,
     tracks: &[TrackId],
 ) -> Result<()> {
-    let playlist_id = playlist_id.to_db();
     for track_id in tracks {
-        let track_id = track_id.to_db();
         sqlx::query!(
             "INSERT INTO playlist_track (playlist, track) VALUES (?, ?)",
             playlist_id,
@@ -239,9 +226,7 @@ pub async fn remove_tracks(
     playlist_id: PlaylistId,
     tracks: &[TrackId],
 ) -> Result<()> {
-    let playlist_id = playlist_id.to_db();
     for track_id in tracks {
-        let track_id = track_id.to_db();
         sqlx::query!(
             "DELETE FROM playlist_track WHERE playlist = ? AND track = ?",
             playlist_id,

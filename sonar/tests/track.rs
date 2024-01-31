@@ -17,11 +17,9 @@ async fn track_create_one() {
         name: "Track".to_string(),
         album: album.id,
         cover_art: None,
-        duration: std::time::Duration::from_secs(60),
+        audio: None,
         lyrics: None,
         properties: sonar::test::create_simple_properties(),
-        audio_stream: data,
-        audio_filename: "track.mp3".to_string(),
     };
     let track = sonar::track_create(&ctx, create).await.unwrap();
     assert_eq!(track.name, "Track");
@@ -76,10 +74,11 @@ async fn track_download_one() {
     let ctx = sonar::test::create_context_memory().await;
     let artist = sonar::test::create_artist(&ctx, "artist").await;
     let album = sonar::test::create_album(&ctx, artist.id, "album").await;
-    let track = sonar::test::create_track_with_data(&ctx, album.id, "track", b"track data").await;
-    let reader = sonar::track_download(&ctx, track.id, sonar::ByteRange::default())
+    let audio = sonar::test::create_audio(&ctx, sonar::test::SMALL_AUDIO_MP3).await;
+    let track = sonar::test::create_track_with_audio(&ctx, album.id, "track", audio.id).await;
+    let download = sonar::track_download(&ctx, track.id, sonar::ByteRange::default())
         .await
         .unwrap();
-    let downloaded = sonar::bytestream::to_bytes(reader).await.unwrap();
-    assert_eq!(downloaded, &b"track data"[..]);
+    let downloaded = sonar::bytestream::to_bytes(download.stream).await.unwrap();
+    assert_eq!(downloaded, sonar::test::SMALL_AUDIO_MP3);
 }

@@ -1,10 +1,45 @@
 -- the NOT NULL in the primary keys is beacause sqlx was sometimes returning Option<T> if the NOT NULL was no there.
 
+-- TABLE DEFINITIONS
+
+CREATE TABLE property (
+	namespace	INTEGER NOT NULL,
+	identifier	INTEGER NOT NULL,
+	key			TEXT NOT NULL,
+	value		TEXT NOT NULL,
+	PRIMARY KEY (namespace, identifier, key),
+	UNIQUE(namespace, identifier, key)
+);
+CREATE INDEX property_key ON property(key);
+CREATE INDEX property_key_value ON property(key, value);
+CREATE INDEX property_namespace_identifier ON property(namespace, identifier);
+
+CREATE TABLE blob (
+	id		INTEGER PRIMARY KEY NOT NULL,
+	key		TEXT NOT NULL UNIQUE,
+	size	INTEGER NOT NULL,
+	sha256	TEXT NOT NULL CHECK(LENGTH(sha256) = 64)
+);
+CREATE INDEX blob_key ON blob(key);
+CREATE INDEX blob_sha256 ON blob(sha256);
+
 CREATE TABLE image (
 	id			INTEGER PRIMARY KEY NOT NULL,
+	blob		INTEGER NOT NULL REFERENCES blob(id),
 	mime_type	TEXT NOT NULL,
-	blob_key	TEXT NOT NULL,
 	created_at	INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE audio (
+	id				INTEGER PRIMARY KEY NOT NULL,
+	bitrate			INTEGER NOT NULL,
+	duration_ms		INTEGER NOT NULL,
+	num_channels	INTEGER NOT NULL,
+	sample_freq		INTEGER NOT NULL,
+	mime_type		TEXT NOT NULL,
+	blob			INTEGER NOT NULL REFERENCES blob(id),
+	filename		TEXT,
+	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
 CREATE TABLE user (
@@ -13,16 +48,15 @@ CREATE TABLE user (
 	-- scrypt PHC string
 	password_hash	TEXT NOT NULL DEFAULT '',
 	avatar			INTEGER REFERENCES image(id),
-	properties		BLOB,
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
+CREATE INDEX user_username ON user(username);
 
 CREATE TABLE artist (
 	id				INTEGER PRIMARY KEY NOT NULL,
 	name 			TEXT NOT NULL,
 	listen_count	INTEGER NOT NULL DEFAULT 0,
 	cover_art		INTEGER REFERENCES image(id),
-	properties		BLOB,
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
@@ -32,40 +66,48 @@ CREATE TABLE album (
 	artist			INTEGER NOT NULL REFERENCES artist(id),
 	listen_count	INTEGER NOT NULL DEFAULT 0,
 	cover_art		INTEGER REFERENCES image(id),
-	properties		BLOB,
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
+CREATE INDEX album_artist ON album(artist);
 
 CREATE TABLE track (
 	id				INTEGER PRIMARY KEY NOT NULL,
 	name			TEXT NOT NULL DEFAULT '',
 	album			INTEGER NOT NULL REFERENCES album(id),
-	duration_ms		INTEGER NOT NULL,
 	listen_count	INTEGER NOT NULL DEFAULT 0,
 	cover_art		INTEGER REFERENCES image(id),
-	-- S : Synced lyrics
-	-- U : Unsynced lyrics
+	-- S : Synced lyrics, U : Unsynced lyrics
 	lyrics_kind		TEXT CHECK (lyrics_kind IS NULL OR lyrics_kind IN ('S', 'U')),
-	audio_blob_key	TEXT NOT NULL,
-	audio_filename	TEXT NOT NULL DEFAULT '',
-	properties		BLOB,
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
+CREATE INDEX track_album ON track(album);
 
 CREATE TABLE track_lyrics_line (
 	track		INTEGER NOT NULL REFERENCES track(id),
 	offset		INTEGER NOT NULL,
 	text		TEXT NOT NULL
 );
+CREATE INDEX track_lyrics_line_track ON track_lyrics_line(track);
+
+CREATE TABLE track_audio (
+	track		INTEGER NOT NULL REFERENCES track(id),
+	audio		INTEGER NOT NULL REFERENCES audio(id),
+	preferred	BOOLEAN CHECK(preferred IS NULL or preferred IS TRUE),
+	UNIQUE(track, preferred),
+	UNIQUE(track, audio)
+);
+CREATE INDEX track_audio_track ON track_audio(track);
+CREATE INDEX track_audio_audio ON track_audio(audio);
+CREATE INDEX track_audio_track_audio ON track_audio(track, audio);
 
 CREATE TABLE playlist (
 	id			INTEGER PRIMARY KEY NOT NULL,
 	owner		INTEGER NOT NULL REFERENCES user(id),
 	name		TEXT NOT NULL DEFAULT '',
-	properties	BLOB,
 	created_at	INTEGER NOT NULL DEFAULT (unixepoch()),
 	UNIQUE(owner, name)
 );
+CREATE INDEX playlist_owner ON playlist(owner);
 
 CREATE TABLE playlist_track (
 	playlist	INTEGER NOT NULL REFERENCES playlist(id),
@@ -73,6 +115,7 @@ CREATE TABLE playlist_track (
 	created_at	INTEGER NOT NULL DEFAULT (unixepoch()),
 	PRIMARY KEY(playlist, track)
 );
+CREATE INDEX playlist_track_playlist ON playlist_track(playlist);
 
 CREATE TABLE scrobble (
 	id				INTEGER PRIMARY KEY NOT NULL,
@@ -81,66 +124,92 @@ CREATE TABLE scrobble (
 	listen_at		INTEGER NOT NULL,
 	listen_secs		INTEGER NOT NULL,
 	listen_device	TEXT NOT NULL DEFAULT '',
-	properties		BLOB,
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
-CREATE VIEW artist_album_count (
-	id, album_count	
+-- AUXILIARY VIEWS
+
+CREATE VIEW view_artist_extra (
+	id, album_count
 ) AS
 	SELECT artist.id, COUNT(album.id)
 	FROM artist
 	LEFT JOIN album ON artist.id = album.artist
 	GROUP BY artist.id;
 
-CREATE VIEW artist_view (
-	id, name, listen_count, cover_art, album_count, properties, created_at
+CREATE VIEW view_track_extra (
+    id,
+    duration_ms,
+    audio
 ) AS
-	SELECT artist.id, name, listen_count, cover_art, album_count, properties, created_at
-	FROM artist
-	INNER JOIN artist_album_count ON artist.id = artist_album_count.id;
+	SELECT
+		track.id,
+		COALESCE(CAST(SUM(CASE WHEN track_audio.preferred = TRUE THEN audio.duration_ms ELSE 0 END) AS INTEGER), 0),
+		COALESCE(CAST(MAX(CASE WHEN track_audio.preferred = TRUE THEN audio.id END) AS INTEGER), NULL)
+	FROM track
+	LEFT JOIN track_audio ON track_audio.track = track.id
+	LEFT JOIN audio ON audio.id = track_audio.audio
+	GROUP BY track.id;
 
-CREATE VIEW album_track_count_dur (
+CREATE VIEW view_album_extra (
 	id, track_count, duration_ms
 ) AS
-	SELECT album.id, COUNT(track.id), CAST(COALESCE(SUM(track.duration_ms), 0) AS INTEGER)
+	SELECT album.id, CAST(COALESCE(COUNT(track.id), 0) AS INTEGER), CAST(COALESCE(SUM(view_track_extra.duration_ms), 0) AS INTEGER)
 	FROM album
-	LEFT JOIN track ON album.id = track.album
+	LEFT JOIN track ON track.album = album.id
+	LEFT JOIN view_track_extra ON view_track_extra.id = track.id
 	GROUP BY album.id;
 
-CREATE VIEW album_view (
-	id, name, duration_ms, artist, listen_count, cover_art, track_count, properties, created_at
-) AS
-	SELECT album.id, name, duration_ms, artist, listen_count, cover_art, track_count, properties, created_at
-	FROM album
-	INNER JOIN album_track_count_dur ON album.id = album_track_count_dur.id;
-
-CREATE VIEW track_artist (
-	id, artist
-) AS
-	SELECT track.id id, album.artist
-	FROM track
-	INNER JOIN album ON track.album = album.id;
-
-CREATE VIEW track_view (
-	id, name, artist, album, duration_ms, listen_count, cover_art, properties, created_at
-) AS
-	SELECT track.id, name, artist, album, duration_ms, listen_count, cover_art, properties, created_at
-	FROM track
-	INNER JOIN track_artist ON track.id = track_artist.id;
-
-CREATE VIEW playlist_track_count_dur (
+CREATE VIEW view_playlist_extra (
 	id, track_count, duration_ms
 ) AS
-	SELECT playlist.id, COUNT(playlist_track.track), CAST(COALESCE(SUM(track.duration_ms), 0) AS INTEGER)
+	SELECT playlist.id, COALESCE(COUNT(playlist_track.track), 0), COALESCE(CAST(SUM(view_track_extra.duration_ms) AS INTEGER), 0)
 	FROM playlist
 	LEFT JOIN playlist_track ON playlist_track.playlist = playlist.id
-	LEFT JOIN track on track.id = playlist_track.track
+	LEFT JOIN view_track_extra ON view_track_extra.id = playlist_track.track
 	GROUP BY playlist.id;
 
-CREATE VIEW playlist_view (
-	id, name, owner, track_count, duration_ms, properties, created_at
+-- SQLX VIEWS
+
+CREATE VIEW sqlx_image (
+	id, mime_type, blob_key, blob_size
 ) AS
-	SELECT playlist.id, name, owner, track_count, duration_ms, properties, created_at
+	SELECT image.id, image.mime_type, blob.key, blob.size
+	FROM image
+	INNER JOIN blob ON blob.id = image.blob;
+
+CREATE VIEW sqlx_audio (
+	id, bitrate, duration_ms, num_channels, sample_freq, mime_type, filename, blob_key, blob_size
+) AS
+	SELECT audio.id, bitrate, duration_ms, num_channels, sample_freq, mime_type, filename, blob.key, blob.size
+	FROM audio
+	INNER JOIN blob ON blob.id = audio.blob;
+
+CREATE VIEW sqlx_artist (
+	id, name, listen_count, cover_art, album_count, created_at
+) AS
+	SELECT artist.id, name, listen_count, cover_art, album_count, created_at
+	FROM artist
+	INNER JOIN view_artist_extra ON view_artist_extra.id = artist.id;
+
+CREATE VIEW sqlx_album (
+	id, name, duration_ms, artist, listen_count, cover_art, track_count, created_at
+) AS
+	SELECT album.id, name, duration_ms, artist, listen_count, cover_art, track_count, created_at
+	FROM album
+	INNER JOIN view_album_extra ON view_album_extra.id = album.id;
+
+CREATE VIEW sqlx_track (
+	id, name, artist, album, duration_ms, audio, listen_count, cover_art, created_at
+) AS
+	SELECT track.id, track.name, album.artist, track.album, view_track_extra.duration_ms, view_track_extra.audio, track.listen_count, track.cover_art, track.created_at
+	FROM track
+	INNER JOIN album ON album.id = track.album
+	INNER JOIN view_track_extra ON view_track_extra.id = track.id;
+
+CREATE VIEW sqlx_playlist (
+	id, name, owner, track_count, duration_ms, created_at
+) AS
+	SELECT playlist.id, name, owner, track_count, duration_ms, created_at
 	FROM playlist
-	INNER JOIN playlist_track_count_dur ON playlist_track_count_dur.id = playlist.id;
+	INNER JOIN view_playlist_extra ON view_playlist_extra.id = playlist.id;
