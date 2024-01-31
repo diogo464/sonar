@@ -30,7 +30,6 @@ pub struct AlbumCreate {
 pub struct AlbumUpdate {
     pub name: ValueUpdate<String>,
     pub artist: ValueUpdate<ArtistId>,
-    pub release_date: ValueUpdate<DateTime>,
     pub cover_art: ValueUpdate<ImageId>,
     pub properties: Vec<PropertyUpdate>,
 }

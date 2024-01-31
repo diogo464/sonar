@@ -3,6 +3,12 @@ use std::net::SocketAddr;
 use bytes::Bytes;
 use eyre::Context;
 
+mod result_ext;
+use result_ext::*;
+
+mod conversions;
+use conversions::*;
+
 tonic::include_proto!("sonar");
 
 pub type Client = sonar_service_client::SonarServiceClient<tonic::transport::Channel>;
@@ -20,6 +26,8 @@ impl Server {
 
 #[tonic::async_trait]
 impl sonar_service_server::SonarService for Server {
+    type ImageDownloadStream = SonarImageDownloadStream;
+
     async fn user_list(
         &self,
         request: tonic::Request<UserListRequest>,
@@ -36,7 +44,7 @@ impl sonar_service_server::SonarService for Server {
     ) -> std::result::Result<tonic::Response<User>, tonic::Status> {
         let req = request.into_inner();
         let username = req.username.parse::<sonar::Username>().m()?;
-        let avatar = req.avatar.map(sonar::ImageId::try_from).transpose().m()?;
+        let avatar = parse_imageid_opt(req.avatar_id)?;
         let user = sonar::user_create(
             &self.context,
             sonar::UserCreate {
@@ -60,7 +68,7 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<UserDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         let req = request.into_inner();
-        let user_id = sonar::UserId::try_from(req.user_id).m()?;
+        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
         sonar::user_delete(&self.context, user_id).await.m()?;
         Ok(tonic::Response::new(()))
     }
@@ -78,7 +86,7 @@ impl sonar_service_server::SonarService for Server {
         .await
         .m()?;
         Ok(tonic::Response::new(ImageCreateResponse {
-            image_id: From::from(image_id),
+            image_id: image_id.to_string(),
         }))
     }
     async fn image_delete(
@@ -90,15 +98,15 @@ impl sonar_service_server::SonarService for Server {
     async fn image_download(
         &self,
         request: tonic::Request<ImageDownloadRequest>,
-    ) -> std::result::Result<tonic::Response<ImageDownloadResponse>, tonic::Status> {
+    ) -> std::result::Result<tonic::Response<SonarImageDownloadStream>, tonic::Status> {
         let req = request.into_inner();
-        let image_id = sonar::ImageId::try_from(req.image_id).m()?;
+        let image_id = req.image_id.parse::<sonar::ImageId>().m()?;
         let image_download = sonar::image_download(&self.context, image_id).await.m()?;
-        let content = sonar::bytestream::to_bytes(image_download).await?;
-        Ok(tonic::Response::new(ImageDownloadResponse {
-            image_id: From::from(image_id),
-            content: content.to_vec(),
-        }))
+        Ok(tonic::Response::new(SonarImageDownloadStream::new(
+            image_id.to_string(),
+            image_download.mime_type,
+            image_download.stream,
+        )))
     }
     async fn artist_list(
         &self,
@@ -110,6 +118,15 @@ impl sonar_service_server::SonarService for Server {
         let artists = artists.into_iter().map(Into::into).collect();
         Ok(tonic::Response::new(ArtistListResponse { artists }))
     }
+    async fn artist_get(
+        &self,
+        request: tonic::Request<ArtistGetRequest>,
+    ) -> std::result::Result<tonic::Response<Artist>, tonic::Status> {
+        let req = request.into_inner();
+        let artist_id = req.artist_id.parse::<sonar::ArtistId>().m()?;
+        let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
+        Ok(tonic::Response::new(artist.into()))
+    }
     async fn artist_create(
         &self,
         request: tonic::Request<ArtistCreateRequest>,
@@ -119,7 +136,11 @@ impl sonar_service_server::SonarService for Server {
             &self.context,
             sonar::ArtistCreate {
                 name: req.name,
-                cover_art: req.coverart.map(sonar::ImageId::try_from).transpose().m()?,
+                cover_art: req
+                    .coverart_id
+                    .map(|id| id.parse::<sonar::ImageId>())
+                    .transpose()
+                    .m()?,
                 properties: convert_properties_from_pb(req.properties)?,
             },
         )
@@ -129,15 +150,23 @@ impl sonar_service_server::SonarService for Server {
     }
     async fn artist_update(
         &self,
-        _request: tonic::Request<ArtistUpdateRequest>,
+        request: tonic::Request<ArtistUpdateRequest>,
     ) -> std::result::Result<tonic::Response<Artist>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+        let (artist_id, update) = TryFrom::try_from(req)?;
+        let artist = sonar::artist_update(&self.context, artist_id, update)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(artist.into()))
     }
     async fn artist_delete(
         &self,
-        _request: tonic::Request<ArtistDeleteRequest>,
+        request: tonic::Request<ArtistDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+        let artist_id = req.artist_id.parse::<sonar::ArtistId>().m()?;
+        sonar::artist_delete(&self.context, artist_id).await.m()?;
+        Ok(tonic::Response::new(()))
     }
     async fn album_list(
         &self,
@@ -148,6 +177,229 @@ impl sonar_service_server::SonarService for Server {
         let albums = sonar::album_list(&self.context, params).await.m()?;
         let albums = albums.into_iter().map(Into::into).collect();
         Ok(tonic::Response::new(AlbumListResponse { albums }))
+    }
+    async fn album_list_by_artist(
+        &self,
+        request: tonic::Request<AlbumListByArtistRequest>,
+    ) -> std::result::Result<tonic::Response<AlbumListResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let artist_id = req.artist_id.parse::<sonar::ArtistId>().m()?;
+        let params = sonar::ListParams::from((req.offset, req.count));
+        let albums = sonar::album_list_by_artist(&self.context, artist_id, params)
+            .await
+            .m()?;
+        let albums = albums.into_iter().map(Into::into).collect();
+        Ok(tonic::Response::new(AlbumListResponse { albums }))
+    }
+    async fn album_get(
+        &self,
+        request: tonic::Request<AlbumGetRequest>,
+    ) -> std::result::Result<tonic::Response<Album>, tonic::Status> {
+        let req = request.into_inner();
+        let album_id = req.album_id.parse::<sonar::AlbumId>().m()?;
+        let album = sonar::album_get(&self.context, album_id).await.m()?;
+        Ok(tonic::Response::new(album.into()))
+    }
+    async fn album_create(
+        &self,
+        request: tonic::Request<AlbumCreateRequest>,
+    ) -> std::result::Result<tonic::Response<Album>, tonic::Status> {
+        let req = request.into_inner();
+        let create = TryFrom::try_from(req)?;
+        let album = sonar::album_create(&self.context, create).await.m()?;
+        Ok(tonic::Response::new(album.into()))
+    }
+    async fn album_update(
+        &self,
+        request: tonic::Request<AlbumUpdateRequest>,
+    ) -> std::result::Result<tonic::Response<Album>, tonic::Status> {
+        let req = request.into_inner();
+        let (album_id, update) = TryFrom::try_from(req)?;
+        let album = sonar::album_update(&self.context, album_id, update)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(album.into()))
+    }
+    async fn album_delete(
+        &self,
+        request: tonic::Request<AlbumDeleteRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let req = request.into_inner();
+        let album_id = req.album_id.parse::<sonar::AlbumId>().m()?;
+        sonar::album_delete(&self.context, album_id).await.m()?;
+        Ok(tonic::Response::new(()))
+    }
+    async fn track_list(
+        &self,
+        request: tonic::Request<TrackListRequest>,
+    ) -> std::result::Result<tonic::Response<TrackListResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let params = sonar::ListParams::from((req.offset, req.count));
+        let tracks = sonar::track_list(&self.context, params).await.m()?;
+        let tracks = tracks.into_iter().map(Into::into).collect();
+        Ok(tonic::Response::new(TrackListResponse { tracks }))
+    }
+    async fn track_list_by_album(
+        &self,
+        request: tonic::Request<TrackListByAlbumRequest>,
+    ) -> std::result::Result<tonic::Response<TrackListResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let album_id = req.album_id.parse::<sonar::AlbumId>().m()?;
+        let params = sonar::ListParams::from((req.offset, req.count));
+        let tracks = sonar::track_list_by_album(&self.context, album_id, params)
+            .await
+            .m()?;
+        let tracks = tracks.into_iter().map(Into::into).collect();
+        Ok(tonic::Response::new(TrackListResponse { tracks }))
+    }
+    async fn track_get(
+        &self,
+        request: tonic::Request<TrackGetRequest>,
+    ) -> std::result::Result<tonic::Response<Track>, tonic::Status> {
+        let req = request.into_inner();
+        let track_id = req.track_id.parse::<sonar::TrackId>().m()?;
+        let track = sonar::track_get(&self.context, track_id).await.m()?;
+        Ok(tonic::Response::new(track.into()))
+    }
+    async fn track_create(
+        &self,
+        request: tonic::Request<TrackCreateRequest>,
+    ) -> std::result::Result<tonic::Response<Track>, tonic::Status> {
+        let req = request.into_inner();
+        let create = TryFrom::try_from(req)?;
+        let track = sonar::track_create(&self.context, create).await.m()?;
+        Ok(tonic::Response::new(track.into()))
+    }
+    async fn track_update(
+        &self,
+        request: tonic::Request<TrackUpdateRequest>,
+    ) -> std::result::Result<tonic::Response<Track>, tonic::Status> {
+        let req = request.into_inner();
+        let (track_id, update) = TryFrom::try_from(req)?;
+        let track = sonar::track_update(&self.context, track_id, update)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(track.into()))
+    }
+    async fn track_delete(
+        &self,
+        request: tonic::Request<TrackDeleteRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let req = request.into_inner();
+        let track_id = req.track_id.parse::<sonar::TrackId>().m()?;
+        sonar::track_delete(&self.context, track_id).await.m()?;
+        Ok(tonic::Response::new(()))
+    }
+    async fn playlist_list(
+        &self,
+        request: tonic::Request<PlaylistListRequest>,
+    ) -> std::result::Result<tonic::Response<PlaylistListResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let params = sonar::ListParams::from((req.offset, req.count));
+        let playlists = sonar::playlist_list(&self.context, params).await.m()?;
+        let playlists = playlists.into_iter().map(Into::into).collect();
+        Ok(tonic::Response::new(PlaylistListResponse { playlists }))
+    }
+    async fn playlist_get(
+        &self,
+        request: tonic::Request<PlaylistGetRequest>,
+    ) -> std::result::Result<tonic::Response<Playlist>, tonic::Status> {
+        let req = request.into_inner();
+        let playlist_id = req.playlist_id.parse::<sonar::PlaylistId>().m()?;
+        let playlist = sonar::playlist_get(&self.context, playlist_id).await.m()?;
+        Ok(tonic::Response::new(playlist.into()))
+    }
+    async fn playlist_create(
+        &self,
+        request: tonic::Request<PlaylistCreateRequest>,
+    ) -> std::result::Result<tonic::Response<Playlist>, tonic::Status> {
+        let req = request.into_inner();
+        let create = TryFrom::try_from(req)?;
+        let playlist = sonar::playlist_create(&self.context, create).await.m()?;
+        Ok(tonic::Response::new(playlist.into()))
+    }
+    async fn playlist_update(
+        &self,
+        request: tonic::Request<PlaylistUpdateRequest>,
+    ) -> std::result::Result<tonic::Response<Playlist>, tonic::Status> {
+        let req = request.into_inner();
+        let (playlist_id, update) = TryFrom::try_from(req)?;
+        let playlist = sonar::playlist_update(&self.context, playlist_id, update)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(playlist.into()))
+    }
+    async fn playlist_delete(
+        &self,
+        request: tonic::Request<PlaylistDeleteRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let req = request.into_inner();
+        let playlist_id = req.playlist_id.parse::<sonar::PlaylistId>().m()?;
+        sonar::playlist_delete(&self.context, playlist_id)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(()))
+    }
+    async fn playlist_track_list(
+        &self,
+        request: tonic::Request<PlaylistTrackListRequest>,
+    ) -> std::result::Result<tonic::Response<PlaylistTrackListResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let playlist_id = req.playlist_id.parse::<sonar::PlaylistId>().m()?;
+        let playlist_tracks =
+            sonar::playlist_list_tracks(&self.context, playlist_id, Default::default())
+                .await
+                .m()?;
+        let track_ids = playlist_tracks
+            .into_iter()
+            .map(|playlist_track| playlist_track.track)
+            .collect::<Vec<_>>();
+        let tracks = sonar::track_get_bulk(&self.context, &track_ids).await.m()?;
+        let tracks = tracks.into_iter().map(Into::into).collect();
+        Ok(tonic::Response::new(PlaylistTrackListResponse { tracks }))
+    }
+    async fn playlist_track_insert(
+        &self,
+        request: tonic::Request<PlaylistTrackInsertRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let req = request.into_inner();
+        let playlist_id = req.playlist_id.parse::<sonar::PlaylistId>().m()?;
+        let track_ids = req
+            .track_ids
+            .into_iter()
+            .map(parse_trackid)
+            .collect::<Result<Vec<_>, _>>()?;
+        sonar::playlist_insert_tracks(&self.context, playlist_id, &track_ids)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(()))
+    }
+    async fn playlist_track_remove(
+        &self,
+        request: tonic::Request<PlaylistTrackRemoveRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let req = request.into_inner();
+        let playlist_id = req.playlist_id.parse::<sonar::PlaylistId>().m()?;
+        let track_ids = req
+            .track_ids
+            .into_iter()
+            .map(parse_trackid)
+            .collect::<Result<Vec<_>, _>>()?;
+        sonar::playlist_remove_tracks(&self.context, playlist_id, &track_ids)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(()))
+    }
+    async fn playlist_track_clear(
+        &self,
+        request: tonic::Request<PlaylistTrackClearRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let req = request.into_inner();
+        let playlist_id = req.playlist_id.parse::<sonar::PlaylistId>().m()?;
+        sonar::playlist_clear_tracks(&self.context, playlist_id)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(()))
     }
     async fn import(
         &self,
@@ -251,149 +503,6 @@ pub async fn start_server(context: sonar::Context, address: SocketAddr) -> eyre:
     Ok(())
 }
 
-trait ResultExt<T> {
-    fn m(self) -> Result<T, tonic::Status>;
-}
-
-impl<T> ResultExt<T> for sonar::Result<T> {
-    fn m(self) -> Result<T, tonic::Status> {
-        self.map_err(|e| match e.kind() {
-            sonar::ErrorKind::NotFound => tonic::Status::not_found(e.to_string()),
-            sonar::ErrorKind::Invalid => tonic::Status::invalid_argument(e.to_string()),
-            sonar::ErrorKind::Unauthorized => tonic::Status::unauthenticated(e.to_string()),
-            sonar::ErrorKind::Internal => tonic::Status::internal(e.to_string()),
-        })
-    }
-}
-
-impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidIdError> {
-    fn m(self) -> Result<T, tonic::Status> {
-        self.map_err(|e| tonic::Status::invalid_argument(e.to_string()))
-    }
-}
-
-impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidPropertyKeyError> {
-    fn m(self) -> Result<T, tonic::Status> {
-        self.map_err(|e| tonic::Status::invalid_argument(e.to_string()))
-    }
-}
-
-impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidPropertyValueError> {
-    fn m(self) -> Result<T, tonic::Status> {
-        self.map_err(|e| tonic::Status::invalid_argument(e.to_string()))
-    }
-}
-
-impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidGenreError> {
-    fn m(self) -> Result<T, tonic::Status> {
-        self.map_err(|e| tonic::Status::invalid_argument(e.to_string()))
-    }
-}
-
-impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidUsernameError> {
-    fn m(self) -> Result<T, tonic::Status> {
-        self.map_err(|e| tonic::Status::invalid_argument(e.to_string()))
-    }
-}
-
-impl From<sonar::User> for User {
-    fn from(value: sonar::User) -> Self {
-        Self {
-            user_id: From::from(value.id),
-            username: From::from(value.username),
-            avatar: value.avatar.map(From::from),
-        }
-    }
-}
-
-impl From<sonar::Artist> for Artist {
-    fn from(value: sonar::Artist) -> Self {
-        Self {
-            id: From::from(value.id),
-            name: value.name,
-            album_count: value.album_count,
-            listen_count: value.listen_count,
-            coverart: value.cover_art.map(From::from),
-            properties: convert_properties_to_pb(value.properties),
-        }
-    }
-}
-
-impl From<sonar::Album> for Album {
-    fn from(value: sonar::Album) -> Self {
-        Self {
-            id: From::from(value.id),
-            name: value.name,
-            track_count: value.track_count,
-            duration: Some(TryFrom::try_from(value.duration).expect("failed to convert duration")),
-            listen_count: value.listen_count,
-            artists: vec![From::from(value.artist)],
-            coverart: value.cover_art.map(From::from),
-            properties: convert_properties_to_pb(value.properties),
-        }
-    }
-}
-
-impl From<sonar::Track> for Track {
-    fn from(value: sonar::Track) -> Self {
-        Self {
-            id: From::from(value.id),
-            name: value.name,
-            artist_id: From::from(value.artist),
-            album_id: From::from(value.album),
-            duration: Some(TryFrom::try_from(value.duration).expect("failed to convert duration")),
-            listen_count: value.listen_count,
-            cover_art_id: value.cover_art.map(From::from),
-            properties: convert_properties_to_pb(value.properties),
-        }
-    }
-}
-
-impl From<sonar::metadata::TrackMetadata> for TrackMetadata {
-    fn from(value: sonar::metadata::TrackMetadata) -> Self {
-        Self {
-            name: value.name,
-            properties: convert_properties_to_pb(value.properties),
-            cover: value.cover.map(From::from),
-        }
-    }
-}
-
-impl From<sonar::metadata::AlbumTracksMetadata> for MetadataAlbumTracksResponse {
-    fn from(value: sonar::metadata::AlbumTracksMetadata) -> Self {
-        Self {
-            tracks: value
-                .tracks
-                .into_iter()
-                .map(|(id, v)| (From::from(id), From::from(v)))
-                .collect(),
-        }
-    }
-}
-
-fn convert_properties_to_pb(properties: sonar::Properties) -> Vec<Property> {
-    let mut props = Vec::with_capacity(properties.len());
-    for (key, value) in properties {
-        props.push(Property {
-            key: From::from(key),
-            value: From::from(value),
-        });
-    }
-    props
-}
-
-fn convert_properties_from_pb(
-    properties: Vec<Property>,
-) -> Result<sonar::Properties, tonic::Status> {
-    let mut props = sonar::Properties::new();
-    for prop in properties {
-        let key = prop.key.parse::<sonar::PropertyKey>().m()?;
-        let value = prop.value.parse::<sonar::PropertyValue>().m()?;
-        props.insert(key, value);
-    }
-    Ok(props)
-}
-
 struct ImportStream {
     first_chunk: Option<Bytes>,
     stream: tonic::Streaming<ImportRequest>,
@@ -421,6 +530,54 @@ impl tokio_stream::Stream for ImportStream {
                     std::task::Poll::Pending => std::task::Poll::Pending,
                 }
             }
+        }
+    }
+}
+
+struct SonarImageDownloadStream {
+    image_id: String,
+    mime_type: String,
+    stream: sonar::bytestream::ByteStream,
+}
+
+impl SonarImageDownloadStream {
+    fn new(image_id: String, mime_type: String, stream: sonar::bytestream::ByteStream) -> Self {
+        Self {
+            image_id,
+            mime_type,
+            stream,
+        }
+    }
+}
+
+impl tokio_stream::Stream for SonarImageDownloadStream {
+    type Item = Result<ImageDownloadResponse, tonic::Status>;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        let stream = std::pin::Pin::new(&mut this.stream);
+        match stream.poll_next(cx) {
+            std::task::Poll::Ready(Some(Ok(data))) => {
+                let image_id = this.image_id.clone();
+                let mime_type = this.mime_type.clone();
+                let content = data.to_vec();
+                std::task::Poll::Ready(Some(Ok(ImageDownloadResponse {
+                    image_id,
+                    mime_type,
+                    content,
+                })))
+            }
+            std::task::Poll::Ready(Some(Err(err))) => {
+                return std::task::Poll::Ready(Some(Err(tonic::Status::new(
+                    tonic::Code::Internal,
+                    err.to_string(),
+                ))))
+            }
+            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
+            std::task::Poll::Pending => std::task::Poll::Pending,
         }
     }
 }

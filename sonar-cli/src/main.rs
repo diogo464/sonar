@@ -150,7 +150,7 @@ async fn cmd_user_create(args: UserCreateArgs) -> Result<()> {
         .user_create(sonar_grpc::UserCreateRequest {
             username: args.username,
             password: args.password,
-            avatar: image_id,
+            avatar_id: image_id,
         })
         .await?;
     println!("{:?}", response.into_inner());
@@ -174,7 +174,7 @@ async fn cmd_user_delete(args: UserDeleteArgs) -> Result<()> {
     let mut client = create_client().await?;
     let response = client
         .user_delete(sonar_grpc::UserDeleteRequest {
-            user_id: From::from(args.id),
+            user_id: args.id.to_string(),
         })
         .await?;
     println!("{:?}", response.into_inner());
@@ -244,7 +244,7 @@ async fn cmd_artist_create(args: ArtistCreateArgs) -> Result<()> {
     let response = client
         .artist_create(sonar_grpc::ArtistCreateRequest {
             name: args.name,
-            coverart: image_id,
+            coverart_id: image_id,
             ..Default::default()
         })
         .await?;
@@ -296,7 +296,7 @@ async fn cmd_album_list(args: AlbumListArgs) -> Result<()> {
         })
         .await?;
     for album in response.into_inner().albums {
-        let album_id = sonar::AlbumId::try_from(album.id)?;
+        let album_id = album.id;
         let album_name = album.name;
         println!("{}\t{}", album_id, album_name);
     }

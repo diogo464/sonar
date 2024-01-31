@@ -260,3 +260,116 @@ impl FromStr for SonarId {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_artist_id() {
+        let id = ArtistId::try_from(0x01000001).unwrap();
+        assert_eq!(id, ArtistId(0x01000001));
+        assert_eq!(id.name(), "artist");
+        assert_eq!(id.namespace(), ID_TYPE_ARTIST);
+        assert_eq!(id.identifier(), 1);
+        assert_eq!(id.to_db(), 1);
+        assert_eq!(ArtistId::from_db(1), id);
+        assert_eq!(id.to_string(), "sonar:artist:1000001");
+    }
+
+    #[test]
+    fn test_album_id() {
+        let id = AlbumId::try_from(0x02000001).unwrap();
+        assert_eq!(id, AlbumId(0x02000001));
+        assert_eq!(id.name(), "album");
+        assert_eq!(id.namespace(), ID_TYPE_ALBUM);
+        assert_eq!(id.identifier(), 1);
+        assert_eq!(id.to_db(), 1);
+        assert_eq!(AlbumId::from_db(1), id);
+        assert_eq!(id.to_string(), "sonar:album:2000001");
+    }
+
+    #[test]
+    fn test_track_id() {
+        let id = TrackId::try_from(0x03000001).unwrap();
+        assert_eq!(id, TrackId(0x03000001));
+        assert_eq!(id.name(), "track");
+        assert_eq!(id.namespace(), ID_TYPE_TRACK);
+        assert_eq!(id.identifier(), 1);
+        assert_eq!(id.to_db(), 1);
+        assert_eq!(TrackId::from_db(1), id);
+        assert_eq!(id.to_string(), "sonar:track:3000001");
+    }
+
+    #[test]
+    fn test_playlist_id() {
+        let id = PlaylistId::try_from(0x04000001).unwrap();
+        assert_eq!(id, PlaylistId(0x04000001));
+        assert_eq!(id.name(), "playlist");
+        assert_eq!(id.namespace(), ID_TYPE_PLAYLIST);
+        assert_eq!(id.identifier(), 1);
+        assert_eq!(id.to_db(), 1);
+        assert_eq!(PlaylistId::from_db(1), id);
+        assert_eq!(id.to_string(), "sonar:playlist:4000001");
+    }
+
+    #[test]
+    fn test_audio_id() {
+        let id = AudioId::try_from(0x05000001).unwrap();
+        assert_eq!(id, AudioId(0x05000001));
+        assert_eq!(id.name(), "audio");
+        assert_eq!(id.namespace(), ID_TYPE_AUDIO);
+        assert_eq!(id.identifier(), 1);
+        assert_eq!(id.to_db(), 1);
+        assert_eq!(AudioId::from_db(1), id);
+        assert_eq!(id.to_string(), "sonar:audio:5000001");
+    }
+
+    #[test]
+    fn test_image_id() {
+        let id = ImageId::try_from(0x06000001).unwrap();
+        assert_eq!(id, ImageId(0x06000001));
+        assert_eq!(id.name(), "image");
+        assert_eq!(id.namespace(), ID_TYPE_IMAGE);
+        assert_eq!(id.identifier(), 1);
+        assert_eq!(id.to_db(), 1);
+        assert_eq!(ImageId::from_db(1), id);
+        assert_eq!(id.to_string(), "sonar:image:6000001");
+    }
+
+    #[test]
+    fn test_user_id() {
+        let id = UserId::try_from(0x07000001).unwrap();
+        assert_eq!(id, UserId(0x07000001));
+        assert_eq!(id.name(), "user");
+        assert_eq!(id.namespace(), ID_TYPE_USER);
+        assert_eq!(id.identifier(), 1);
+        assert_eq!(id.to_db(), 1);
+        assert_eq!(UserId::from_db(1), id);
+        assert_eq!(id.to_string(), "sonar:user:7000001");
+    }
+
+    #[test]
+    fn test_lyrics_id() {
+        let id = LyricsId::try_from(0x08000001).unwrap();
+        assert_eq!(id, LyricsId(0x08000001));
+        assert_eq!(id.name(), "lyrics");
+        assert_eq!(id.namespace(), ID_TYPE_LYRICS);
+        assert_eq!(id.identifier(), 1);
+        assert_eq!(id.to_db(), 1);
+        assert_eq!(LyricsId::from_db(1), id);
+        assert_eq!(id.to_string(), "sonar:lyrics:8000001");
+    }
+
+    #[test]
+    fn test_scrobble_id() {
+        let id = ScrobbleId::try_from(0x09000001).unwrap();
+        assert_eq!(id, ScrobbleId(0x09000001));
+        assert_eq!(id.name(), "scrobble");
+        assert_eq!(id.namespace(), ID_TYPE_SCROBBLE);
+        assert_eq!(id.identifier(), 1);
+        assert_eq!(id.to_db(), 1);
+        assert_eq!(ScrobbleId::from_db(1), id);
+        assert_eq!(id.to_string(), "sonar:scrobble:9000001");
+    }
+}

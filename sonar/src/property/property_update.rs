@@ -13,6 +13,16 @@ pub struct PropertyUpdate {
 }
 
 impl PropertyUpdate {
+    pub fn from_option(key: PropertyKey, value: Option<PropertyValue>) -> Self {
+        Self {
+            key,
+            action: match value {
+                Some(value) => PropertyUpdateAction::Set(value),
+                None => PropertyUpdateAction::Remove,
+            },
+        }
+    }
+
     pub fn set(key: PropertyKey, value: PropertyValue) -> Self {
         Self {
             key,
