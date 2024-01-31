@@ -61,11 +61,11 @@ impl Properties {
     }
 
     pub fn insert(&mut self, key: PropertyKey, value: PropertyValue) -> Option<PropertyValue> {
-        self.0.insert(key.0, value.0).map(|v| PropertyValue(v))
+        self.0.insert(key.0, value.0).map(PropertyValue)
     }
 
     pub fn remove(&mut self, key: impl AsRef<str>) -> Option<PropertyValue> {
-        self.0.remove(key.as_ref()).map(|v| PropertyValue(v))
+        self.0.remove(key.as_ref()).map(PropertyValue)
     }
 
     pub fn keys(&self) -> impl Iterator<Item = PropertyKey> + '_ {

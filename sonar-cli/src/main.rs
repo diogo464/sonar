@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
 
 async fn create_client() -> Result<sonar_grpc::Client> {
     let endpoint = SERVER_ENDPOINT.get().unwrap();
-    sonar_grpc::client(&endpoint)
+    sonar_grpc::client(endpoint)
         .await
         .with_context(|| format!("connecting to grpc server at {}", endpoint))
 }
@@ -256,14 +256,14 @@ async fn cmd_artist_create(args: ArtistCreateArgs) -> Result<()> {
 #[derive(Debug, Parser)]
 struct ArtistUpdateArgs {}
 
-async fn cmd_artist_update(args: ArtistUpdateArgs) -> Result<()> {
+async fn cmd_artist_update(_args: ArtistUpdateArgs) -> Result<()> {
     todo!()
 }
 
 #[derive(Debug, Parser)]
 struct ArtistDeleteArgs {}
 
-async fn cmd_artist_delete(args: ArtistDeleteArgs) -> Result<()> {
+async fn cmd_artist_delete(_args: ArtistDeleteArgs) -> Result<()> {
     todo!()
 }
 
@@ -316,21 +316,21 @@ struct AlbumCreateArgs {
     genres: sonar::Genres,
 }
 
-async fn cmd_album_create(args: AlbumCreateArgs) -> Result<()> {
+async fn cmd_album_create(_args: AlbumCreateArgs) -> Result<()> {
     todo!()
 }
 
 #[derive(Debug, Parser)]
 struct AlbumUpdateArgs {}
 
-async fn cmd_album_update(args: AlbumUpdateArgs) -> Result<()> {
+async fn cmd_album_update(_args: AlbumUpdateArgs) -> Result<()> {
     todo!()
 }
 
 #[derive(Debug, Parser)]
 struct AlbumDeleteArgs {}
 
-async fn cmd_album_delete(args: AlbumDeleteArgs) -> Result<()> {
+async fn cmd_album_delete(_args: AlbumDeleteArgs) -> Result<()> {
     todo!()
 }
 
@@ -407,7 +407,7 @@ struct MetadataAlbumArgs {
     album_id: sonar::AlbumId,
 }
 
-async fn cmd_metadata_album(args: MetadataAlbumArgs, view: bool) -> Result<()> {
+async fn cmd_metadata_album(args: MetadataAlbumArgs, _view: bool) -> Result<()> {
     let mut client = create_client().await?;
     let _response = client
         .metadata_fetch(sonar_grpc::MetadataFetchRequest {
@@ -472,7 +472,7 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     };
     let mut config = sonar::Config::new(database_url, storage_backend);
     config
-        .register_extractor("lofty", sonar_extractor_lofty::LoftyExtractor::default())
+        .register_extractor("lofty", sonar_extractor_lofty::LoftyExtractor)
         .context("registering lofty extractor")?;
     config
         .register_provider("beets", sonar_beets::BeetsMetadataImporter)
@@ -510,10 +510,7 @@ struct ExtractorArgs {
 async fn cmd_extractor(args: ExtractorArgs) -> Result<()> {
     use sonar::extractor::Extractor;
 
-    let extractors = vec![(
-        "lofty",
-        Box::new(sonar_extractor_lofty::LoftyExtractor::default()),
-    )];
+    let extractors = [("lofty", Box::new(sonar_extractor_lofty::LoftyExtractor))];
 
     for file in args.files {
         for extractor in extractors.iter() {

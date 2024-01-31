@@ -120,7 +120,7 @@ pub async fn update(db: &mut DbC, artist_id: ArtistId, update: ArtistUpdate) -> 
             .await?;
     }
     property::update(db, artist_id, &update.properties).await?;
-    Ok(get(db, artist_id).await?)
+    get(db, artist_id).await
 }
 
 pub async fn delete(db: &mut DbC, artist_id: ArtistId) -> Result<()> {

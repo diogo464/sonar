@@ -9,7 +9,10 @@ use tokio::{
     io::{AsyncReadExt, AsyncSeekExt},
 };
 
-use crate::{async_trait, bytestream::{self, ByteStream}};
+use crate::{
+    async_trait,
+    bytestream::{self, ByteStream},
+};
 
 use super::{BlobRange, BlobStorage};
 

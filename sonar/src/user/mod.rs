@@ -38,7 +38,7 @@ impl UserView {
         User {
             id: UserId::from_db(self.id),
             username: Username::new_uncheked(self.username),
-            avatar: self.avatar.map(|id| ImageId::from_db(id)),
+            avatar: self.avatar.map(ImageId::from_db),
         }
     }
 }

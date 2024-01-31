@@ -7,23 +7,23 @@ use serde::Deserialize;
 use sonar::metadata::prelude::*;
 use tokio::process::Command;
 
-const BEETS_CONFIG_TEMPLATE: &'static str = include_str!("config.yaml");
-const MARKER_LIBRARY_PATH: &'static str = "{{LIBRARY_PATH}}";
-const MARKER_DIRECTORY_PATH: &'static str = "{{DIRECTORY_PATH}}";
-const MARKER_PLUGINS: &'static str = "{{PLUGINS}}";
-const PLUGIN_COVERART: &'static str = "fetchart";
+const BEETS_CONFIG_TEMPLATE: &str = include_str!("config.yaml");
+const MARKER_LIBRARY_PATH: &str = "{{LIBRARY_PATH}}";
+const MARKER_DIRECTORY_PATH: &str = "{{DIRECTORY_PATH}}";
+const MARKER_PLUGINS: &str = "{{PLUGINS}}";
+const PLUGIN_COVERART: &str = "fetchart";
 
-const TAG_TITLE: &'static str = "title";
-const TAG_ARTIST: &'static str = "artist";
-const TAG_ALBUM: &'static str = "album";
+const TAG_TITLE: &str = "title";
+const TAG_ARTIST: &str = "artist";
+const TAG_ALBUM: &str = "album";
 // track number in format "<track>/<total>"
-const TAG_TRACK_NUMBER: &'static str = "track";
+const TAG_TRACK_NUMBER: &str = "track";
 // disc number in format "<disc>/<total>"
-const TAG_DISC_NUMBER: &'static str = "disc";
-const TAG_GENRE: &'static str = "genre";
+const TAG_DISC_NUMBER: &str = "disc";
+const TAG_GENRE: &str = "genre";
 // release date in format "YYYY-MM-DD"
-const TAG_RELEASE_DATE: &'static str = "date";
-const TAG_PUBLISHER: &'static str = "publisher";
+const TAG_RELEASE_DATE: &str = "date";
+const TAG_PUBLISHER: &str = "publisher";
 /*
     "MusicBrainz Work Id": "fe2eab1d-646f-4836-8651-6d8ce0f8205d",
     "MusicBrainz Album Id": "37e4a79b-723f-4501-94aa-775c609b7fdf",
@@ -32,12 +32,12 @@ const TAG_PUBLISHER: &'static str = "publisher";
     "MusicBrainz Release Group Id": "fe4373ed-5e89-46b3-b4c0-31433ce217df",
     "MusicBrainz Release Track Id": "cc59647c-3435-3c96-a62a-56334aa27ebd"
 */
-const TAG_MUSICBRAINZ_WORK_ID: &'static str = "MusicBrainz Work Id";
-const TAG_MUSICBRAINZ_ALBUM_ID: &'static str = "MusicBrainz Album Id";
-const TAG_MUSICBRAINZ_ARTIST_ID: &'static str = "MusicBrainz Artist Id";
-const TAG_MUSICBRAINZ_ALBUM_ARTIST_ID: &'static str = "MusicBrainz Album Artist Id";
-const TAG_MUSICBRAINZ_RELEASE_GROUP_ID: &'static str = "MusicBrainz Release Group Id";
-const TAG_MUSICBRAINZ_RELEASE_TRACK_ID: &'static str = "MusicBrainz Release Track Id";
+const TAG_MUSICBRAINZ_WORK_ID: &str = "MusicBrainz Work Id";
+const TAG_MUSICBRAINZ_ALBUM_ID: &str = "MusicBrainz Album Id";
+const TAG_MUSICBRAINZ_ARTIST_ID: &str = "MusicBrainz Artist Id";
+const TAG_MUSICBRAINZ_ALBUM_ARTIST_ID: &str = "MusicBrainz Album Artist Id";
+const TAG_MUSICBRAINZ_RELEASE_GROUP_ID: &str = "MusicBrainz Release Group Id";
+const TAG_MUSICBRAINZ_RELEASE_TRACK_ID: &str = "MusicBrainz Release Track Id";
 
 #[derive(Debug, Default)]
 pub struct BeetsMetadataImporter;

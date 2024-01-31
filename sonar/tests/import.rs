@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use sonar::{extractor::ExtractedMetadata, Genres};
 
 #[tokio::test]

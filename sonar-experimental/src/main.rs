@@ -16,10 +16,9 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
     let filepath = args.filepath;
-    let file = lofty::read_from_path(&filepath)?;
+    let file = lofty::read_from_path(filepath)?;
     let props = file.properties();
     println!("{:#?}", props);
 
     Ok(())
 }
-

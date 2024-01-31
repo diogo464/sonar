@@ -179,7 +179,7 @@ pub async fn import(
     let mut conn = db.begin().await?;
     let audio_stream = bytestream::from_file(&tmp_filepath).await?;
     let audio = audio::create(
-        &mut *conn,
+        &mut conn,
         storage,
         AudioCreate {
             stream: audio_stream,

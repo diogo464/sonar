@@ -238,7 +238,7 @@ impl FromStr for SonarId {
             .strip_prefix("sonar:")
             .ok_or_else(|| InvalidIdError::new(0, "not a sonar ID"))?;
         let (kind, value) = s
-            .split_once(":")
+            .split_once(':')
             .ok_or_else(|| InvalidIdError::new(0, "not a sonar ID"))?;
         let id = u32::from_str_radix(value, 16).map_err(|_| {
             InvalidIdError::new(

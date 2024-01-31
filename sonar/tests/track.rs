@@ -12,7 +12,7 @@ async fn track_create_one() {
     let ctx = sonar::test::create_context_memory().await;
     let artist = sonar::test::create_artist(&ctx, "artist").await;
     let album = sonar::test::create_album(&ctx, artist.id, "album").await;
-    let data = sonar::test::create_stream(b"track data");
+    let _data = sonar::test::create_stream(b"track data");
     let create = sonar::TrackCreate {
         name: "Track".to_string(),
         album: album.id,

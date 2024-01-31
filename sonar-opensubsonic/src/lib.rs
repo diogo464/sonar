@@ -29,7 +29,7 @@ impl Server {
                 ))
             }
         };
-        sonar::user_authenticate(&self.context, &username, &password)
+        sonar::user_authenticate(&self.context, &username, password)
             .await
             .m()
     }
@@ -176,8 +176,8 @@ impl OpenSubsonicServer for Server {
                         .map(|track| track.track)
                         .collect::<Vec<_>>();
                     let tracks = sonar::track_get_bulk(&self.context, &track_ids).await.m()?;
-                    let song = child_from_playlist_tracks(&playlist_tracks, &tracks);
-                    song
+
+                    child_from_playlist_tracks(&playlist_tracks, &tracks)
                 }
                 None => Default::default(),
             };
@@ -241,7 +241,7 @@ impl OpenSubsonicServer for Server {
             .await
             .m()?,
             // playlist update
-            (Some(playlist_id), _) => {
+            (Some(_playlist_id), _) => {
                 todo!()
             }
             (None, None) => {
@@ -274,7 +274,7 @@ impl OpenSubsonicServer for Server {
             download.stream,
         ))
     }
-    async fn scrobble(&self, request: Request<Scrobble>) -> Result<()> {
+    async fn scrobble(&self, _request: Request<Scrobble>) -> Result<()> {
         // TODO: implement
         Ok(())
     }
@@ -288,7 +288,7 @@ impl OpenSubsonicServer for Server {
             download.stream,
         ))
     }
-    async fn get_music_folders(&self, request: Request<GetMusicFolders>) -> Result<MusicFolders> {
+    async fn get_music_folders(&self, _request: Request<GetMusicFolders>) -> Result<MusicFolders> {
         Ok(Default::default())
     }
     async fn get_podcasts(&self, _request: Request<GetPodcasts>) -> Result<Podcasts> {

@@ -112,7 +112,7 @@ mod test {
         // we should ignore missing keys
         let key = random_key();
         let result = storage.delete(&key).await;
-        assert!(!result.is_err());
+        assert!(result.is_ok());
     }
 
     async fn generic_put(storage: &dyn BlobStorage) {

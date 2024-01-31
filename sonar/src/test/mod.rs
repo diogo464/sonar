@@ -23,7 +23,7 @@ pub const SMALL_IMAGE_JPEG: &[u8] = &[
 
 // ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 1 -q:a 9 -acodec libmp3lame silence.mp3
 pub const SMALL_AUDIO_MP3_DURATION: Duration = Duration::from_millis(1040);
-pub const SMALL_AUDIO_MP3: &'static [u8] = &[
+pub const SMALL_AUDIO_MP3: &[u8] = &[
     0x49, 0x44, 0x33, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0, 0x23, 0x54, 0x53, 0x53, 0x45, 0x0, 0x0, 0x0,
     0xF, 0x0, 0x0, 0x3, 0x4C, 0x61, 0x76, 0x66, 0x36, 0x30, 0x2E, 0x31, 0x36, 0x2E, 0x31, 0x30,
     0x30, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xFF, 0xFB, 0x40, 0xC0, 0x0, 0x0,
@@ -314,8 +314,7 @@ impl Extractor for StaticMetadataExtractor {
 }
 
 pub fn create_config_memory() -> crate::Config {
-    let config = crate::Config::new(":memory:", crate::StorageBackend::Memory);
-    config
+    crate::Config::new(":memory:", crate::StorageBackend::Memory)
 }
 
 pub async fn create_context_memory() -> Context {
@@ -406,7 +405,7 @@ pub async fn create_track_with_audio_opt(
 }
 
 pub async fn create_audio(ctx: &Context, data: &[u8]) -> Audio {
-    let audio = crate::audio_create(
+    crate::audio_create(
         ctx,
         crate::AudioCreate {
             stream: create_stream(data),
@@ -414,8 +413,7 @@ pub async fn create_audio(ctx: &Context, data: &[u8]) -> Audio {
         },
     )
     .await
-    .unwrap();
-    audio
+    .unwrap()
 }
 
 pub async fn create_playlist(ctx: &Context, owner: UserId, name: &str) -> Playlist {

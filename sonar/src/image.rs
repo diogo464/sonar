@@ -75,7 +75,7 @@ pub async fn create(
         },
         None => None,
     };
-    if !mime_type.is_some() {
+    if mime_type.is_none() {
         return Err(Error::new(ErrorKind::Invalid, "invalid image type"));
     }
 

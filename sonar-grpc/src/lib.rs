@@ -51,7 +51,7 @@ impl sonar_service_server::SonarService for Server {
     }
     async fn user_update(
         &self,
-        request: tonic::Request<UserUpdateRequest>,
+        _request: tonic::Request<UserUpdateRequest>,
     ) -> std::result::Result<tonic::Response<User>, tonic::Status> {
         todo!()
     }
@@ -83,7 +83,7 @@ impl sonar_service_server::SonarService for Server {
     }
     async fn image_delete(
         &self,
-        request: tonic::Request<ImageDeleteRequest>,
+        _request: tonic::Request<ImageDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         todo!()
     }
@@ -129,13 +129,13 @@ impl sonar_service_server::SonarService for Server {
     }
     async fn artist_update(
         &self,
-        request: tonic::Request<ArtistUpdateRequest>,
+        _request: tonic::Request<ArtistUpdateRequest>,
     ) -> std::result::Result<tonic::Response<Artist>, tonic::Status> {
         todo!()
     }
     async fn artist_delete(
         &self,
-        request: tonic::Request<ArtistDeleteRequest>,
+        _request: tonic::Request<ArtistDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         todo!()
     }
@@ -192,7 +192,7 @@ impl sonar_service_server::SonarService for Server {
         let req = request.into_inner();
         match req.kind {
             _ if req.kind == MetadataFetchKind::Artist as i32 => {
-                let artist_id = sonar::ArtistId::try_from(req.item_id).m()?;
+                let _artist_id = sonar::ArtistId::try_from(req.item_id).m()?;
                 unimplemented!()
             }
             _ if req.kind == MetadataFetchKind::Album as i32 => {
@@ -208,7 +208,7 @@ impl sonar_service_server::SonarService for Server {
                     .m()?;
             }
             _ if req.kind == MetadataFetchKind::Track as i32 => {
-                let track_id = sonar::TrackId::try_from(req.item_id).m()?;
+                let _track_id = sonar::TrackId::try_from(req.item_id).m()?;
                 unimplemented!()
             }
             _ => {
@@ -235,11 +235,9 @@ impl sonar_service_server::SonarService for Server {
 
 pub async fn client(endpoint: &str) -> eyre::Result<Client> {
     tracing::info!("connecting to grpc server on {}", endpoint);
-    Ok(
-        sonar_service_client::SonarServiceClient::connect(endpoint.to_string())
-            .await
-            .context("connecting to grpc server")?,
-    )
+    sonar_service_client::SonarServiceClient::connect(endpoint.to_string())
+        .await
+        .context("connecting to grpc server")
 }
 
 pub async fn start_server(context: sonar::Context, address: SocketAddr) -> eyre::Result<()> {
@@ -313,8 +311,8 @@ impl From<sonar::Artist> for Artist {
         Self {
             id: From::from(value.id),
             name: value.name,
-            album_count: value.album_count as u32,
-            listen_count: value.listen_count as u32,
+            album_count: value.album_count,
+            listen_count: value.listen_count,
             coverart: value.cover_art.map(From::from),
             properties: convert_properties_to_pb(value.properties),
         }
@@ -326,9 +324,9 @@ impl From<sonar::Album> for Album {
         Self {
             id: From::from(value.id),
             name: value.name,
-            track_count: value.track_count as u32,
+            track_count: value.track_count,
             duration: Some(TryFrom::try_from(value.duration).expect("failed to convert duration")),
-            listen_count: value.listen_count as u32,
+            listen_count: value.listen_count,
             artists: vec![From::from(value.artist)],
             coverart: value.cover_art.map(From::from),
             properties: convert_properties_to_pb(value.properties),
@@ -344,7 +342,7 @@ impl From<sonar::Track> for Track {
             artist_id: From::from(value.artist),
             album_id: From::from(value.album),
             duration: Some(TryFrom::try_from(value.duration).expect("failed to convert duration")),
-            listen_count: value.listen_count as u32,
+            listen_count: value.listen_count,
             cover_art_id: value.cover_art.map(From::from),
             properties: convert_properties_to_pb(value.properties),
         }

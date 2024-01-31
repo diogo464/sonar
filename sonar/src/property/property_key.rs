@@ -73,7 +73,7 @@ impl PropertyKey {
     }
 
     pub const fn new_const(key: &'static str) -> Self {
-        if let Some(_) = property_key_check(key) {
+        if property_key_check(key).is_some() {
             panic!("invalid property key");
         }
         Self(Cow::Borrowed(key))

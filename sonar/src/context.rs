@@ -563,7 +563,7 @@ pub async fn metadata_fetch_album_tracks(context: &Context, album_id: AlbumId) -
     Ok(())
 }
 
-pub async fn metadata_view_artist(context: &Context, artist_id: ArtistId) -> Result<()> {
+pub async fn metadata_view_artist(_context: &Context, _artist_id: ArtistId) -> Result<()> {
     todo!()
 }
 
@@ -571,7 +571,7 @@ pub async fn metadata_view_album(context: &Context, album_id: AlbumId) -> Result
     let album = album_get(context, album_id).await?;
     let artist = artist_get(context, album.artist).await?;
     let request = AlbumMetadataRequest { artist, album };
-    for fetcher in context.providers.iter().cloned() {
+    for fetcher in context.providers.iter() {
         if !fetcher.supports(MetadataRequestKind::Album) {
             continue;
         }
@@ -601,7 +601,7 @@ pub async fn metadata_view_album_tracks(
         album,
         tracks,
     };
-    for fetcher in context.providers.iter().cloned() {
+    for fetcher in context.providers.iter() {
         if !fetcher.supports(MetadataRequestKind::AlbumTracks) {
             continue;
         }
@@ -619,6 +619,6 @@ pub async fn metadata_view_album_tracks(
     Ok(Default::default())
 }
 
-pub async fn metadata_view_track(context: &Context, track_id: TrackId) -> Result<()> {
+pub async fn metadata_view_track(_context: &Context, _track_id: TrackId) -> Result<()> {
     todo!()
 }

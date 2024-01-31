@@ -1,4 +1,3 @@
-
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ListParams {
     pub offset: Option<u32>,
