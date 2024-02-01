@@ -270,8 +270,12 @@ pub async fn download(
     let audio_id = sqlx::query_scalar!("SELECT audio FROM sqlx_track WHERE id = ?", track_id)
         .fetch_one(&mut *db)
         .await?;
-    let audio_id = AudioId::from_db(audio_id);
-    audio::download(db, storage, audio_id, range).await
+    if let Some(audio_id) = audio_id {
+        let audio_id = AudioId::from_db(audio_id);
+        audio::download(db, storage, audio_id, range).await
+    } else {
+        Err(Error::new(ErrorKind::NotFound, "no audio for track"))
+    }
 }
 
 pub async fn get_lyrics(db: &mut DbC, track_id: TrackId) -> Result<Lyrics> {

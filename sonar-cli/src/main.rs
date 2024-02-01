@@ -2,11 +2,15 @@ use std::{collections::HashSet, net::SocketAddr, path::PathBuf, sync::OnceLock};
 
 use clap::Parser;
 use eyre::{Context, Result};
-use sonar::UserId;
+use serde::Serialize;
+use sonar::Properties;
 use tokio_stream::StreamExt;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 const IMPORT_FILETYPES: &[&str] = &["flac", "mp3", "ogg", "opus", "wav"];
+
 static SERVER_ENDPOINT: OnceLock<String> = OnceLock::new();
+static OUTPUT_JSON: OnceLock<bool> = OnceLock::new();
 
 #[derive(Debug, Parser)]
 struct ListParams {
@@ -22,38 +26,199 @@ struct Args {
     #[clap(long, default_value = "http://localhost:3000", env = "SONAR_SERVER")]
     server: String,
 
+    #[clap(long, env = "SONAR_JSON")]
+    json: bool,
+
     #[clap(subcommand)]
     command: Command,
 }
 
 #[derive(Debug, Parser)]
 enum Command {
-    User(UserArgs),
+    Login(LoginArgs),
+    Logout(LogoutArgs),
     Artist(ArtistArgs),
     Album(AlbumArgs),
-    //Track(TrackArgs),
+    Track(TrackArgs),
+    Playlist(PlaylistArgs),
+    Sync(SyncArgs),
+    Admin(AdminArgs),
     Import(ImportArgs),
     Metadata(MetadataArgs),
     Server(ServerArgs),
     Extractor(ExtractorArgs),
 }
 
+// Types used to generate json
+#[derive(Debug, Serialize)]
+struct User {
+    id: String,
+    username: String,
+    avatar: Option<String>,
+}
+
+impl std::fmt::Display for User {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\t{}", self.id, self.username)
+    }
+}
+
+impl From<sonar_grpc::User> for User {
+    fn from(value: sonar_grpc::User) -> Self {
+        Self {
+            id: value.user_id,
+            username: value.username,
+            avatar: value.avatar_id,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct Artist {
+    id: String,
+    name: String,
+    album_count: u32,
+    listen_count: u32,
+    coverart: Option<String>,
+    properties: Properties,
+}
+
+impl std::fmt::Display for Artist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\t{}", self.id, self.name)
+    }
+}
+
+impl From<sonar_grpc::Artist> for Artist {
+    fn from(value: sonar_grpc::Artist) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            album_count: value.album_count,
+            listen_count: value.listen_count,
+            coverart: value.coverart_id,
+            properties: properties_from_pb(value.properties),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct Album {
+    id: String,
+    name: String,
+    track_count: u32,
+    duration: Option<u32>,
+    listen_count: u32,
+    artist: String,
+    coverart: Option<String>,
+    properties: Properties,
+}
+
+impl std::fmt::Display for Album {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\t{}", self.id, self.name)
+    }
+}
+
+impl From<sonar_grpc::Album> for Album {
+    fn from(value: sonar_grpc::Album) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            track_count: value.track_count,
+            duration: value.duration.map(|x| x.seconds as u32),
+            listen_count: value.listen_count,
+            artist: value.artist_id,
+            coverart: value.coverart_id,
+            properties: properties_from_pb(value.properties),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct Track {
+    id: String,
+    name: String,
+    album: String,
+    artist: String,
+    duration: Option<u32>,
+    listen_count: u32,
+    properties: Properties,
+}
+
+impl std::fmt::Display for Track {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\t{}", self.id, self.name)
+    }
+}
+
+impl From<sonar_grpc::Track> for Track {
+    fn from(value: sonar_grpc::Track) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            album: value.album_id,
+            artist: value.artist_id,
+            duration: value.duration.map(|x| x.seconds as u32),
+            listen_count: value.listen_count,
+            properties: properties_from_pb(value.properties),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct Playlist {
+    id: String,
+    name: String,
+    track_count: u32,
+    duration: Option<u32>,
+    properties: Properties,
+}
+
+impl std::fmt::Display for Playlist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\t{}", self.id, self.name)
+    }
+}
+
+impl From<sonar_grpc::Playlist> for Playlist {
+    fn from(value: sonar_grpc::Playlist) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            track_count: value.track_count,
+            duration: value.duration.map(|x| x.seconds as u32),
+            properties: properties_from_pb(value.properties),
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
     color_eyre::install()?;
 
     let args = Args::parse();
 
+    if std::matches!(args.command, Command::Server(_)) {
+        let tracer = opentelemetry_jaeger::new_agent_pipeline()
+            .with_service_name("sonar")
+            .install_simple()?;
+
+        let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+        tracing_subscriber::registry()
+            .with(opentelemetry)
+            .with(tracing_subscriber::fmt::layer())
+            .try_init()?;
+    } else {
+        tracing_subscriber::fmt::init();
+    }
+
     SERVER_ENDPOINT.set(args.server.clone()).unwrap();
+    OUTPUT_JSON.set(args.json).unwrap();
 
     match args.command {
-        Command::User(cargs) => match cargs.command {
-            UserCommand::List(cargs) => cmd_user_list(cargs).await?,
-            UserCommand::Create(cargs) => cmd_user_create(cargs).await?,
-            UserCommand::Update(cargs) => cmd_user_update(cargs).await?,
-            UserCommand::Delete(cargs) => cmd_user_delete(cargs).await?,
-        },
+        Command::Login(args) => cmd_login(args).await?,
+        Command::Logout(args) => cmd_logout(args).await?,
         Command::Artist(cargs) => match cargs.command {
             ArtistCommand::List(cargs) => cmd_artist_list(cargs).await?,
             ArtistCommand::Create(cargs) => cmd_artist_create(cargs).await?,
@@ -65,6 +230,35 @@ async fn main() -> Result<()> {
             AlbumCommand::Create(cargs) => cmd_album_create(cargs).await?,
             AlbumCommand::Update(cargs) => cmd_album_update(cargs).await?,
             AlbumCommand::Delete(cargs) => cmd_album_delete(cargs).await?,
+        },
+        Command::Track(cargs) => match cargs.command {
+            TrackCommand::List(cargs) => cmd_track_list(cargs).await?,
+            TrackCommand::Create(cargs) => cmd_track_create(cargs).await?,
+            TrackCommand::Update(cargs) => cmd_track_update(cargs).await?,
+            TrackCommand::Delete(cargs) => cmd_track_delete(cargs).await?,
+            TrackCommand::Download(cargs) => cmd_track_download(cargs).await?,
+        },
+        Command::Playlist(cargs) => match cargs.command {
+            PlaylistCommand::List(cargs) => cmd_playlist_list(cargs).await?,
+            PlaylistCommand::Create(cargs) => cmd_playlist_create(cargs).await?,
+            PlaylistCommand::Delete(cargs) => cmd_playlist_delete(cargs).await?,
+            PlaylistCommand::Add(cargs) => cmd_playlist_add(cargs).await?,
+            PlaylistCommand::Remove(cargs) => cmd_playlist_remove(cargs).await?,
+        },
+        Command::Sync(cargs) => cmd_sync(cargs).await?,
+        Command::Admin(cargs) => match cargs.command {
+            AdminCommand::User(cargs) => match cargs.command {
+                AdminUserCommand::List(cargs) => cmd_admin_user_list(cargs).await?,
+                AdminUserCommand::Create(cargs) => cmd_admin_user_create(cargs).await?,
+                AdminUserCommand::Update(cargs) => cmd_admin_user_update(cargs).await?,
+                AdminUserCommand::Delete(cargs) => cmd_admin_user_delete(cargs).await?,
+            },
+            AdminCommand::Playlist(cargs) => match cargs.command {
+                AdminPlaylistCommand::List(cargs) => cmd_admin_playlist_list(cargs).await?,
+                AdminPlaylistCommand::Create(cargs) => cmd_admin_playlist_create(cargs).await?,
+                AdminPlaylistCommand::Update(cargs) => cmd_admin_playlist_update(cargs).await?,
+                AdminPlaylistCommand::Delete(cargs) => cmd_admin_playlist_delete(cargs).await?,
+            },
         },
         Command::Import(cargs) => cmd_import(cargs).await?,
         Command::Metadata(margs) => match margs.command {
@@ -88,96 +282,37 @@ async fn create_client() -> Result<sonar_grpc::Client> {
 }
 
 #[derive(Debug, Parser)]
-struct UserArgs {
-    #[clap(subcommand)]
-    command: UserCommand,
-}
-
-#[derive(Debug, Parser)]
-enum UserCommand {
-    List(UserListArgs),
-    Create(UserCreateArgs),
-    Update(UserUpdateArgs),
-    Delete(UserDeleteArgs),
-}
-
-#[derive(Debug, Parser)]
-struct UserListArgs {
-    #[clap(flatten)]
-    params: ListParams,
-}
-
-async fn cmd_user_list(args: UserListArgs) -> Result<()> {
-    let mut client = create_client().await?;
-    let response = client
-        .user_list(sonar_grpc::UserListRequest {
-            offset: args.params.offset,
-            count: args.params.limit,
-        })
-        .await?;
-    for user in response.into_inner().users {
-        println!("{:?}", user);
-    }
-    Ok(())
-}
-
-#[derive(Debug, Parser)]
-struct UserCreateArgs {
+struct LoginArgs {
     username: String,
 
     password: String,
-
-    #[clap(long)]
-    avatar: Option<PathBuf>,
 }
 
-async fn cmd_user_create(args: UserCreateArgs) -> Result<()> {
+async fn cmd_login(args: LoginArgs) -> Result<()> {
     let mut client = create_client().await?;
-    let image_id = match args.avatar {
-        Some(path) => {
-            tracing::info!("uploading avatar from {}", path.display());
-            let content = tokio::fs::read(path).await.context("reading avatar")?;
-            let response = client
-                .image_create(sonar_grpc::ImageCreateRequest { content })
-                .await
-                .context("uploading image")?;
-            Some(response.into_inner().image_id)
-        }
-        None => None,
-    };
-
     let response = client
-        .user_create(sonar_grpc::UserCreateRequest {
+        .user_login(sonar_grpc::UserLoginRequest {
             username: args.username,
             password: args.password,
-            avatar_id: image_id,
         })
         .await?;
-    println!("{:?}", response.into_inner());
-
+    let token = response.into_inner().token;
+    auth_token_write(&token).await?;
     Ok(())
 }
 
 #[derive(Debug, Parser)]
-struct UserUpdateArgs {}
+struct LogoutArgs {}
 
-async fn cmd_user_update(_args: UserUpdateArgs) -> Result<()> {
-    todo!()
-}
-
-#[derive(Debug, Parser)]
-struct UserDeleteArgs {
-    id: UserId,
-}
-
-async fn cmd_user_delete(args: UserDeleteArgs) -> Result<()> {
+async fn cmd_logout(_args: LogoutArgs) -> Result<()> {
     let mut client = create_client().await?;
-    let response = client
-        .user_delete(sonar_grpc::UserDeleteRequest {
-            user_id: args.id.to_string(),
+    let token = auth_token_read().await?;
+    client
+        .user_logout(sonar_grpc::UserLogoutRequest {
+            token: token.as_str().to_string(),
         })
         .await?;
-    println!("{:?}", response.into_inner());
+    auth_token_delete().await?;
     Ok(())
 }
 
@@ -209,9 +344,13 @@ async fn cmd_artist_list(args: ArtistListArgs) -> Result<()> {
             count: args.params.limit,
         })
         .await?;
-    for artist in response.into_inner().artists {
-        println!("{:?}", artist);
-    }
+    let artists = response
+        .into_inner()
+        .artists
+        .into_iter()
+        .map(Artist::from)
+        .collect::<Vec<_>>();
+    stdout_values(&artists)?;
     Ok(())
 }
 
@@ -248,7 +387,8 @@ async fn cmd_artist_create(args: ArtistCreateArgs) -> Result<()> {
             ..Default::default()
         })
         .await?;
-    println!("{:?}", response.into_inner());
+    let artist = Artist::from(response.into_inner());
+    stdout_value(&artist)?;
 
     Ok(())
 }
@@ -295,11 +435,13 @@ async fn cmd_album_list(args: AlbumListArgs) -> Result<()> {
             count: args.params.limit,
         })
         .await?;
-    for album in response.into_inner().albums {
-        let album_id = album.id;
-        let album_name = album.name;
-        println!("{}\t{}", album_id, album_name);
-    }
+    let albums = response
+        .into_inner()
+        .albums
+        .into_iter()
+        .map(Album::from)
+        .collect::<Vec<_>>();
+    stdout_values(&albums)?;
     Ok(())
 }
 
@@ -331,6 +473,325 @@ async fn cmd_album_update(_args: AlbumUpdateArgs) -> Result<()> {
 struct AlbumDeleteArgs {}
 
 async fn cmd_album_delete(_args: AlbumDeleteArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct TrackArgs {
+    #[clap(subcommand)]
+    command: TrackCommand,
+}
+
+#[derive(Debug, Parser)]
+enum TrackCommand {
+    List(TrackListArgs),
+    Create(TrackCreateArgs),
+    Update(TrackUpdateArgs),
+    Delete(TrackDeleteArgs),
+    Download(TrackDownloadArgs),
+}
+
+#[derive(Debug, Parser)]
+struct TrackListArgs {
+    #[clap(flatten)]
+    params: ListParams,
+}
+
+async fn cmd_track_list(args: TrackListArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .track_list(sonar_grpc::TrackListRequest {
+            offset: args.params.offset,
+            count: args.params.limit,
+        })
+        .await?;
+    let tracks = response
+        .into_inner()
+        .tracks
+        .into_iter()
+        .map(Track::from)
+        .collect::<Vec<_>>();
+    stdout_values(&tracks)?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct TrackCreateArgs {
+    album_id: sonar::AlbumId,
+
+    name: String,
+
+    #[clap(long)]
+    cover_art: Option<PathBuf>,
+
+    #[clap(long, default_value = "")]
+    genres: sonar::Genres,
+}
+
+async fn cmd_track_create(_args: TrackCreateArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct TrackUpdateArgs {}
+
+async fn cmd_track_update(_args: TrackUpdateArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct TrackDeleteArgs {}
+
+async fn cmd_track_delete(_args: TrackDeleteArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct TrackDownloadArgs {
+    id: sonar::TrackId,
+
+    #[clap(long)]
+    output: Option<PathBuf>,
+}
+
+async fn cmd_track_download(args: TrackDownloadArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct PlaylistArgs {
+    #[clap(subcommand)]
+    command: PlaylistCommand,
+}
+
+#[derive(Debug, Parser)]
+enum PlaylistCommand {
+    List(PlaylistListArgs),
+    Create(PlaylistCreateArgs),
+    Delete(PlaylistDeleteArgs),
+    Add(PlaylistAddArgs),
+    Remove(PlaylistRemoveArgs),
+}
+
+#[derive(Debug, Parser)]
+struct PlaylistListArgs {
+    #[clap(flatten)]
+    params: ListParams,
+}
+
+async fn cmd_playlist_list(args: PlaylistListArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .playlist_list(sonar_grpc::PlaylistListRequest {
+            offset: args.params.offset,
+            count: args.params.limit,
+        })
+        .await?;
+    let playlists = response
+        .into_inner()
+        .playlists
+        .into_iter()
+        .map(Playlist::from)
+        .collect::<Vec<_>>();
+    stdout_values(&playlists)?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct PlaylistCreateArgs {
+    name: String,
+}
+
+async fn cmd_playlist_create(args: PlaylistCreateArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct PlaylistDeleteArgs {
+    id: sonar::PlaylistId,
+}
+
+async fn cmd_playlist_delete(args: PlaylistDeleteArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct PlaylistAddArgs {
+    playlist_id: sonar::PlaylistId,
+
+    track_ids: Vec<sonar::TrackId>,
+}
+
+async fn cmd_playlist_add(args: PlaylistAddArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct PlaylistRemoveArgs {
+    playlist_id: sonar::PlaylistId,
+
+    track_ids: Vec<sonar::TrackId>,
+}
+
+async fn cmd_playlist_remove(args: PlaylistRemoveArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct SyncArgs {}
+
+async fn cmd_sync(_args: SyncArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct AdminArgs {
+    #[clap(subcommand)]
+    command: AdminCommand,
+}
+
+#[derive(Debug, Parser)]
+enum AdminCommand {
+    User(AdminUserArgs),
+    Playlist(AdminPlaylistArgs),
+}
+
+#[derive(Debug, Parser)]
+struct AdminUserArgs {
+    #[clap(subcommand)]
+    command: AdminUserCommand,
+}
+
+#[derive(Debug, Parser)]
+enum AdminUserCommand {
+    List(AdminUserListArgs),
+    Create(AdminUserCreateArgs),
+    Update(AdminUserUpdateArgs),
+    Delete(AdminUserDeleteArgs),
+}
+
+#[derive(Debug, Parser)]
+struct AdminUserListArgs {
+    #[clap(flatten)]
+    params: ListParams,
+}
+
+async fn cmd_admin_user_list(args: AdminUserListArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .user_list(sonar_grpc::UserListRequest {
+            offset: args.params.offset,
+            count: args.params.limit,
+        })
+        .await?;
+    for user in response.into_inner().users {
+        println!("{:?}", user);
+    }
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct AdminUserCreateArgs {
+    username: String,
+
+    password: String,
+
+    #[clap(long)]
+    avatar: Option<PathBuf>,
+}
+
+async fn cmd_admin_user_create(args: AdminUserCreateArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let image_id = match args.avatar {
+        Some(path) => {
+            tracing::info!("uploading avatar from {}", path.display());
+            let content = tokio::fs::read(path).await.context("reading avatar")?;
+            let response = client
+                .image_create(sonar_grpc::ImageCreateRequest { content })
+                .await
+                .context("uploading image")?;
+            Some(response.into_inner().image_id)
+        }
+        None => None,
+    };
+
+    let response = client
+        .user_create(sonar_grpc::UserCreateRequest {
+            username: args.username,
+            password: args.password,
+            avatar_id: image_id,
+        })
+        .await?;
+    println!("{:?}", response.into_inner());
+
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct AdminUserUpdateArgs {}
+
+async fn cmd_admin_user_update(_args: AdminUserUpdateArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct AdminUserDeleteArgs {
+    id: sonar::UserId,
+}
+
+async fn cmd_admin_user_delete(args: AdminUserDeleteArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .user_delete(sonar_grpc::UserDeleteRequest {
+            user_id: args.id.to_string(),
+        })
+        .await?;
+    println!("{:?}", response.into_inner());
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct AdminPlaylistArgs {
+    #[clap(subcommand)]
+    command: AdminPlaylistCommand,
+}
+
+#[derive(Debug, Parser)]
+enum AdminPlaylistCommand {
+    List(AdminPlaylistListArgs),
+    Create(AdminPlaylistCreateArgs),
+    Update(AdminPlaylistUpdateArgs),
+    Delete(AdminPlaylistDeleteArgs),
+}
+
+#[derive(Debug, Parser)]
+struct AdminPlaylistListArgs {
+    #[clap(flatten)]
+    params: ListParams,
+}
+
+async fn cmd_admin_playlist_list(args: AdminPlaylistListArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct AdminPlaylistCreateArgs {}
+
+async fn cmd_admin_playlist_create(_args: AdminPlaylistCreateArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct AdminPlaylistUpdateArgs {}
+
+async fn cmd_admin_playlist_update(_args: AdminPlaylistUpdateArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct AdminPlaylistDeleteArgs {}
+
+async fn cmd_admin_playlist_delete(_args: AdminPlaylistDeleteArgs) -> Result<()> {
     todo!()
 }
 
@@ -565,4 +1026,78 @@ async fn list_files_in_directories(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> 
         }
     }
     Ok(files)
+}
+
+fn auth_token_path() -> PathBuf {
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .expect("failed to get home dir")
+        .join(".config")
+        .join("sonar")
+        .join("auth_token")
+}
+
+async fn auth_token_read() -> Result<String> {
+    let path = auth_token_path();
+    let token = tokio::fs::read_to_string(path)
+        .await
+        .context("reading auth token")?;
+    Ok(token)
+}
+
+async fn auth_token_write(token: &str) -> Result<()> {
+    let path = auth_token_path();
+    tokio::fs::create_dir_all(path.parent().unwrap())
+        .await
+        .context("creating auth token dir")?;
+    tokio::fs::write(path, token)
+        .await
+        .context("writing auth token")?;
+    Ok(())
+}
+
+async fn auth_token_delete() -> Result<()> {
+    let path = auth_token_path();
+    tokio::fs::remove_file(path)
+        .await
+        .context("removing auth token")?;
+    Ok(())
+}
+
+fn properties_from_pb(properties: Vec<sonar_grpc::Property>) -> sonar::Properties {
+    let mut props = sonar::Properties::new();
+    for property in properties {
+        let key = property.key.parse::<sonar::PropertyKey>().unwrap();
+        let value = property.value.parse::<sonar::PropertyValue>().unwrap();
+        props.insert(key, value);
+    }
+    props
+}
+
+fn stdout_value<T: std::fmt::Display + Serialize>(value: T) -> Result<()> {
+    use std::io::Write;
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+    if *OUTPUT_JSON.get().unwrap() {
+        serde_json::to_writer_pretty(&mut stdout, &value)?;
+        writeln!(stdout)?;
+    } else {
+        writeln!(stdout, "{}", value)?;
+    }
+    Ok(())
+}
+
+fn stdout_values<T: std::fmt::Display + Serialize>(values: &[T]) -> Result<()> {
+    use std::io::Write;
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+    if *OUTPUT_JSON.get().unwrap() {
+        serde_json::to_writer_pretty(&mut stdout, &values)?;
+        writeln!(stdout)?;
+    } else {
+        for value in values {
+            writeln!(stdout, "{}", value)?;
+        }
+    }
+    Ok(())
 }

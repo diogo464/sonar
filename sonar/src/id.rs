@@ -261,6 +261,57 @@ impl FromStr for SonarId {
     }
 }
 
+impl SonarIdentifier for SonarId {
+    fn name(&self) -> &'static str {
+        match self {
+            SonarId::Artist(id) => id.name(),
+            SonarId::Album(id) => id.name(),
+            SonarId::Track(id) => id.name(),
+            SonarId::Playlist(id) => id.name(),
+            SonarId::Audio(id) => id.name(),
+            SonarId::Image(id) => id.name(),
+            SonarId::User(id) => id.name(),
+            SonarId::Lyrics(id) => id.name(),
+            SonarId::Scrobble(id) => id.name(),
+        }
+    }
+
+    fn namespace(&self) -> u32 {
+        match self {
+            SonarId::Artist(id) => id.namespace(),
+            SonarId::Album(id) => id.namespace(),
+            SonarId::Track(id) => id.namespace(),
+            SonarId::Playlist(id) => id.namespace(),
+            SonarId::Audio(id) => id.namespace(),
+            SonarId::Image(id) => id.namespace(),
+            SonarId::User(id) => id.namespace(),
+            SonarId::Lyrics(id) => id.namespace(),
+            SonarId::Scrobble(id) => id.namespace(),
+        }
+    }
+
+    fn identifier(&self) -> u32 {
+        match self {
+            SonarId::Artist(id) => id.identifier(),
+            SonarId::Album(id) => id.identifier(),
+            SonarId::Track(id) => id.identifier(),
+            SonarId::Playlist(id) => id.identifier(),
+            SonarId::Audio(id) => id.identifier(),
+            SonarId::Image(id) => id.identifier(),
+            SonarId::User(id) => id.identifier(),
+            SonarId::Lyrics(id) => id.identifier(),
+            SonarId::Scrobble(id) => id.identifier(),
+        }
+    }
+}
+
+impl SonarId {
+    pub(crate) fn from_type_and_id(ty: u32, id: u32) -> Result<SonarId, InvalidIdError> {
+        let id = id | ty << ID_TYPE_SHIFT;
+        TryFrom::try_from(id)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

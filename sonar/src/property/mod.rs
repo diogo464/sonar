@@ -11,7 +11,7 @@ pub use property_value::*;
 mod property_update;
 pub use property_update::*;
 
-use crate::{db::DbC, Result, SonarIdentifier};
+use crate::{db::DbC, Result, SonarId, SonarIdentifier, UserId};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Properties(HashMap<Cow<'static, str>, Cow<'static, str>>);
@@ -154,7 +154,11 @@ impl<'a> IntoIterator for &'a Properties {
     }
 }
 
-pub async fn set(db: &mut DbC, id: impl SonarIdentifier, properties: &Properties) -> Result<()> {
+pub(crate) async fn set(
+    db: &mut DbC,
+    id: impl SonarIdentifier,
+    properties: &Properties,
+) -> Result<()> {
     clear(db, id).await?;
 
     let namespace = id.namespace();
@@ -176,11 +180,11 @@ pub async fn set(db: &mut DbC, id: impl SonarIdentifier, properties: &Properties
     Ok(())
 }
 
-pub async fn get(db: &mut DbC, id: impl SonarIdentifier) -> Result<Properties> {
+pub(crate) async fn get(db: &mut DbC, id: impl SonarIdentifier) -> Result<Properties> {
     let namespace = id.namespace();
     let identifier = id.identifier();
     let rows = sqlx::query!(
-        "SELECT key, value FROM property WHERE namespace = ? AND identifier = ?",
+        "SELECT key, value FROM property WHERE namespace = ? AND identifier = ? AND user IS NULL",
         namespace,
         identifier
     )
@@ -193,7 +197,7 @@ pub async fn get(db: &mut DbC, id: impl SonarIdentifier) -> Result<Properties> {
     Ok(properties)
 }
 
-pub async fn get_bulk(
+pub(crate) async fn get_bulk(
     db: &mut DbC,
     ids: impl Iterator<Item = impl SonarIdentifier>,
 ) -> Result<Vec<Properties>> {
@@ -204,7 +208,7 @@ pub async fn get_bulk(
     Ok(properties)
 }
 
-pub async fn update(
+pub(crate) async fn update(
     db: &mut DbC,
     id: impl SonarIdentifier,
     updates: &[PropertyUpdate],
@@ -229,7 +233,7 @@ pub async fn update(
             PropertyUpdateAction::Remove => {
                 let key = update.key.as_str();
                 sqlx::query!(
-                    "DELETE FROM property WHERE namespace = ? AND identifier = ? AND key = ?",
+                    "DELETE FROM property WHERE namespace = ? AND identifier = ? AND key = ? AND user IS NULL",
                     namespace,
                     identifier,
                     key
@@ -242,15 +246,209 @@ pub async fn update(
     Ok(())
 }
 
-pub async fn clear(db: &mut DbC, id: impl SonarIdentifier) -> Result<()> {
+pub(crate) async fn clear(db: &mut DbC, id: impl SonarIdentifier) -> Result<()> {
     let namespace = id.namespace();
     let identifier = id.identifier();
     sqlx::query!(
-        "DELETE FROM property WHERE namespace = ? AND identifier = ?",
+        "DELETE FROM property WHERE namespace = ? AND identifier = ? AND user IS NULL",
         namespace,
         identifier
     )
     .execute(&mut *db)
     .await?;
     Ok(())
+}
+
+pub(crate) async fn user_set(
+    db: &mut DbC,
+    user: UserId,
+    id: impl SonarIdentifier,
+    properties: &Properties,
+) -> Result<()> {
+    user_clear(db, user, id).await?;
+
+    let namespace = id.namespace();
+    let identifier = id.identifier();
+    for (key, value) in properties {
+        let key = key.as_str();
+        let value = value.as_str();
+        sqlx::query!(
+            "INSERT INTO property (namespace, identifier, key, value, user) VALUES (?, ?, ?, ?, ?)",
+            namespace,
+            identifier,
+            key,
+            value,
+            user
+        )
+        .execute(&mut *db)
+        .await?;
+    }
+
+    Ok(())
+}
+
+pub(crate) async fn user_get(
+    db: &mut DbC,
+    user: UserId,
+    id: impl SonarIdentifier,
+) -> Result<Properties> {
+    let namespace = id.namespace();
+    let identifier = id.identifier();
+    let rows = sqlx::query!(
+        "SELECT key, value FROM property WHERE namespace = ? AND identifier = ? AND user = ?",
+        namespace,
+        identifier,
+        user
+    )
+    .fetch_all(&mut *db)
+    .await?;
+    let mut properties = Properties::with_capacity(rows.len());
+    for row in rows {
+        properties.insert(PropertyKey(row.key.into()), PropertyValue(row.value.into()));
+    }
+    Ok(properties)
+}
+
+pub(crate) async fn user_get_bulk(
+    db: &mut DbC,
+    user: UserId,
+    ids: impl IntoIterator<Item = impl SonarIdentifier>,
+) -> Result<Vec<Properties>> {
+    let mut properties = Vec::new();
+    for id in ids {
+        properties.push(user_get(db, user, id).await?);
+    }
+    Ok(properties)
+}
+
+pub(crate) async fn user_clear(db: &mut DbC, user: UserId, id: impl SonarIdentifier) -> Result<()> {
+    let namespace = id.namespace();
+    let identifier = id.identifier();
+    sqlx::query!(
+        "DELETE FROM property WHERE namespace = ? AND identifier = ? AND user = ?",
+        namespace,
+        identifier,
+        user
+    )
+    .execute(&mut *db)
+    .await?;
+    Ok(())
+}
+
+pub(crate) async fn user_update(
+    db: &mut DbC,
+    user: UserId,
+    id: impl SonarIdentifier,
+    update: &[PropertyUpdate],
+) -> Result<()> {
+    let namespace = id.namespace();
+    let identifier = id.identifier();
+    for update in update {
+        match &update.action {
+            PropertyUpdateAction::Set(value) => {
+                let key = update.key.as_str();
+                let value = value.as_str();
+                sqlx::query!(
+                    "INSERT OR REPLACE INTO property (namespace, identifier, key, value, user) VALUES (?, ?, ?, ?, ?)",
+                    namespace,
+                    identifier,
+                    key,
+                    value,
+                    user
+                )
+                .execute(&mut *db)
+                .await?;
+            }
+            PropertyUpdateAction::Remove => {
+                let key = update.key.as_str();
+                sqlx::query!(
+                    "DELETE FROM property WHERE namespace = ? AND identifier = ? AND key = ? AND user = ?",
+                    namespace,
+                    identifier,
+                    key,
+                    user
+                )
+                .execute(&mut *db)
+                .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) async fn user_list_with_property(
+    db: &mut DbC,
+    user: UserId,
+    key: &PropertyKey,
+) -> Result<Vec<SonarId>> {
+    let key = key.as_str();
+    let rows = sqlx::query!(
+        "SELECT namespace, identifier FROM property WHERE key = ? AND user = ?",
+        key,
+        user
+    )
+    .fetch_all(&mut *db)
+    .await?;
+    let mut ids = Vec::with_capacity(rows.len());
+    for row in rows {
+        ids.push(
+            SonarId::from_type_and_id(row.namespace as u32, row.identifier as u32)
+                .expect("invalid id in database"),
+        );
+    }
+    Ok(ids)
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ArtistId;
+
+    use super::*;
+
+    fn create_simple_properties() -> Properties {
+        let mut properties = crate::Properties::default();
+        properties.insert(
+            crate::PropertyKey::new_uncheked("key1"),
+            crate::PropertyValue::new_uncheked("value1"),
+        );
+        properties.insert(
+            crate::PropertyKey::new_uncheked("key2"),
+            crate::PropertyValue::new_uncheked("value2"),
+        );
+        properties
+    }
+
+    #[tokio::test]
+    async fn test_set_properties() {
+        let context = crate::test::create_context_memory().await;
+        let mut db = context.db.acquire().await.unwrap();
+        let properties = create_simple_properties();
+
+        let id = ArtistId::from_db(1);
+        super::set(&mut db, id, &properties).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_properties() {
+        let context = crate::test::create_context_memory().await;
+        let mut db = context.db.acquire().await.unwrap();
+
+        let id = ArtistId::from_db(1);
+        let properties = super::get(&mut db, id).await.unwrap();
+        assert_eq!(properties.len(), 0);
+
+        let properties = create_simple_properties();
+        super::set(&mut db, id, &properties).await.unwrap();
+
+        let properties = super::get(&mut db, id).await.unwrap();
+        assert_eq!(properties.len(), 2);
+        assert_eq!(
+            properties.get("key1").unwrap().as_str(),
+            "value1".to_owned()
+        );
+        assert_eq!(
+            properties.get("key2").unwrap().as_str(),
+            "value2".to_owned()
+        );
+    }
 }

@@ -3,6 +3,9 @@ use crate::{db::DbC, Error, ErrorKind, ImageId, ListParams, Result, UserId, Valu
 mod username;
 pub use username::*;
 
+mod token;
+pub use token::*;
+
 const PASSWORD_MIN_LENGTH: usize = 8;
 const PASSWORD_MAX_LENGTH: usize = 48;
 
@@ -43,6 +46,7 @@ impl UserView {
     }
 }
 
+#[tracing::instrument]
 pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<User>> {
     let (offset, limit) = params.to_db_offset_limit();
     let views = sqlx::query_as!(
@@ -62,6 +66,7 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<User>> {
     Ok(users)
 }
 
+#[tracing::instrument]
 pub async fn create(db: &mut DbC, create: UserCreate) -> Result<User> {
     validate_password(&create.password)?;
     let username = create.username.as_str();
@@ -82,6 +87,7 @@ VALUES (?, ?, ?) RETURNING id
     get(db, UserId::from_db(user_id)).await
 }
 
+#[tracing::instrument]
 pub async fn get(db: &mut DbC, user_id: UserId) -> Result<User> {
     let user_id = user_id.to_db();
     let user_view = sqlx::query_as!(
@@ -94,6 +100,7 @@ pub async fn get(db: &mut DbC, user_id: UserId) -> Result<User> {
     Ok(user_view.into_user())
 }
 
+#[tracing::instrument]
 pub async fn delete(db: &mut DbC, user_id: UserId) -> Result<()> {
     let user_id = user_id.to_db();
     sqlx::query!("DELETE FROM user WHERE id = ?", user_id)
@@ -102,6 +109,7 @@ pub async fn delete(db: &mut DbC, user_id: UserId) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument]
 pub async fn authenticate(db: &mut DbC, username: &Username, password: &str) -> Result<UserId> {
     let username = username.as_str();
     let row = sqlx::query!(

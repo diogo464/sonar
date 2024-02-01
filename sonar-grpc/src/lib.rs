@@ -72,6 +72,29 @@ impl sonar_service_server::SonarService for Server {
         sonar::user_delete(&self.context, user_id).await.m()?;
         Ok(tonic::Response::new(()))
     }
+    async fn user_login(
+        &self,
+        request: tonic::Request<UserLoginRequest>,
+    ) -> std::result::Result<tonic::Response<UserLoginResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let username = req.username.parse::<sonar::Username>().m()?;
+        let password = req.password;
+        let user_token = sonar::user_login(&self.context, &username, &password)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(UserLoginResponse {
+            token: user_token.to_string(),
+        }))
+    }
+    async fn user_logout(
+        &self,
+        request: tonic::Request<UserLogoutRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let req = request.into_inner();
+        let user_token = req.token.parse::<sonar::UserToken>().m()?;
+        sonar::user_logout(&self.context, &user_token).await.m()?;
+        Ok(tonic::Response::new(()))
+    }
     async fn image_create(
         &self,
         request: tonic::Request<ImageCreateRequest>,

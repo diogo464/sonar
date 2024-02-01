@@ -2,21 +2,36 @@
 
 -- TABLE DEFINITIONS
 
+CREATE TABLE user (
+	id			INTEGER PRIMARY KEY NOT NULL,
+	username		TEXT NOT NULL UNIQUE,
+	-- scrypt PHC string
+	password_hash		TEXT NOT NULL DEFAULT '',
+	avatar			INTEGER REFERENCES image(id),
+	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX user_username ON user(username);
+
 CREATE TABLE property (
 	namespace	INTEGER NOT NULL,
 	identifier	INTEGER NOT NULL,
-	key			TEXT NOT NULL,
+	user		INTEGER REFERENCES user(id) DEFAULT NULL,
+	key		TEXT NOT NULL,
 	value		TEXT NOT NULL,
 	PRIMARY KEY (namespace, identifier, key),
-	UNIQUE(namespace, identifier, key)
+	UNIQUE(namespace, identifier, user, key)
 );
 CREATE INDEX property_key ON property(key);
+CREATE INDEX property_user_key ON property(user, key);
 CREATE INDEX property_key_value ON property(key, value);
+CREATE INDEX property_user_key_value ON property(user, key ,value);
 CREATE INDEX property_namespace_identifier ON property(namespace, identifier);
+CREATE INDEX property_namespace_identifier_key ON property(namespace, identifier, key);
+CREATE INDEX property_namespace_identifier_user_key ON property(namespace, identifier, user, key);
 
 CREATE TABLE blob (
-	id		INTEGER PRIMARY KEY NOT NULL,
-	key		TEXT NOT NULL UNIQUE,
+	id	INTEGER PRIMARY KEY NOT NULL,
+	key	TEXT NOT NULL UNIQUE,
 	size	INTEGER NOT NULL,
 	sha256	TEXT NOT NULL CHECK(LENGTH(sha256) = 64)
 );
@@ -24,17 +39,17 @@ CREATE INDEX blob_key ON blob(key);
 CREATE INDEX blob_sha256 ON blob(sha256);
 
 CREATE TABLE image (
-	id			INTEGER PRIMARY KEY NOT NULL,
+	id		INTEGER PRIMARY KEY NOT NULL,
 	blob		INTEGER NOT NULL REFERENCES blob(id),
 	mime_type	TEXT NOT NULL,
 	created_at	INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
 CREATE TABLE audio (
-	id				INTEGER PRIMARY KEY NOT NULL,
+	id			INTEGER PRIMARY KEY NOT NULL,
 	bitrate			INTEGER NOT NULL,
 	duration_ms		INTEGER NOT NULL,
-	num_channels	INTEGER NOT NULL,
+	num_channels		INTEGER NOT NULL,
 	sample_freq		INTEGER NOT NULL,
 	mime_type		TEXT NOT NULL,
 	blob			INTEGER NOT NULL REFERENCES blob(id),
@@ -42,39 +57,29 @@ CREATE TABLE audio (
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
-CREATE TABLE user (
-	id				INTEGER PRIMARY KEY NOT NULL,
-	username		TEXT NOT NULL UNIQUE,
-	-- scrypt PHC string
-	password_hash	TEXT NOT NULL DEFAULT '',
-	avatar			INTEGER REFERENCES image(id),
-	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
-);
-CREATE INDEX user_username ON user(username);
-
 CREATE TABLE artist (
-	id				INTEGER PRIMARY KEY NOT NULL,
+	id			INTEGER PRIMARY KEY NOT NULL,
 	name 			TEXT NOT NULL,
-	listen_count	INTEGER NOT NULL DEFAULT 0,
+	listen_count		INTEGER NOT NULL DEFAULT 0,
 	cover_art		INTEGER REFERENCES image(id),
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
 CREATE TABLE album (
-	id				INTEGER PRIMARY KEY NOT NULL,
+	id			INTEGER PRIMARY KEY NOT NULL,
 	name			TEXT NOT NULL,
 	artist			INTEGER NOT NULL REFERENCES artist(id),
-	listen_count	INTEGER NOT NULL DEFAULT 0,
+	listen_count		INTEGER NOT NULL DEFAULT 0,
 	cover_art		INTEGER REFERENCES image(id),
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
 CREATE INDEX album_artist ON album(artist);
 
 CREATE TABLE track (
-	id				INTEGER PRIMARY KEY NOT NULL,
+	id			INTEGER PRIMARY KEY NOT NULL,
 	name			TEXT NOT NULL DEFAULT '',
 	album			INTEGER NOT NULL REFERENCES album(id),
-	listen_count	INTEGER NOT NULL DEFAULT 0,
+	listen_count		INTEGER NOT NULL DEFAULT 0,
 	cover_art		INTEGER REFERENCES image(id),
 	-- S : Synced lyrics, U : Unsynced lyrics
 	lyrics_kind		TEXT CHECK (lyrics_kind IS NULL OR lyrics_kind IN ('S', 'U')),
@@ -101,7 +106,7 @@ CREATE INDEX track_audio_audio ON track_audio(audio);
 CREATE INDEX track_audio_track_audio ON track_audio(track, audio);
 
 CREATE TABLE playlist (
-	id			INTEGER PRIMARY KEY NOT NULL,
+	id		INTEGER PRIMARY KEY NOT NULL,
 	owner		INTEGER NOT NULL REFERENCES user(id),
 	name		TEXT NOT NULL DEFAULT '',
 	created_at	INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -118,12 +123,12 @@ CREATE TABLE playlist_track (
 CREATE INDEX playlist_track_playlist ON playlist_track(playlist);
 
 CREATE TABLE scrobble (
-	id				INTEGER PRIMARY KEY NOT NULL,
+	id			INTEGER PRIMARY KEY NOT NULL,
 	user			INTEGER NOT NULL REFERENCES user(id),
 	track			INTEGER NOT NULL REFERENCES track(id),
 	listen_at		INTEGER NOT NULL,
 	listen_secs		INTEGER NOT NULL,
-	listen_device	TEXT NOT NULL DEFAULT '',
+	listen_device		TEXT NOT NULL DEFAULT '',
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
 

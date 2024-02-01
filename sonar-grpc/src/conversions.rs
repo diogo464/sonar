@@ -45,7 +45,7 @@ impl From<sonar::Album> for Album {
             track_count: value.track_count,
             duration: Some(TryFrom::try_from(value.duration).expect("failed to convert duration")),
             listen_count: value.listen_count,
-            artists: vec![From::from(value.artist)],
+            artist_id: value.artist.to_string(),
             coverart_id: value.cover_art.map(|id| id.to_string()),
             properties: convert_properties_to_pb(value.properties),
         }
@@ -90,8 +90,8 @@ impl From<sonar::Track> for Track {
         Self {
             id: value.id.to_string(),
             name: value.name,
-            artist_id: From::from(value.artist),
-            album_id: From::from(value.album),
+            artist_id: value.artist.to_string(),
+            album_id: value.album.to_string(),
             duration: Some(TryFrom::try_from(value.duration).expect("failed to convert duration")),
             listen_count: value.listen_count,
             cover_art_id: value.cover_art.map(|id| id.to_string()),

@@ -48,10 +48,16 @@ pub use genre::{Genre, GenreUpdateAction, Genres, InvalidGenreError};
 pub use image::{ImageCreate, ImageDownload};
 pub use importer::Import;
 pub use playlist::{Playlist, PlaylistCreate, PlaylistTrack, PlaylistUpdate};
-pub use property::*;
+pub use property::{
+    InvalidPropertyKeyError, InvalidPropertyValueError, Properties, PropertyKey, PropertyUpdate,
+    PropertyUpdateAction, PropertyValue,
+};
 pub use scrobble::{Scrobble, ScrobbleCreate, ScrobbleUpdate};
 pub use track::{Lyrics, LyricsKind, Track, TrackCreate, TrackLyrics, TrackUpdate};
-pub use user::{InvalidUsernameError, User, UserCreate, UserUpdate, Username};
+pub use user::{
+    InvalidUserTokenError, InvalidUsernameError, User, UserCreate, UserToken, UserUpdate, Username,
+};
 
 pub use async_trait::async_trait;
 pub use bytes;
+pub use chrono;

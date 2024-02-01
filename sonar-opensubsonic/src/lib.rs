@@ -2,10 +2,13 @@ use std::{collections::HashMap, net::SocketAddr};
 
 use eyre::Context;
 use opensubsonic::service::prelude::*;
+use sonar::PropertyKey;
 use tower_http::cors::Any;
 
-const FAVORITES_PLAYLIST_NAME: &str = "favorites";
+const PROPERTY_USER_STARRED: PropertyKey =
+    PropertyKey::new_const("user.opensubsonic.sonar.io/starred");
 
+#[derive(Debug)]
 struct Server {
     context: sonar::Context,
 }
@@ -37,10 +40,13 @@ impl Server {
 
 #[opensubsonic::async_trait]
 impl OpenSubsonicServer for Server {
+    #[tracing::instrument]
     async fn ping(&self, request: Request<Ping>) -> Result<()> {
         let _user_id = self.authenticate(&request).await?;
         Ok(())
     }
+
+    #[tracing::instrument]
     async fn get_artists(&self, _request: Request<GetArtists>) -> Result<ArtistsID3> {
         let artists = sonar::artist_list(&self.context, Default::default())
             .await
@@ -65,6 +71,8 @@ impl OpenSubsonicServer for Server {
             ignored_articles: Default::default(),
         })
     }
+
+    #[tracing::instrument]
     async fn get_artist_info2(&self, _request: Request<GetArtistInfo2>) -> Result<ArtistInfo2> {
         Ok(ArtistInfo2 {
             info: ArtistInfoBase {
@@ -76,30 +84,28 @@ impl OpenSubsonicServer for Server {
             similar_artist: Default::default(),
         })
     }
+
+    #[tracing::instrument]
     async fn get_artist(&self, request: Request<GetArtist>) -> Result<ArtistWithAlbumsID3> {
         let artist_id = request.body.id.parse::<sonar::ArtistId>().m()?;
         let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
         let albums = sonar::album_list_by_artist(&self.context, artist_id, Default::default())
             .await
             .m()?;
-        Ok(ArtistWithAlbumsID3 {
-            artist: ArtistID3 {
-                id: artist.id.to_string(),
-                name: artist.name.clone(),
-                artist_image_url: None,
-                starred: None,
-                album_count: artist.album_count,
-                cover_art: artist.cover_art.map(|id| id.to_string()),
-            },
-            album: albums
-                .into_iter()
-                .map(|album| albumid3_from_album_and_artist(&artist, album))
-                .collect(),
-        })
+        let album = albums
+            .into_iter()
+            .map(|album| albumid3_from_album_and_artist(&artist, album))
+            .collect();
+        let artist = artistid3_from_artist(artist);
+        Ok(ArtistWithAlbumsID3 { artist, album })
     }
+
+    #[tracing::instrument]
     async fn get_top_songs(&self, _request: Request<GetTopSongs>) -> Result<TopSongs> {
         Ok(Default::default())
     }
+
+    #[tracing::instrument]
     async fn get_album(&self, request: Request<GetAlbum>) -> Result<AlbumWithSongsID3> {
         let album_id = request.body.id.parse::<sonar::AlbumId>().m()?;
         let album = sonar::album_get(&self.context, album_id).await.m()?;
@@ -117,77 +123,94 @@ impl OpenSubsonicServer for Server {
             song,
         })
     }
+
+    #[tracing::instrument]
     async fn get_album_list2(&self, request: Request<GetAlbumList2>) -> Result<AlbumList2> {
-        // TODO: implement list types
+        let user_id = self.authenticate(&request).await?;
         let params = sonar::ListParams::from((request.body.offset, request.body.size));
         let albums = sonar::album_list(&self.context, params).await.m()?;
         let albums = sonar::ext::albums_map(albums);
         let artists = sonar::ext::artist_bulk_map(&self.context, albums.values().map(|v| v.artist))
             .await
             .m()?;
-        let album = multi_albumid3_from_album_and_artist(&artists, &albums);
+        let album_properties = sonar::ext::user_property_bulk_map(
+            &self.context,
+            user_id,
+            albums.keys().copied().map(sonar::SonarId::from),
+        )
+        .await
+        .m()?;
+        let album = multi_albumid3_from_album_and_artist(&artists, &albums, &album_properties);
         Ok(AlbumList2 { album })
     }
+
+    #[tracing::instrument]
     async fn star(&self, request: Request<Star>) -> Result<()> {
         let user_id = self.authenticate(&request).await?;
-        let playlist =
-            match sonar::playlist_find_by_name(&self.context, user_id, FAVORITES_PLAYLIST_NAME)
-                .await
-                .m()?
-            {
-                Some(playlist) => playlist,
-                None => sonar::playlist_create(
-                    &self.context,
-                    sonar::PlaylistCreate {
-                        name: FAVORITES_PLAYLIST_NAME.to_string(),
-                        owner: user_id,
-                        tracks: Default::default(),
-                        properties: Default::default(),
-                    },
-                )
-                .await
-                .m()?,
-            };
-        let track_ids = request
+        let star_ids = request
             .body
             .id
             .into_iter()
-            .map(|id| id.parse::<sonar::TrackId>().m())
-            .collect::<Result<Vec<_>, _>>()?;
-        sonar::playlist_insert_tracks(&self.context, playlist.id, &track_ids)
-            .await
-            .m()?;
+            .chain(request.body.album_id)
+            .chain(request.body.artist_id);
+        for id in star_ids {
+            let sonar_id = id.parse::<sonar::SonarId>().m()?;
+            let value = sonar::PropertyValue::new(sonar::chrono::Utc::now().to_string()).unwrap();
+            let update = sonar::PropertyUpdate::set(PROPERTY_USER_STARRED, value);
+            sonar::user_property_update(&self.context, user_id, sonar_id, &[update])
+                .await
+                .m()?;
+        }
         Ok(())
     }
+
+    #[tracing::instrument]
     async fn get_starred2(&self, request: Request<GetStarred2>) -> Result<Starred2> {
         let user_id = self.authenticate(&request).await?;
-        let song =
-            match sonar::playlist_find_by_name(&self.context, user_id, FAVORITES_PLAYLIST_NAME)
+        let starred_ids =
+            sonar::list_with_user_property(&self.context, user_id, &PROPERTY_USER_STARRED)
                 .await
-                .m()?
-            {
-                Some(playlist) => {
-                    let playlist_tracks =
-                        sonar::playlist_list_tracks(&self.context, playlist.id, Default::default())
-                            .await
-                            .m()?;
-                    let track_ids = playlist_tracks
-                        .iter()
-                        .map(|track| track.track)
-                        .collect::<Vec<_>>();
-                    let tracks = sonar::track_get_bulk(&self.context, &track_ids).await.m()?;
+                .m()?;
+        let split = sonar::ext::split_sonar_ids(starred_ids);
 
-                    child_from_playlist_tracks(&playlist_tracks, &tracks)
-                }
-                None => Default::default(),
-            };
+        let artists = sonar::artist_get_bulk(&self.context, &split.artist_ids);
+        let albums = sonar::album_get_bulk(&self.context, &split.album_ids);
+        let tracks = sonar::track_get_bulk(&self.context, &split.track_ids);
+        let (artists, albums, tracks) = tokio::try_join!(artists, albums, tracks).m()?;
+
+        let album_artists = sonar::ext::get_albums_artists_map(&self.context, &albums);
+        let track_artists = sonar::ext::get_tracks_artists_map(&self.context, &tracks);
+        let track_albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks);
+        let (album_artists, track_artists, track_albums) =
+            tokio::try_join!(album_artists, track_artists, track_albums).m()?;
+
+        let mut song = Vec::with_capacity(tracks.len());
+        let mut album = Vec::with_capacity(albums.len());
+        let mut artist = Vec::with_capacity(artists.len());
+
+        for track in tracks {
+            let album = &track_albums[&track.album];
+            let artist = &track_artists[&track.artist];
+            song.push(child_from_track_and_album_and_artist(artist, album, track));
+        }
+
+        for alb in albums {
+            let artist = &album_artists[&alb.artist];
+            album.push(albumid3_from_album_and_artist(artist, alb));
+        }
+
+        for art in artists {
+            artist.push(artistid3_from_artist(art));
+        }
 
         Ok(Starred2 {
             song,
-            album: Default::default(),
-            artist: Default::default(),
+            album,
+            artist,
         })
     }
+
+    #[tracing::instrument]
     async fn get_playlists(&self, _request: Request<GetPlaylists>) -> Result<Playlists> {
         let playlists = sonar::playlist_list(&self.context, Default::default())
             .await
@@ -196,6 +219,8 @@ impl OpenSubsonicServer for Server {
             playlist: playlists.into_iter().map(playlist_from_playlist).collect(),
         })
     }
+
+    #[tracing::instrument]
     async fn get_playlist(&self, request: Request<GetPlaylist>) -> Result<PlaylistWithSongs> {
         let playlist_id = request.body.id.parse::<sonar::PlaylistId>().m()?;
         let playlist = sonar::playlist_get(&self.context, playlist_id).await.m()?;
@@ -213,6 +238,8 @@ impl OpenSubsonicServer for Server {
             entry: child_from_playlist_tracks(&playlist_tracks, &tracks),
         })
     }
+
+    #[tracing::instrument]
     async fn create_playlist(&self, request: Request<CreatePlaylist>) -> Result<PlaylistWithSongs> {
         let user_id = self.authenticate(&request).await?;
         let track_ids = request
@@ -266,6 +293,8 @@ impl OpenSubsonicServer for Server {
             entry: child_from_playlist_tracks(&playlist_tracks, &tracks),
         })
     }
+
+    #[tracing::instrument]
     async fn get_cover_art(&self, request: Request<GetCoverArt>) -> Result<ByteStream> {
         let image_id = request.body.id.parse::<sonar::ImageId>().m()?;
         let download = sonar::image_download(&self.context, image_id).await.m()?;
@@ -274,10 +303,14 @@ impl OpenSubsonicServer for Server {
             download.stream,
         ))
     }
+
+    #[tracing::instrument]
     async fn scrobble(&self, _request: Request<Scrobble>) -> Result<()> {
         // TODO: implement
         Ok(())
     }
+
+    #[tracing::instrument]
     async fn stream(&self, request: Request<Stream>) -> Result<ByteStream> {
         let track_id = request.body.id.parse::<sonar::TrackId>().m()?;
         let download = sonar::track_download(&self.context, track_id, Default::default())
@@ -288,12 +321,18 @@ impl OpenSubsonicServer for Server {
             download.stream,
         ))
     }
+
+    #[tracing::instrument]
     async fn get_music_folders(&self, _request: Request<GetMusicFolders>) -> Result<MusicFolders> {
         Ok(Default::default())
     }
+
+    #[tracing::instrument]
     async fn get_podcasts(&self, _request: Request<GetPodcasts>) -> Result<Podcasts> {
         Ok(Default::default())
     }
+
+    #[tracing::instrument]
     async fn get_internet_radio_stations(
         &self,
         _request: Request<GetInternetRadioStations>,
@@ -335,11 +374,17 @@ fn albumid3_from_album_and_artist(artist: &sonar::Artist, album: sonar::Album) -
 fn multi_albumid3_from_album_and_artist(
     artists: &HashMap<sonar::ArtistId, sonar::Artist>,
     albums: &HashMap<sonar::AlbumId, sonar::Album>,
+    albums_user_properties: &HashMap<sonar::SonarId, sonar::Properties>,
 ) -> Vec<AlbumID3> {
     let mut albumid3s = Vec::with_capacity(albums.len());
     for album in albums.values() {
         let artist = &artists[&album.artist];
-        albumid3s.push(albumid3_from_album_and_artist(artist, album.clone()));
+        let properties = &albums_user_properties[&sonar::SonarId::from(album.id)];
+        let mut album = albumid3_from_album_and_artist(artist, album.clone());
+        if let Some(value) = properties.get(PROPERTY_USER_STARRED) {
+            album.starred = Some(value.to_string().parse().unwrap());
+        }
+        albumid3s.push(album);
     }
     albumid3s
 }

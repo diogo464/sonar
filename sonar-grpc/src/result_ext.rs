@@ -42,3 +42,9 @@ impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidUsernameError> {
         self.map_err(|e| tonic::Status::invalid_argument(e.to_string()))
     }
 }
+
+impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidUserTokenError> {
+    fn m(self) -> Result<T, tonic::Status> {
+        self.map_err(|e| tonic::Status::invalid_argument(e.to_string()))
+    }
+}
