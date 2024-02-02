@@ -1,13 +1,17 @@
-use crate::{async_trait, Scrobble};
+use std::sync::Arc;
+
+use crate::{async_trait, Context, Scrobble, Username};
 
 #[async_trait]
 pub trait Scrobbler: Send + Sync + 'static {
-    async fn scrobble(&self, scrobble: Scrobble) -> std::io::Result<()>;
+    async fn scrobble(&self, context: &Context, scrobble: Scrobble) -> std::io::Result<()>;
 }
 
+#[derive(Clone)]
 pub(crate) struct SonarScrobbler {
     identifier: String,
-    scrobbler: Box<dyn Scrobbler>,
+    username: Option<Username>,
+    scrobbler: Arc<dyn Scrobbler>,
 }
 
 impl std::fmt::Debug for SonarScrobbler {
@@ -19,10 +23,15 @@ impl std::fmt::Debug for SonarScrobbler {
 }
 
 impl SonarScrobbler {
-    pub fn new(identifier: impl Into<String>, scrobbler: impl Scrobbler) -> Self {
+    pub fn new(
+        identifier: impl Into<String>,
+        username: Option<Username>,
+        scrobbler: impl Scrobbler,
+    ) -> Self {
         Self {
             identifier: identifier.into(),
-            scrobbler: Box::new(scrobbler),
+            username,
+            scrobbler: Arc::new(scrobbler),
         }
     }
 
@@ -30,7 +39,11 @@ impl SonarScrobbler {
         &self.identifier
     }
 
-    pub async fn scrobble(&self, scrobble: Scrobble) -> std::io::Result<()> {
-        self.scrobbler.scrobble(scrobble).await
+    pub fn username(&self) -> Option<&Username> {
+        self.username.as_ref()
+    }
+
+    pub async fn scrobble(&self, context: &Context, scrobble: Scrobble) -> std::io::Result<()> {
+        self.scrobbler.scrobble(context, scrobble).await
     }
 }

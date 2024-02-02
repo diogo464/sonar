@@ -305,8 +305,36 @@ impl OpenSubsonicServer for Server {
     }
 
     #[tracing::instrument]
-    async fn scrobble(&self, _request: Request<Scrobble>) -> Result<()> {
-        // TODO: implement
+    async fn scrobble(&self, request: Request<Scrobble>) -> Result<()> {
+        let user_id = self.authenticate(&request).await?;
+
+        if !request.body.submission.unwrap_or(false) {
+            return Ok(());
+        }
+
+        for (idx, id) in request.body.id.into_iter().enumerate() {
+            let timestamp = match request.body.time.get(idx) {
+                Some(timestamp_ms) => sonar::Timestamp::from_duration(timestamp_ms.to_duration()),
+                None => sonar::Timestamp::now(),
+            };
+
+            let track_id = id.parse::<sonar::TrackId>().m()?;
+            let track = sonar::track_get(&self.context, track_id).await.m()?;
+            sonar::scrobble_create(
+                &self.context,
+                sonar::ScrobbleCreate {
+                    user: user_id,
+                    track: track_id,
+                    listen_at: timestamp,
+                    listen_duration: track.duration,
+                    listen_device: "opensubsonic".to_string(),
+                    properties: Default::default(),
+                },
+            )
+            .await
+            .m()?;
+        }
+
         Ok(())
     }
 

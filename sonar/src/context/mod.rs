@@ -28,6 +28,8 @@ use crate::{
     TrackUpdate, User, UserCreate, UserId, UserToken, Username, ValueUpdate,
 };
 
+mod scrobbler_process;
+
 #[derive(Debug, Clone)]
 pub enum StorageBackend {
     Memory,
@@ -79,15 +81,29 @@ impl Config {
         identifier: impl Into<String>,
         scrobbler: impl scrobbler::Scrobbler,
     ) -> Result<()> {
-        let identifier = identifier.into();
+        let scrobbler = SonarScrobbler::new(identifier.into(), None, scrobbler);
+        self.register_scrobbler_internal(scrobbler)
+    }
+
+    pub fn register_scrobbler_for_user(
+        &mut self,
+        identifier: impl Into<String>,
+        username: Username,
+        scrobbler: impl scrobbler::Scrobbler,
+    ) -> Result<()> {
+        let scrobbler = SonarScrobbler::new(identifier.into(), Some(username), scrobbler);
+        self.register_scrobbler_internal(scrobbler)
+    }
+
+    fn register_scrobbler_internal(&mut self, scrobber: SonarScrobbler) -> Result<()> {
+        let identifier = scrobber.identifier();
         if self.scrobblers.iter().any(|s| s.identifier() == identifier) {
             return Err(Error::new(
                 ErrorKind::Invalid,
                 "scrobbler already registered",
             ));
         }
-        self.scrobblers
-            .push(SonarScrobbler::new(identifier, scrobbler));
+        self.scrobblers.push(scrobber);
         Ok(())
     }
 
@@ -144,7 +160,7 @@ pub async fn new(config: Config) -> Result<Context> {
         max_concurrent_imports: config.max_parallel_imports,
     });
 
-    Ok(Context {
+    let context = Context {
         db,
         tokens: Default::default(),
         storage,
@@ -152,7 +168,14 @@ pub async fn new(config: Config) -> Result<Context> {
         extractors: Arc::new(config.extractors),
         scrobblers: Arc::new(config.scrobblers),
         providers: Arc::new(config.providers),
-    })
+    };
+
+    for scrobbler in context.scrobblers.iter().cloned() {
+        tracing::info!("starting scrobbler: {}", scrobbler.identifier());
+        tokio::spawn(scrobbler_process::run(context.clone(), scrobbler));
+    }
+
+    Ok(context)
 }
 
 #[tracing::instrument]
@@ -173,6 +196,12 @@ pub async fn user_create(context: &Context, create: UserCreate) -> Result<User> 
 pub async fn user_get(context: &Context, user_id: UserId) -> Result<User> {
     let mut conn = context.db.acquire().await?;
     user::get(&mut conn, user_id).await
+}
+
+#[tracing::instrument]
+pub async fn user_lookup(context: &Context, username: &Username) -> Result<Option<UserId>> {
+    let mut conn = context.db.acquire().await?;
+    user::lookup(&mut conn, username).await
 }
 
 #[tracing::instrument]
@@ -198,7 +227,7 @@ pub async fn user_login(
     context: &Context,
     username: &Username,
     password: &str,
-) -> Result<UserToken> {
+) -> Result<(UserId, UserToken)> {
     let user_id = user_authenticate(context, username, password).await?;
     let token = UserToken::random();
     context
@@ -206,7 +235,7 @@ pub async fn user_login(
         .lock()
         .unwrap()
         .insert(token.clone(), user_id);
-    Ok(token)
+    Ok((user_id, token))
 }
 
 #[tracing::instrument]
@@ -638,6 +667,37 @@ pub async fn scrobble_update(
 pub async fn scrobble_delete(context: &Context, id: ScrobbleId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = scrobble::delete(&mut tx, id).await;
+    tx.commit().await?;
+    result
+}
+
+#[tracing::instrument]
+pub(crate) async fn scrobble_list_unsubmitted(
+    context: &Context,
+    scrobbler: &str,
+) -> Result<Vec<Scrobble>> {
+    let mut conn = context.db.acquire().await?;
+    scrobble::list_unsubmitted(&mut conn, scrobbler).await
+}
+
+#[tracing::instrument]
+pub(crate) async fn scrobble_list_unsubmitted_for_user(
+    context: &Context,
+    scrobbler: &str,
+    user_id: UserId,
+) -> Result<Vec<Scrobble>> {
+    let mut conn = context.db.acquire().await?;
+    scrobble::list_unsubmitted_for_user(&mut conn, user_id, scrobbler).await
+}
+
+#[tracing::instrument]
+pub(crate) async fn scrobble_register_submission(
+    context: &Context,
+    scrobble_id: ScrobbleId,
+    scrobbler: &str,
+) -> Result<()> {
+    let mut tx = context.db.begin().await?;
+    let result = scrobble::register_submission(&mut tx, scrobble_id, scrobbler).await;
     tx.commit().await?;
     result
 }

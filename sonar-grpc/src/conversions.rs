@@ -30,7 +30,9 @@ impl TryFrom<ArtistUpdateRequest> for (sonar::ArtistId, sonar::ArtistUpdate) {
         let artist_id = parse_artistid(value.artist_id)?;
         let update = sonar::ArtistUpdate {
             name: sonar::ValueUpdate::from_option_unchanged(value.name),
-            cover_art: Default::default(),
+            cover_art: sonar::ValueUpdate::from_option_unchanged(parse_imageid_opt(
+                value.coverart_id,
+            )?),
             properties: convert_property_updates_from_pb(value.properties)?,
         };
         Ok((artist_id, update))
@@ -182,6 +184,48 @@ impl TryFrom<PlaylistUpdateRequest> for (sonar::PlaylistId, sonar::PlaylistUpdat
     }
 }
 
+impl From<sonar::Scrobble> for Scrobble {
+    fn from(value: sonar::Scrobble) -> Self {
+        Self {
+            id: value.id.to_string(),
+            track_id: value.track.to_string(),
+            user_id: value.user.to_string(),
+            listen_at: Some(convert_timestamp_to_pb(value.listen_at)),
+            listen_duration: Some(
+                TryFrom::try_from(value.listen_duration).expect("failed to convert duration"),
+            ),
+            listen_device: value.listen_device,
+            properties: convert_properties_to_pb(value.properties),
+        }
+    }
+}
+
+impl TryFrom<ScrobbleCreateRequest> for sonar::ScrobbleCreate {
+    type Error = tonic::Status;
+
+    fn try_from(value: ScrobbleCreateRequest) -> Result<Self, Self::Error> {
+        let track = parse_trackid(value.track_id)?;
+        let user = parse_userid(value.user_id)?;
+        let listen_at = value
+            .listen_at
+            .ok_or_else(|| tonic::Status::invalid_argument("listen_at is required"))?;
+        let listen_duration = value
+            .listen_duration
+            .ok_or_else(|| tonic::Status::invalid_argument("listen_duration is required"))?;
+        let listen_duration =
+            std::time::Duration::new(listen_duration.seconds as u64, listen_duration.nanos as u32);
+        let properties = convert_properties_from_pb(value.properties)?;
+        Ok(Self {
+            track,
+            user,
+            listen_at: convert_timestamp_from_pb(listen_at),
+            listen_duration,
+            listen_device: value.listen_device,
+            properties,
+        })
+    }
+}
+
 impl From<sonar::metadata::TrackMetadata> for TrackMetadata {
     fn from(value: sonar::metadata::TrackMetadata) -> Self {
         Self {
@@ -241,6 +285,21 @@ pub fn convert_property_updates_from_pb(
         props.push(sonar::PropertyUpdate::from_option(key, value));
     }
     Ok(props)
+}
+
+pub fn convert_timestamp_to_pb(timestamp: sonar::Timestamp) -> prost_types::Timestamp {
+    prost_types::Timestamp {
+        seconds: timestamp.seconds() as i64,
+        nanos: timestamp.nanos() as i32,
+    }
+}
+
+pub fn convert_timestamp_from_pb(timestamp: prost_types::Timestamp) -> sonar::Timestamp {
+    sonar::Timestamp::new(timestamp.seconds as u64, timestamp.nanos as u32)
+}
+
+pub fn parse_userid(id: String) -> Result<sonar::UserId, tonic::Status> {
+    id.parse::<sonar::UserId>().m()
 }
 
 pub fn parse_artistid(id: String) -> Result<sonar::ArtistId, tonic::Status> {

@@ -79,11 +79,12 @@ impl sonar_service_server::SonarService for Server {
         let req = request.into_inner();
         let username = req.username.parse::<sonar::Username>().m()?;
         let password = req.password;
-        let user_token = sonar::user_login(&self.context, &username, &password)
+        let (user_id, user_token) = sonar::user_login(&self.context, &username, &password)
             .await
             .m()?;
         Ok(tonic::Response::new(UserLoginResponse {
             token: user_token.to_string(),
+            user_id: user_id.to_string(),
         }))
     }
     async fn user_logout(
@@ -424,6 +425,36 @@ impl sonar_service_server::SonarService for Server {
             .m()?;
         Ok(tonic::Response::new(()))
     }
+    async fn scrobble_list(
+        &self,
+        request: tonic::Request<ScrobbleListRequest>,
+    ) -> std::result::Result<tonic::Response<ScrobbleListResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let params = sonar::ListParams::from((req.offset, req.count));
+        let scrobbles = sonar::scrobble_list(&self.context, params).await.m()?;
+        let scrobbles = scrobbles.into_iter().map(Into::into).collect();
+        Ok(tonic::Response::new(ScrobbleListResponse { scrobbles }))
+    }
+    async fn scrobble_create(
+        &self,
+        request: tonic::Request<ScrobbleCreateRequest>,
+    ) -> std::result::Result<tonic::Response<Scrobble>, tonic::Status> {
+        let req = request.into_inner();
+        let create = TryFrom::try_from(req)?;
+        let scrobble = sonar::scrobble_create(&self.context, create).await.m()?;
+        Ok(tonic::Response::new(scrobble.into()))
+    }
+    async fn scrobble_delete(
+        &self,
+        request: tonic::Request<ScrobbleDeleteRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let req = request.into_inner();
+        let scrobble_id = req.scrobble_id.parse::<sonar::ScrobbleId>().m()?;
+        sonar::scrobble_delete(&self.context, scrobble_id)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(()))
+    }
     async fn import(
         &self,
         request: tonic::Request<tonic::Streaming<ImportRequest>>,
@@ -467,23 +498,23 @@ impl sonar_service_server::SonarService for Server {
         let req = request.into_inner();
         match req.kind {
             _ if req.kind == MetadataFetchKind::Artist as i32 => {
-                let _artist_id = sonar::ArtistId::try_from(req.item_id).m()?;
+                let _artist_id = req.item_id.parse::<sonar::ArtistId>().m()?;
                 unimplemented!()
             }
             _ if req.kind == MetadataFetchKind::Album as i32 => {
-                let album_id = sonar::AlbumId::try_from(req.item_id).m()?;
+                let album_id = req.item_id.parse::<sonar::AlbumId>().m()?;
                 sonar::metadata_fetch_album(&self.context, album_id)
                     .await
                     .m()?;
             }
             _ if req.kind == MetadataFetchKind::Albumtracks as i32 => {
-                let album_id = sonar::AlbumId::try_from(req.item_id).m()?;
+                let album_id = req.item_id.parse::<sonar::AlbumId>().m()?;
                 sonar::metadata_fetch_album_tracks(&self.context, album_id)
                     .await
                     .m()?;
             }
             _ if req.kind == MetadataFetchKind::Track as i32 => {
-                let _track_id = sonar::TrackId::try_from(req.item_id).m()?;
+                let _track_id = req.item_id.parse::<sonar::TrackId>().m()?;
                 unimplemented!()
             }
             _ => {

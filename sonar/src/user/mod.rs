@@ -101,6 +101,15 @@ pub async fn get(db: &mut DbC, user_id: UserId) -> Result<User> {
 }
 
 #[tracing::instrument]
+pub async fn lookup(db: &mut DbC, username: &Username) -> Result<Option<UserId>> {
+    let username = username.as_str();
+    let row = sqlx::query!("SELECT id FROM user WHERE username = ?", username)
+        .fetch_optional(db)
+        .await?;
+    Ok(row.map(|row| UserId::from_db(row.id)))
+}
+
+#[tracing::instrument]
 pub async fn delete(db: &mut DbC, user_id: UserId) -> Result<()> {
     let user_id = user_id.to_db();
     sqlx::query!("DELETE FROM user WHERE id = ?", user_id)

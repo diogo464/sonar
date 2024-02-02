@@ -89,6 +89,14 @@ pub async fn get(db: &mut DbC, scrobble_id: ScrobbleId) -> Result<Scrobble> {
     Ok(Scrobble::from((scrobble_view, properties)))
 }
 
+pub async fn get_bulk(db: &mut DbC, scrobble_ids: &[ScrobbleId]) -> Result<Vec<Scrobble>> {
+    let mut scrobbles = Vec::with_capacity(scrobble_ids.len());
+    for scrobble_id in scrobble_ids {
+        scrobbles.push(get(db, *scrobble_id).await?);
+    }
+    Ok(scrobbles)
+}
+
 pub async fn create(db: &mut DbC, create: ScrobbleCreate) -> Result<Scrobble> {
     let track_id = create.track.to_db();
     let user_id = create.user.to_db();
@@ -123,5 +131,70 @@ pub async fn delete(db: &mut DbC, scrobble_id: ScrobbleId) -> Result<()> {
     sqlx::query!("DELETE FROM scrobble WHERE id = ?", scrobble_id)
         .execute(&mut *db)
         .await?;
+    Ok(())
+}
+
+pub async fn list_unsubmitted(db: &mut DbC, scrobbler: &str) -> Result<Vec<Scrobble>> {
+    let rows = sqlx::query!(
+        "
+SELECT sc.id
+FROM scrobble sc
+LEFT JOIN scrobble_submission ss ON sc.id = ss.scrobble AND ss.scrobbler = ?
+WHERE ss.scrobble IS NULL
+LIMIT 100
+",
+        scrobbler,
+    )
+    .fetch_all(&mut *db)
+    .await?;
+
+    let ids = rows
+        .iter()
+        .map(|row| ScrobbleId::from_db(row.id))
+        .collect::<Vec<_>>();
+
+    get_bulk(db, &ids).await
+}
+
+pub async fn list_unsubmitted_for_user(
+    db: &mut DbC,
+    user_id: UserId,
+    scrobbler: &str,
+) -> Result<Vec<Scrobble>> {
+    let rows = sqlx::query!(
+        "
+SELECT sc.id
+FROM scrobble sc
+LEFT JOIN scrobble_submission ss ON sc.id = ss.scrobble AND ss.scrobbler = ?
+WHERE ss.scrobble IS NULL AND sc.user = ?
+LIMIT 100
+",
+        scrobbler,
+        user_id,
+    )
+    .fetch_all(&mut *db)
+    .await?;
+
+    let ids = rows
+        .iter()
+        .map(|row| ScrobbleId::from_db(row.id))
+        .collect::<Vec<_>>();
+
+    get_bulk(db, &ids).await
+}
+
+pub async fn register_submission(
+    db: &mut DbC,
+    scrobble_id: ScrobbleId,
+    scrobbler: &str,
+) -> Result<()> {
+    let scrobble_id = scrobble_id.to_db();
+    sqlx::query!(
+        "INSERT INTO scrobble_submission (scrobble, scrobbler) VALUES (?, ?)",
+        scrobble_id,
+        scrobbler,
+    )
+    .execute(&mut *db)
+    .await?;
     Ok(())
 }

@@ -13,6 +13,10 @@ impl Timestamp {
         Self { seconds, nanos }
     }
 
+    pub fn from_millis(millis: u64) -> Self {
+        Self::new(millis / 1000, (millis % 1000) as u32 * 1_000_000)
+    }
+
     pub fn from_seconds(seconds: u64) -> Self {
         Self::new(seconds, 0)
     }
@@ -27,6 +31,10 @@ impl Timestamp {
 
     pub fn seconds_f64(&self) -> f64 {
         self.seconds as f64 + self.nanos as f64 / 1_000_000_000.0
+    }
+
+    pub fn from_duration(duration: std::time::Duration) -> Self {
+        Self::new(duration.as_secs(), duration.subsec_nanos())
     }
 
     /// Returns the timestamp as a duration since the UNIX epoch.

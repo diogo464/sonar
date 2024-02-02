@@ -132,6 +132,15 @@ CREATE TABLE scrobble (
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
+CREATE TABLE scrobble_submission (
+	scrobble	INTEGER NOT NULL REFERENCES scrobble(id),
+	scrobbler	TEXT NOT NULL,
+	created_at	INTEGER NOT NULL DEFAULT (unixepoch()),
+	UNIQUE(scrobble, scrobbler)
+);
+CREATE INDEX scrobble_submission_scrobbler ON scrobble_submission(scrobbler);
+CREATE INDEX scrobble_submission_scrobble_scrobbler ON scrobble_submission(scrobble, scrobbler);
+
 -- AUXILIARY VIEWS
 
 CREATE VIEW view_artist_extra (

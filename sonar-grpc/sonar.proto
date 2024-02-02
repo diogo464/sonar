@@ -49,6 +49,10 @@ service SonarService {
 	rpc PlaylistTrackRemove(PlaylistTrackRemoveRequest) returns (google.protobuf.Empty);
 	rpc PlaylistTrackClear(PlaylistTrackClearRequest) returns (google.protobuf.Empty);
 
+	rpc ScrobbleList(ScrobbleListRequest) returns (ScrobbleListResponse);
+	rpc ScrobbleCreate(ScrobbleCreateRequest) returns (Scrobble);
+	rpc ScrobbleDelete(ScrobbleDeleteRequest) returns (google.protobuf.Empty);
+
 	rpc Import(stream ImportRequest) returns (Track);
 
 	rpc MetadataFetch(MetadataFetchRequest) returns (google.protobuf.Empty);
@@ -103,7 +107,8 @@ message UserLoginRequest {
 }
 
 message UserLoginResponse {
-	string token = 1;
+	string user_id = 1;
+	string token = 2;
 }
 
 message UserLogoutRequest {
@@ -167,8 +172,8 @@ message ArtistDeleteRequest {
 message ArtistUpdateRequest {
 	string artist_id = 1;
 	optional string name = 2;
-	repeated PropertyUpdate properties = 3;
-	google.protobuf.FieldMask mask = 4;
+	optional string coverart_id = 3;
+	repeated PropertyUpdate properties = 4;
 }
 
 message Album {
@@ -283,6 +288,7 @@ message Playlist {
 message PlaylistListRequest {
 	optional uint32 offset = 1;
 	optional uint32 count = 2;
+	optional string user_id = 3;
 }
 
 message PlaylistListResponse {
@@ -336,9 +342,32 @@ message Scrobble {
 	string id = 1;
 	string track_id = 2;
 	string user_id = 3;
-	google.protobuf.Duration duration = 4;
-	google.protobuf.Timestamp timestamp = 5;
+	google.protobuf.Timestamp listen_at = 4;
+	google.protobuf.Duration listen_duration = 5;
+	string listen_device = 6;
+	repeated Property properties = 7;
+}
+
+message ScrobbleListRequest {
+	optional uint32 offset = 1;
+	optional uint32 count = 2;
+}
+
+message ScrobbleListResponse {
+	repeated Scrobble scrobbles = 1;
+}
+
+message ScrobbleCreateRequest {
+	string user_id = 1;
+	string track_id = 2;
+	google.protobuf.Timestamp listen_at = 3;
+	google.protobuf.Duration listen_duration = 4;
+	string listen_device = 5;
 	repeated Property properties = 6;
+}
+
+message ScrobbleDeleteRequest {
+	string scrobble_id = 1;
 }
 
 message ImportRequest {
@@ -357,7 +386,7 @@ enum MetadataFetchKind {
 
 message MetadataFetchRequest {
 	MetadataFetchKind kind = 1;
-	uint32 item_id = 2;
+	string item_id = 2;
 }
 
 message TrackMetadata {
