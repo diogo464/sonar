@@ -57,7 +57,12 @@ service SonarService {
 	rpc PinSet(PinSetRequest) returns (google.protobuf.Empty);
 	rpc PinUnset(PinUnsetRequest) returns (google.protobuf.Empty);
 
-	rpc ExternalDownloadStart(ExternalDownloadRequest) returns (google.protobuf.Empty);
+	rpc ExternalSubscriptionList(ExternalSubscriptionListRequest) returns (ExternalSubscriptionListResponse);
+	rpc ExternalSubscriptionCreate(ExternalSubscriptionCreateRequest) returns (google.protobuf.Empty);
+	rpc ExternalSubscriptionDelete(ExternalSubscriptionDeleteRequest) returns (google.protobuf.Empty);
+	rpc ExternalDownloadList(ExternalDownloadListRequest) returns (ExternalDownloadListResponse);
+	rpc ExternalDownloadStart(ExternalDownloadStartRequest) returns (google.protobuf.Empty);
+	rpc ExternalDownloadCancel(ExternalDownloadCancelRequest) returns (google.protobuf.Empty);
 
 	rpc Import(stream ImportRequest) returns (Track);
 
@@ -394,7 +399,49 @@ message PinUnsetRequest {
 	repeated string sonar_ids = 2;
 }
 
-message ExternalDownloadRequest {
+message ExternalSubscription {
+	string user_id = 1;
+	string external_id = 2;
+	string description = 3;
+}
+
+message ExternalDownload {
+	string user_id = 1;
+	string external_id = 2;
+	string description = 3;
+}
+
+message ExternalSubscriptionListRequest {
+	string user_id = 1;
+}
+
+message ExternalSubscriptionListResponse {
+	repeated ExternalSubscription subscriptions = 1;
+}
+
+message ExternalSubscriptionCreateRequest {
+	string user_id = 1;
+	string external_id = 2;
+}
+
+message ExternalSubscriptionDeleteRequest {
+	string user_id = 1;
+	string external_id = 2;
+}
+
+message ExternalDownloadListRequest {
+}
+
+message ExternalDownloadListResponse {
+	repeated ExternalDownload downloads = 1;
+}
+
+message ExternalDownloadStartRequest {
+	string user_id = 1;
+	string external_id = 2;
+}
+
+message ExternalDownloadCancelRequest {
 	string user_id = 1;
 	string external_id = 2;
 }

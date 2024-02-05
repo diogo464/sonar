@@ -12,8 +12,8 @@ use crate::{
         ExternalTrack, SonarExternalService,
     },
     playlist, track, Album, AlbumCreate, AlbumId, Artist, ArtistCreate, ArtistId, AudioCreate,
-    Context, Error, ErrorKind, ExternalDownload, ExternalDownloadDelete, ExternalDownloadRequest,
-    ExternalDownloadStatus, Playlist, PlaylistCreate, Result, Track, TrackCreate, TrackId, UserId,
+    Error, ErrorKind, ExternalDownload, ExternalDownloadStatus, Playlist, PlaylistCreate, Result,
+    Track, TrackCreate, TrackId, UserId,
 };
 
 type Sender<T> = tokio::sync::mpsc::Sender<T>;
@@ -412,6 +412,12 @@ async fn download_track(
     external_id: &ExternalMediaId,
     track_id: TrackId,
 ) -> Result<()> {
+    let mut conn = db.acquire().await?;
+    if !audio::list_by_track(&mut conn, track_id).await?.is_empty() {
+        tracing::info!("audio already exists for track: {}", track_id);
+        return Ok(());
+    }
+
     let stream = service.download_track(external_id).await?;
     let create = AudioCreate {
         stream,

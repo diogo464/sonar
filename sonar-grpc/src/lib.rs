@@ -499,9 +499,33 @@ impl sonar_service_server::SonarService for Server {
         }
         Ok(tonic::Response::new(()))
     }
+    async fn external_subscription_list(
+        &self,
+        request: tonic::Request<ExternalSubscriptionListRequest>,
+    ) -> std::result::Result<tonic::Response<ExternalSubscriptionListResponse>, tonic::Status> {
+        todo!()
+    }
+    async fn external_subscription_create(
+        &self,
+        request: tonic::Request<ExternalSubscriptionCreateRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        todo!()
+    }
+    async fn external_subscription_delete(
+        &self,
+        request: tonic::Request<ExternalSubscriptionDeleteRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        todo!()
+    }
+    async fn external_download_list(
+        &self,
+        request: tonic::Request<ExternalDownloadListRequest>,
+    ) -> std::result::Result<tonic::Response<ExternalDownloadListResponse>, tonic::Status> {
+        todo!()
+    }
     async fn external_download_start(
         &self,
-        request: tonic::Request<ExternalDownloadRequest>,
+        request: tonic::Request<ExternalDownloadStartRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
@@ -512,8 +536,16 @@ impl sonar_service_server::SonarService for Server {
                 user_id,
                 external_id,
             },
-        ).await.m()?;
+        )
+        .await
+        .m()?;
         Ok(tonic::Response::new(()))
+    }
+    async fn external_download_cancel(
+        &self,
+        request: tonic::Request<ExternalDownloadCancelRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        todo!()
     }
     async fn import(
         &self,

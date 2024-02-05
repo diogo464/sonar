@@ -5,7 +5,7 @@ use lofty::AudioFile;
 use crate::{
     blob::{self, BlobStorage},
     bytestream::{self, ByteStream},
-    db::{Db, DbC},
+    db::DbC,
     ks, AudioId, ByteRange, Error, ErrorKind, Result, TrackId,
 };
 
@@ -57,6 +57,30 @@ struct AudioView {
     #[allow(unused)]
     blob_key: String,
     blob_size: i64,
+}
+
+pub async fn list_by_track(db: &mut DbC, track_id: TrackId) -> Result<Vec<Audio>> {
+    let rows = sqlx::query_as!(
+        AudioView,
+        "SELECT a.* FROM sqlx_audio a INNER JOIN track_audio ta ON a.id = ta.audio WHERE ta.track = ?",
+        track_id
+    )
+    .fetch_all(&mut *db)
+    .await?;
+
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        result.push(Audio {
+            id: AudioId::from_db(row.id),
+            bitrate: row.bitrate as u32,
+            duration: Duration::from_millis(row.duration_ms as u64),
+            num_channels: row.num_channels as u32,
+            sample_freq: row.sample_freq as u32,
+            size: row.blob_size as u32,
+            mime_type: row.mime_type,
+        });
+    }
+    Ok(result)
 }
 
 pub async fn create(db: &mut DbC, storage: &dyn BlobStorage, create: AudioCreate) -> Result<Audio> {

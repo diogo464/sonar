@@ -1044,7 +1044,7 @@ async fn cmd_external_request(args: ExternalRequestArgs) -> Result<()> {
     let mut client = create_client().await?;
     let (user_id, _) = auth_read().await?;
     let response = client
-        .external_download_start(sonar_grpc::ExternalDownloadRequest {
+        .external_download_start(sonar_grpc::ExternalDownloadStartRequest {
             user_id,
             external_id: args.external_id,
         })
