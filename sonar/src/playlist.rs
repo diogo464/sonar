@@ -1,6 +1,7 @@
 use crate::{
-    db::DbC, property, Error, ListParams, PlaylistId, Properties, PropertyUpdate, Result,
-    Timestamp, TrackId, UserId, ValueUpdate,
+    db::{Db, DbC},
+    property, Error, ListParams, PlaylistId, Properties, PropertyUpdate, Result, Timestamp,
+    TrackId, UserId, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -145,6 +146,26 @@ pub async fn create(db: &mut DbC, create: PlaylistCreate) -> Result<Playlist> {
     get(db, playlist_id).await
 }
 
+pub async fn find_or_create_by_name(
+    db: &mut DbC,
+    user_id: UserId,
+    create_: PlaylistCreate,
+) -> Result<Playlist> {
+    match find_by_name(db, user_id, &create_.name).await? {
+        Some(playlist) => Ok(playlist),
+        None => create(db, create_).await,
+    }
+}
+
+pub async fn find_or_create_by_name_tx(db: &Db, create_: PlaylistCreate) -> Result<Playlist> {
+    let mut tx = db.begin().await?;
+    let result = find_or_create_by_name(&mut tx, create_.owner, create_).await;
+    if result.is_ok() {
+        tx.commit().await?;
+    }
+    result
+}
+
 pub async fn update(
     db: &mut DbC,
     playlist_id: PlaylistId,
@@ -195,6 +216,13 @@ pub async fn list_tracks(
         .into_iter()
         .map(|t| t.into_playlist_track())
         .collect())
+}
+
+pub async fn list_tracks_in_all_playlists(db: &mut DbC) -> Result<Vec<TrackId>> {
+    let tracks = sqlx::query_scalar!("SELECT track FROM playlist_track")
+        .fetch_all(&mut *db)
+        .await?;
+    Ok(tracks.into_iter().map(TrackId::from_db).collect())
 }
 
 pub async fn clear_tracks(db: &mut DbC, playlist_id: PlaylistId) -> Result<()> {

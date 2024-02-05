@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::{
     audio::{self, AudioDownload},
     blob::BlobStorage,
-    db::DbC,
+    db::{Db, DbC},
     property, AlbumId, ArtistId, AudioId, ByteRange, Error, ErrorKind, ImageId, ListParams,
     Properties, PropertyUpdate, Result, Timestamp, TrackId, ValueUpdate,
 };
@@ -150,6 +150,19 @@ pub async fn list_by_album(
         .collect())
 }
 
+pub async fn list_album_id_pairs(db: &mut DbC) -> Result<Vec<(AlbumId, TrackId)>> {
+    let rows = sqlx::query!("SELECT album, id FROM track")
+        .fetch_all(db)
+        .await?;
+    let mut pairs = Vec::with_capacity(rows.len());
+    for row in rows {
+        let album_id = AlbumId::from_db(row.album);
+        let track_id = TrackId::from_db(row.id);
+        pairs.push((album_id, track_id));
+    }
+    Ok(pairs)
+}
+
 pub async fn get(db: &mut DbC, track_id: TrackId) -> Result<Track> {
     let track_view = sqlx::query_as!(TrackView, "SELECT * FROM sqlx_track WHERE id = ?", track_id)
         .fetch_one(&mut *db)
@@ -259,6 +272,32 @@ pub async fn delete(db: &mut DbC, track_id: TrackId) -> Result<()> {
         .await?;
     property::clear(db, track_id).await?;
     Ok(())
+}
+
+pub async fn find_or_create_by_name(db: &mut DbC, create_: TrackCreate) -> Result<Track> {
+    let track_name = &create_.name;
+    let track_id = sqlx::query_scalar!(
+        "SELECT id FROM track WHERE name = ? AND album = ?",
+        track_name,
+        create_.album
+    )
+    .fetch_optional(&mut *db)
+    .await?;
+
+    if let Some(track_id) = track_id {
+        return get(db, TrackId::from_db(track_id)).await;
+    }
+
+    create(db, create_).await
+}
+
+pub async fn find_or_create_by_name_tx(db: &Db, create_: TrackCreate) -> Result<Track> {
+    let mut tx = db.begin().await?;
+    let result = find_or_create_by_name(&mut tx, create_).await;
+    if result.is_ok() {
+        tx.commit().await?;
+    }
+    result
 }
 
 pub async fn download(

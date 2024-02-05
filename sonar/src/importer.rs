@@ -140,7 +140,7 @@ pub async fn import(
 
         // TODO: add _tx methods
         let mut conn = db.acquire().await?;
-        artist::find_or_create(&mut conn, artist_name, artist_create)
+        artist::find_or_create_by_name(&mut conn, artist_create)
             .await?
             .id
     };
@@ -171,7 +171,7 @@ pub async fn import(
 
         // TODO: add _tx methods
         let mut conn = db.acquire().await?;
-        album::find_or_create(&mut conn, album_name, album_create)
+        album::find_or_create_by_name(&mut conn, album_create)
             .await?
             .id
     };

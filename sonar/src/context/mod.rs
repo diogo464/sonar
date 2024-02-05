@@ -5,27 +5,32 @@ use std::{
 };
 
 use sqlx::Executor;
+use tokio::sync::Notify;
 
 use crate::{
     album, artist, audio,
     blob::{self, BlobStorage},
     bytestream::{self},
     db::Db,
+    download::DownloadManager,
+    external::{ExternalService, SonarExternalService},
     extractor::{Extractor, SonarExtractor},
-    image,
+    gc, image,
     importer::{self, Importer},
     metadata::{
         AlbumMetadata, AlbumMetadataRequest, AlbumTracksMetadata, AlbumTracksMetadataRequest,
         MetadataProvider, MetadataRequestKind, SonarMetadataProvider,
     },
-    playlist, property, scrobble,
+    pin, playlist, property, scrobble,
     scrobbler::{self, SonarScrobbler},
     track, user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId,
     ArtistUpdate, Audio, AudioCreate, AudioDownload, AudioId, ByteRange, Error, ErrorKind,
-    ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics, Playlist, PlaylistCreate,
-    PlaylistId, PlaylistTrack, PlaylistUpdate, Properties, PropertyKey, PropertyUpdate, Result,
-    Scrobble, ScrobbleCreate, ScrobbleId, ScrobbleUpdate, SonarId, Track, TrackCreate, TrackId,
-    TrackUpdate, User, UserCreate, UserId, UserToken, Username, ValueUpdate,
+    ExternalDownload, ExternalDownloadDelete, ExternalDownloadRequest, ExternalSubscription,
+    ExternalSubscriptionCreate, ExternalSubscriptionDelete, ImageCreate, ImageDownload, ImageId,
+    Import, ListParams, Lyrics, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack,
+    PlaylistUpdate, Properties, PropertyKey, PropertyUpdate, Result, Scrobble, ScrobbleCreate,
+    ScrobbleId, ScrobbleUpdate, SonarId, Track, TrackCreate, TrackId, TrackUpdate, User,
+    UserCreate, UserId, UserToken, Username, ValueUpdate,
 };
 
 mod scrobbler_process;
@@ -43,6 +48,7 @@ pub struct Config {
     extractors: Vec<SonarExtractor>,
     scrobblers: Vec<SonarScrobbler>,
     providers: Vec<SonarMetadataProvider>,
+    external: Vec<SonarExternalService>,
     max_import_size: usize,
     max_parallel_imports: usize,
 }
@@ -55,6 +61,7 @@ impl Config {
             extractors: Vec::new(),
             scrobblers: Vec::new(),
             providers: Vec::new(),
+            external: Vec::new(),
             max_import_size: 1024 * 1024 * 1024,
             max_parallel_imports: 8,
         }
@@ -123,6 +130,24 @@ impl Config {
             .push(SonarMetadataProvider::new(name, provider));
         Ok(())
     }
+
+    pub fn register_external_service(
+        &mut self,
+        priority: u32,
+        name: impl Into<String>,
+        service: impl ExternalService,
+    ) -> Result<()> {
+        let name = name.into();
+        if self.external.iter().any(|s| s.identifier() == name) {
+            return Err(Error::new(
+                ErrorKind::Invalid,
+                "external service already registered",
+            ));
+        }
+        self.external
+            .push(SonarExternalService::new(priority, name, service));
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -134,9 +159,12 @@ pub struct Context {
     extractors: Arc<Vec<SonarExtractor>>,
     scrobblers: Arc<Vec<SonarScrobbler>>,
     providers: Arc<Vec<SonarMetadataProvider>>,
+    external: Arc<Vec<SonarExternalService>>,
+    downloads: DownloadManager,
+    scrobbler_notify: Arc<Notify>,
 }
 
-pub async fn new(config: Config) -> Result<Context> {
+pub async fn new(mut config: Config) -> Result<Context> {
     let db = sqlx::sqlite::SqlitePoolOptions::new()
         .connect(&config.database_url)
         .await
@@ -160,6 +188,8 @@ pub async fn new(config: Config) -> Result<Context> {
         max_concurrent_imports: config.max_parallel_imports,
     });
 
+    let downloads = DownloadManager::new(db.clone(), config.external.clone());
+
     let context = Context {
         db,
         tokens: Default::default(),
@@ -168,12 +198,21 @@ pub async fn new(config: Config) -> Result<Context> {
         extractors: Arc::new(config.extractors),
         scrobblers: Arc::new(config.scrobblers),
         providers: Arc::new(config.providers),
+        external: Arc::new(config.external),
+        downloads,
+        scrobbler_notify: Arc::new(Notify::new()),
     };
 
     for scrobbler in context.scrobblers.iter().cloned() {
         tracing::info!("starting scrobbler: {}", scrobbler.identifier());
-        tokio::spawn(scrobbler_process::run(context.clone(), scrobbler));
+        tokio::spawn(scrobbler_process::run(
+            context.clone(),
+            scrobbler,
+            context.scrobbler_notify.clone(),
+        ));
     }
+
+    context.scrobbler_notify.notify_waiters();
 
     Ok(context)
 }
@@ -366,6 +405,17 @@ pub async fn artist_delete(context: &Context, id: ArtistId) -> Result<()> {
 }
 
 #[tracing::instrument]
+pub async fn artist_find_or_create_by_name(
+    context: &Context,
+    create: ArtistCreate,
+) -> Result<Artist> {
+    let mut tx = context.db.begin().await?;
+    let result = artist::find_or_create_by_name(&mut tx, create).await;
+    tx.commit().await?;
+    result
+}
+
+#[tracing::instrument]
 pub async fn album_list(context: &Context, params: ListParams) -> Result<Vec<Album>> {
     let mut conn = context.db.acquire().await?;
     album::list(&mut conn, params).await
@@ -418,6 +468,14 @@ pub async fn album_delete(context: &Context, id: AlbumId) -> Result<()> {
 }
 
 #[tracing::instrument]
+pub async fn album_find_or_create_by_name(context: &Context, create: AlbumCreate) -> Result<Album> {
+    let mut tx = context.db.begin().await?;
+    let result = album::find_or_create_by_name(&mut tx, create).await;
+    tx.commit().await?;
+    result
+}
+
+#[tracing::instrument]
 pub async fn track_list(context: &Context, params: ListParams) -> Result<Vec<Track>> {
     let mut conn = context.db.acquire().await?;
     track::list(&mut conn, params).await
@@ -465,6 +523,14 @@ pub async fn track_update(context: &Context, id: TrackId, update: TrackUpdate) -
 pub async fn track_delete(context: &Context, id: TrackId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = track::delete(&mut tx, id).await;
+    tx.commit().await?;
+    result
+}
+
+#[tracing::instrument]
+pub async fn track_find_or_create_by_name(context: &Context, create: TrackCreate) -> Result<Track> {
+    let mut tx = context.db.begin().await?;
+    let result = track::find_or_create_by_name(&mut tx, create).await;
     tx.commit().await?;
     result
 }
@@ -648,6 +714,7 @@ pub async fn scrobble_create(context: &Context, create: ScrobbleCreate) -> Resul
     let mut tx = context.db.begin().await?;
     let result = scrobble::create(&mut tx, create).await;
     tx.commit().await?;
+    context.scrobbler_notify.notify_waiters();
     result
 }
 
@@ -700,6 +767,91 @@ pub(crate) async fn scrobble_register_submission(
     let result = scrobble::register_submission(&mut tx, scrobble_id, scrobbler).await;
     tx.commit().await?;
     result
+}
+
+#[tracing::instrument]
+pub async fn pin_list(context: &Context, user_id: UserId) -> Result<Vec<SonarId>> {
+    let mut conn = context.db.acquire().await?;
+    pin::list(&mut conn, user_id).await
+}
+
+#[tracing::instrument]
+pub async fn pin_set(context: &Context, user_id: UserId, id: SonarId) -> Result<()> {
+    let mut tx = context.db.begin().await?;
+    pin::set(&mut tx, user_id, id).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+#[tracing::instrument]
+pub async fn pin_unset(context: &Context, user_id: UserId, id: SonarId) -> Result<()> {
+    let mut tx = context.db.begin().await?;
+    pin::unset(&mut tx, user_id, id).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+#[tracing::instrument]
+pub async fn external_service_list(context: &Context) -> Result<Vec<String>> {
+    Ok(context
+        .external
+        .iter()
+        .map(|s| s.identifier().to_string())
+        .collect())
+}
+
+#[tracing::instrument]
+pub async fn external_subscription_list(context: &Context) -> Result<Vec<ExternalSubscription>> {
+    todo!()
+}
+
+#[tracing::instrument]
+pub async fn external_subscription_create(
+    context: &Context,
+    create: ExternalSubscriptionCreate,
+) -> Result<()> {
+    todo!()
+}
+
+#[tracing::instrument]
+pub async fn external_subscription_delete(
+    context: &Context,
+    delete: ExternalSubscriptionDelete,
+) -> Result<()> {
+    todo!()
+}
+
+#[tracing::instrument]
+pub async fn external_download_list(context: &Context) -> Result<Vec<ExternalDownload>> {
+    Ok(context.downloads.list())
+}
+
+#[tracing::instrument]
+pub async fn external_download_request(
+    context: &Context,
+    request: ExternalDownloadRequest,
+) -> Result<()> {
+    Ok(context
+        .downloads
+        .request(request.user_id, request.external_id)
+        .await)
+}
+
+#[tracing::instrument]
+pub async fn external_download_delete(
+    context: &Context,
+    delete: ExternalDownloadDelete,
+) -> Result<()> {
+    Ok(context
+        .downloads
+        .delete(delete.user_id, delete.external_id)
+        .await)
+}
+
+#[tracing::instrument]
+pub async fn garbage_collection_candidates(context: &Context) -> Result<Vec<SonarId>> {
+    let mut conn = context.db.acquire().await?;
+    gc::list_gc_candidates(&mut conn).await
 }
 
 #[tracing::instrument]

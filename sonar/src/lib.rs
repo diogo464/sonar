@@ -2,6 +2,7 @@
 #![feature(const_trait_impl)]
 #![feature(concat_idents)]
 #![feature(backtrace_frames)]
+#![feature(is_sorted)]
 
 mod error;
 pub use error::*;
@@ -17,6 +18,7 @@ pub use context::*;
 
 pub mod bytestream;
 pub mod ext;
+pub mod external;
 pub mod extractor;
 pub mod metadata;
 pub mod prop;
@@ -28,13 +30,16 @@ pub mod test;
 
 pub(crate) mod album;
 pub(crate) mod artist;
+pub(crate) mod download;
 pub(crate) mod audio;
 pub(crate) mod blob;
 pub(crate) mod db;
+pub(crate) mod gc;
 pub(crate) mod genre;
 pub(crate) mod image;
 pub(crate) mod importer;
 pub(crate) mod ks;
+pub(crate) mod pin;
 pub(crate) mod playlist;
 pub(crate) mod property;
 pub(crate) mod scrobble;

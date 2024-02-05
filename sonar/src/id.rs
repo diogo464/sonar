@@ -230,6 +230,12 @@ impl From<SonarId> for u32 {
     }
 }
 
+impl From<SonarId> for String {
+    fn from(id: SonarId) -> Self {
+        id.to_string()
+    }
+}
+
 impl FromStr for SonarId {
     type Err = InvalidIdError;
 

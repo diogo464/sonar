@@ -333,3 +333,7 @@ pub fn parse_trackid(id: String) -> Result<sonar::TrackId, tonic::Status> {
 pub fn parse_trackid_opt(id: Option<String>) -> Result<Option<sonar::TrackId>, tonic::Status> {
     id.map(|id| id.parse::<sonar::TrackId>().m()).transpose()
 }
+
+pub fn parse_sonarid(id: String) -> Result<sonar::SonarId, tonic::Status> {
+    id.parse::<sonar::SonarId>().m()
+}

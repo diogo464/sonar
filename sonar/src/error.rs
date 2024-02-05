@@ -49,6 +49,10 @@ impl Error {
         }
     }
 
+    pub fn internal(message: impl Into<Cow<'static, str>>) -> Self {
+        Self::new(ErrorKind::Internal, message)
+    }
+
     pub fn kind(&self) -> ErrorKind {
         self.kind
     }

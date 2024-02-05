@@ -1,6 +1,7 @@
 use crate::{
-    db::DbC, property, ArtistId, ImageId, ListParams, Properties, PropertyUpdate, Result,
-    Timestamp, ValueUpdate,
+    db::{Db, DbC},
+    property, ArtistId, ImageId, ListParams, Properties, PropertyUpdate, Result, Timestamp,
+    ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -71,6 +72,13 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Artist>> {
         .collect())
 }
 
+pub async fn list_ids(db: &mut DbC) -> Result<Vec<ArtistId>> {
+    let ids = sqlx::query_scalar!("SELECT id FROM artist")
+        .fetch_all(&mut *db)
+        .await?;
+    Ok(ids.into_iter().map(ArtistId::from_db).collect())
+}
+
 pub async fn get(db: &mut DbC, artist_id: ArtistId) -> Result<Artist> {
     let artist_id = artist_id.to_db();
     let artist_view = sqlx::query_as!(
@@ -132,11 +140,8 @@ pub async fn delete(db: &mut DbC, artist_id: ArtistId) -> Result<()> {
     Ok(())
 }
 
-pub async fn find_or_create(
-    db: &mut DbC,
-    artist_name: &str,
-    create_: ArtistCreate,
-) -> Result<Artist> {
+pub async fn find_or_create_by_name(db: &mut DbC, create_: ArtistCreate) -> Result<Artist> {
+    let artist_name = &create_.name;
     let artist_id = sqlx::query_scalar!(r#"SELECT id FROM artist WHERE name = ?"#, artist_name)
         .fetch_optional(&mut *db)
         .await?;
@@ -146,4 +151,13 @@ pub async fn find_or_create(
     }
 
     create(db, create_).await
+}
+
+pub async fn find_or_create_by_name_tx(db: &Db, create_: ArtistCreate) -> Result<Artist> {
+    let mut tx = db.begin().await?;
+    let result = find_or_create_by_name(&mut tx, create_).await;
+    if result.is_ok() {
+        tx.commit().await?;
+    }
+    result
 }

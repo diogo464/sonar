@@ -12,6 +12,7 @@ sonar-opensubsonic = { path = "../sonar-opensubsonic" }
 sonar-extractor-lofty = { path = "../sonar-extractor-lofty" }
 sonar-beets = { path = "../sonar-beets" }
 sonar-listenbrainz = { path = "../sonar-listenbrainz" }
+sonar-spotify = { path = "../sonar-spotify" }
 
 clap = { version = "4.4.18", features = ["env", "derive"] }
 color-eyre = "0.6.2"

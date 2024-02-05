@@ -48,10 +48,12 @@ enum Command {
     Playlist(PlaylistArgs),
     Scrobble(ScrobbleArgs),
     Sync(SyncArgs),
+    Pin(PinArgs),
     Admin(AdminArgs),
     Import(ImportArgs),
     Server(ServerArgs),
     Extractor(ExtractorArgs),
+    Spotify(SpotifyArgs),
 }
 
 // Types used to generate json
@@ -288,6 +290,11 @@ async fn main() -> Result<()> {
             ScrobbleCommand::Delete(cargs) => cmd_scrobble_delete(cargs).await?,
         },
         Command::Sync(cargs) => cmd_sync(cargs).await?,
+        Command::Pin(cargs) => match cargs.command {
+            PinCommand::List(cargs) => cmd_pin_list(cargs).await?,
+            PinCommand::Set(cargs) => cmd_pin_set(cargs).await?,
+            PinCommand::Unset(cargs) => cmd_pin_unset(cargs).await?,
+        },
         Command::Admin(cargs) => match cargs.command {
             AdminCommand::User(cargs) => match cargs.command {
                 AdminUserCommand::List(cargs) => cmd_admin_user_list(cargs).await?,
@@ -306,6 +313,11 @@ async fn main() -> Result<()> {
         Command::Import(cargs) => cmd_import(cargs).await?,
         Command::Server(cargs) => cmd_server(cargs).await?,
         Command::Extractor(cargs) => cmd_extractor(cargs).await?,
+        Command::Spotify(cargs) => match cargs.command {
+            SpotifyCommand::List(cargs) => cmd_spotify_list(cargs).await?,
+            SpotifyCommand::Add(cargs) => cmd_spotify_add(cargs).await?,
+            SpotifyCommand::Remove(cargs) => cmd_spotify_remove(cargs).await?,
+        },
     }
 
     Ok(())
@@ -953,6 +965,68 @@ async fn cmd_sync(_args: SyncArgs) -> Result<()> {
 }
 
 #[derive(Debug, Parser)]
+struct PinArgs {
+    #[clap(subcommand)]
+    command: PinCommand,
+}
+
+#[derive(Debug, Parser)]
+enum PinCommand {
+    List(PinListArgs),
+    Set(PinSetArgs),
+    Unset(PinUnsetArgs),
+}
+
+#[derive(Debug, Parser)]
+struct PinListArgs {}
+
+async fn cmd_pin_list(_args: PinListArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    let response = client
+        .pin_list(sonar_grpc::PinListRequest { user_id })
+        .await?;
+    for pin in response.into_inner().sonar_ids {
+        println!("{}", pin);
+    }
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct PinSetArgs {
+    id: String,
+}
+
+async fn cmd_pin_set(args: PinSetArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    client
+        .pin_set(sonar_grpc::PinSetRequest {
+            user_id,
+            sonar_ids: vec![args.id],
+        })
+        .await?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct PinUnsetArgs {
+    id: String,
+}
+
+async fn cmd_pin_unset(args: PinUnsetArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    client
+        .pin_unset(sonar_grpc::PinUnsetRequest {
+            user_id,
+            sonar_ids: vec![args.id],
+        })
+        .await?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
 struct AdminArgs {
     #[clap(subcommand)]
     command: AdminCommand,
@@ -1230,6 +1304,12 @@ struct ServerArgs {
 
     #[clap(long, default_value = ".", env = "SONAR_DATA_DIR")]
     data_dir: PathBuf,
+
+    #[clap(long, env = "SONAR_SPOTIFY_USERNAME")]
+    spotify_username: Option<String>,
+
+    #[clap(long, env = "SONAR_SPOTIFY_PASSWORD")]
+    spotify_password: Option<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -1301,9 +1381,23 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
         .context("registering listenbrainz scrobbler")?;
     let context = sonar::new(config).await.context("creating sonar context")?;
 
+    let spotify =
+        if let (Some(username), Some(password)) = (args.spotify_username, args.spotify_password) {
+            let spotify = sonar_spotify::Context::new(
+                context.clone(),
+                sonar_spotify::LoginCredentials { username, password },
+                data_dir.join("spotify"),
+            )
+            .await
+            .context("creating spotify context")?;
+            Some(spotify)
+        } else {
+            None
+        };
+
     let grpc_context = context.clone();
     let f0 = tokio::spawn(async move {
-        sonar_grpc::start_server(grpc_context, args.address)
+        sonar_grpc::start_server(args.address, grpc_context, spotify)
             .await
             .context("starting grpc server")?;
         Ok::<(), eyre::Report>(())
@@ -1360,6 +1454,63 @@ async fn cmd_extractor(args: ExtractorArgs) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Parser)]
+struct SpotifyArgs {
+    #[clap(subcommand)]
+    command: SpotifyCommand,
+}
+
+#[derive(Debug, Parser)]
+enum SpotifyCommand {
+    List(SpotifyListArgs),
+    Add(SpotifyAddArgs),
+    Remove(SpotifyRemoveArgs),
+}
+
+#[derive(Debug, Parser)]
+struct SpotifyListArgs {}
+
+async fn cmd_spotify_list(_args: SpotifyListArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .spotify_list(sonar_grpc::SpotifyListRequest {})
+        .await?;
+    for id in response.into_inner().spotify_ids {
+        println!("{}", id);
+    }
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct SpotifyAddArgs {
+    uri: String,
+}
+
+async fn cmd_spotify_add(args: SpotifyAddArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    client
+        .spotify_add(sonar_grpc::SpotifyAddRequest {
+            spotify_ids: vec![args.uri],
+        })
+        .await?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct SpotifyRemoveArgs {
+    uri: String,
+}
+
+async fn cmd_spotify_remove(args: SpotifyRemoveArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    client
+        .spotify_remove(sonar_grpc::SpotifyRemoveRequest {
+            spotify_ids: vec![args.uri],
+        })
+        .await?;
+    Ok(())
+}
+
 async fn list_files_in_directories(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     let mut queue = paths;
     let mut files = vec![];
@@ -1403,7 +1554,7 @@ async fn auth_read() -> Result<(String, String)> {
     let auth = tokio::fs::read_to_string(path)
         .await
         .context("reading auth token")?;
-    let (user_id, token) = auth.split_once(':').expect("invalid auth token");
+    let (user_id, token) = auth.split_once(' ').expect("invalid auth token");
     if user_id.is_empty() || token.is_empty() {
         eyre::bail!("invalid auth token");
     }
@@ -1415,7 +1566,7 @@ async fn auth_write(user_id: &str, token: &str) -> Result<()> {
     tokio::fs::create_dir_all(path.parent().unwrap())
         .await
         .context("creating auth token dir")?;
-    let auth = format!("{}:{}", user_id, token);
+    let auth = format!("{} {}", user_id, token);
     tokio::fs::write(path, auth).await.context("writing auth")?;
     Ok(())
 }

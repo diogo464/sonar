@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 sonar = { path = "../sonar" }
+sonar-spotify = { path = "../sonar-spotify" }
 
 prost = "0.12.3"
 prost-types = "0.12.3"

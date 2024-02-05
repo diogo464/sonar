@@ -53,11 +53,19 @@ service SonarService {
 	rpc ScrobbleCreate(ScrobbleCreateRequest) returns (Scrobble);
 	rpc ScrobbleDelete(ScrobbleDeleteRequest) returns (google.protobuf.Empty);
 
+	rpc PinList(PinListRequest) returns (PinListResponse);
+	rpc PinSet(PinSetRequest) returns (google.protobuf.Empty);
+	rpc PinUnset(PinUnsetRequest) returns (google.protobuf.Empty);
+
 	rpc Import(stream ImportRequest) returns (Track);
 
 	rpc MetadataFetch(MetadataFetchRequest) returns (google.protobuf.Empty);
 
 	rpc MetadataAlbumTracks(MetadataAlbumTracksRequest) returns (MetadataAlbumTracksResponse);
+
+	rpc SpotifyList(SpotifyListRequest) returns (SpotifyListResponse);
+	rpc SpotifyAdd(SpotifyAddRequest) returns (google.protobuf.Empty);
+	rpc SpotifyRemove(SpotifyRemoveRequest) returns (google.protobuf.Empty);
 }
 
 message Property {
@@ -370,6 +378,24 @@ message ScrobbleDeleteRequest {
 	string scrobble_id = 1;
 }
 
+message PinListRequest {
+	string user_id = 1;
+}
+
+message PinListResponse {
+	repeated string sonar_ids = 1;
+}
+
+message PinSetRequest {
+	string user_id = 1;
+	repeated string sonar_ids = 2;
+}
+
+message PinUnsetRequest {
+	string user_id = 1;
+	repeated string sonar_ids = 2;
+}
+
 message ImportRequest {
 	bytes chunk = 1;
 	optional string filepath = 2;
@@ -401,4 +427,19 @@ message MetadataAlbumTracksRequest {
 
 message MetadataAlbumTracksResponse {
 	map<uint32, TrackMetadata> tracks = 1;
+}
+
+message SpotifyListRequest {
+}
+
+message SpotifyListResponse {
+	repeated string spotify_ids = 1;
+}
+
+message SpotifyAddRequest {
+	repeated string spotify_ids = 1;
+}
+
+message SpotifyRemoveRequest {
+	repeated string spotify_ids = 1;
 }

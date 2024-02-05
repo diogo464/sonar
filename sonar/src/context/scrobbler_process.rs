@@ -1,8 +1,12 @@
+use std::sync::Arc;
+
+use tokio::sync::Notify;
+
 use crate::{scrobbler::SonarScrobbler, Context};
 
-pub(super) async fn run(context: Context, scrobbler: SonarScrobbler) {
+pub(super) async fn run(context: Context, scrobbler: SonarScrobbler, notify: Arc<Notify>) {
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(360), notify.notified()).await;
         let scrobbles = if let Some(username) = scrobbler.username() {
             let user_id = match super::user_lookup(&context, username).await {
                 Ok(Some(user_id)) => user_id,

@@ -57,6 +57,23 @@ CREATE TABLE audio (
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
+CREATE TABLE pin (
+	namespace	INTEGER NOT NULL,
+	identifier	INTEGER NOT NULL,
+	user		INTEGER NOT NULL REFERENCES user(id),
+	PRIMARY KEY(namespace, identifier, user)
+);
+CREATE INDEX pin_namespace_identifier ON pin(namespace, identifier);
+CREATE INDEX pin_namespace_identifier_user ON pin(namespace, identifier, user);
+
+CREATE TABLE subscription (
+	user			INTEGER NOT NULL REFERENCES user(id),
+	external_id		TEXT NOT NULL,
+	external_service	TEXT,
+	PRIMARY KEY (user, external_id)
+);
+CREATE INDEX subscription_user ON subscription(user);
+
 CREATE TABLE artist (
 	id			INTEGER PRIMARY KEY NOT NULL,
 	name 			TEXT NOT NULL,

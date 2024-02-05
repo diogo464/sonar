@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 use crate::{
-    db::DbC, property, AlbumId, ArtistId, DateTime, Error, ErrorKind, ImageId, ListParams,
-    Properties, PropertyUpdate, Result, Timestamp, ValueUpdate,
+    db::{Db, DbC},
+    property, AlbumId, ArtistId, DateTime, Error, ErrorKind, ImageId, ListParams, Properties,
+    PropertyUpdate, Result, Timestamp, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -106,6 +107,16 @@ pub async fn list_by_artist(
         .collect())
 }
 
+pub async fn list_artist_id_pairs(db: &mut DbC) -> Result<Vec<(AlbumId, ArtistId)>> {
+    let rows = sqlx::query!("SELECT id, artist FROM album")
+        .fetch_all(&mut *db)
+        .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| (AlbumId::from_db(row.id), ArtistId::from_db(row.artist)))
+        .collect())
+}
+
 pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
     let album_view = sqlx::query_as!(AlbumView, "SELECT * FROM sqlx_album WHERE id = ?", album_id)
         .fetch_one(&mut *db)
@@ -203,7 +214,8 @@ pub async fn delete(db: &mut DbC, album_id: AlbumId) -> Result<()> {
     Ok(())
 }
 
-pub async fn find_or_create(db: &mut DbC, name: &str, create_: AlbumCreate) -> Result<Album> {
+pub async fn find_or_create_by_name(db: &mut DbC, create_: AlbumCreate) -> Result<Album> {
+    let name = &create_.name;
     let album_id = sqlx::query!("SELECT id FROM album WHERE name = ?", name)
         .fetch_optional(&mut *db)
         .await?
@@ -214,4 +226,13 @@ pub async fn find_or_create(db: &mut DbC, name: &str, create_: AlbumCreate) -> R
     }
 
     create(db, create_).await
+}
+
+pub async fn find_or_create_by_name_tx(db: &Db, create_: AlbumCreate) -> Result<Album> {
+    let mut tx = db.begin().await?;
+    let result = find_or_create_by_name(&mut tx, create_).await;
+    if result.is_ok() {
+        tx.commit().await?;
+    }
+    result
 }
