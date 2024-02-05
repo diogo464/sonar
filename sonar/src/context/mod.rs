@@ -188,7 +188,7 @@ pub async fn new(mut config: Config) -> Result<Context> {
         max_concurrent_imports: config.max_parallel_imports,
     });
 
-    let downloads = DownloadManager::new(db.clone(), config.external.clone());
+    let downloads = DownloadManager::new(db.clone(), storage.clone(), config.external.clone());
 
     let context = Context {
         db,

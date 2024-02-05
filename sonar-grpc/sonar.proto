@@ -57,15 +57,13 @@ service SonarService {
 	rpc PinSet(PinSetRequest) returns (google.protobuf.Empty);
 	rpc PinUnset(PinUnsetRequest) returns (google.protobuf.Empty);
 
+	rpc ExternalDownloadStart(ExternalDownloadRequest) returns (google.protobuf.Empty);
+
 	rpc Import(stream ImportRequest) returns (Track);
 
 	rpc MetadataFetch(MetadataFetchRequest) returns (google.protobuf.Empty);
 
 	rpc MetadataAlbumTracks(MetadataAlbumTracksRequest) returns (MetadataAlbumTracksResponse);
-
-	rpc SpotifyList(SpotifyListRequest) returns (SpotifyListResponse);
-	rpc SpotifyAdd(SpotifyAddRequest) returns (google.protobuf.Empty);
-	rpc SpotifyRemove(SpotifyRemoveRequest) returns (google.protobuf.Empty);
 }
 
 message Property {
@@ -394,6 +392,11 @@ message PinSetRequest {
 message PinUnsetRequest {
 	string user_id = 1;
 	repeated string sonar_ids = 2;
+}
+
+message ExternalDownloadRequest {
+	string user_id = 1;
+	string external_id = 2;
 }
 
 message ImportRequest {

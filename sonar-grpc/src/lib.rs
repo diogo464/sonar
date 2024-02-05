@@ -16,18 +16,11 @@ pub type Client = sonar_service_client::SonarServiceClient<tonic::transport::Cha
 #[derive(Clone)]
 struct Server {
     context: sonar::Context,
-    spotify: Option<sonar_spotify::Context>,
 }
 
 impl Server {
-    fn new(context: sonar::Context, spotify: Option<sonar_spotify::Context>) -> Self {
-        Self { context, spotify }
-    }
-
-    fn get_spotify(&self) -> Result<&sonar_spotify::Context, tonic::Status> {
-        self.spotify
-            .as_ref()
-            .ok_or_else(|| tonic::Status::unimplemented("spotify not configured"))
+    fn new(context: sonar::Context) -> Self {
+        Self { context }
     }
 }
 
@@ -506,6 +499,22 @@ impl sonar_service_server::SonarService for Server {
         }
         Ok(tonic::Response::new(()))
     }
+    async fn external_download_start(
+        &self,
+        request: tonic::Request<ExternalDownloadRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let req = request.into_inner();
+        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
+        let external_id = sonar::ExternalMediaId::from(req.external_id);
+        sonar::external_download_request(
+            &self.context,
+            sonar::ExternalDownloadRequest {
+                user_id,
+                external_id,
+            },
+        ).await.m()?;
+        Ok(tonic::Response::new(()))
+    }
     async fn import(
         &self,
         request: tonic::Request<tonic::Streaming<ImportRequest>>,
@@ -588,60 +597,6 @@ impl sonar_service_server::SonarService for Server {
             .m()?;
         Ok(tonic::Response::new(metadata.into()))
     }
-    async fn spotify_list(
-        &self,
-        request: tonic::Request<SpotifyListRequest>,
-    ) -> std::result::Result<tonic::Response<SpotifyListResponse>, tonic::Status> {
-        let spotify = self.get_spotify()?;
-        let resources = spotify
-            .list()
-            .await
-            .map_err(|_| tonic::Status::internal("failed to list spotify resources"))?;
-        let resources = resources.into_iter().map(|r| r.to_string()).collect();
-        Ok(tonic::Response::new(SpotifyListResponse {
-            spotify_ids: resources,
-        }))
-    }
-    async fn spotify_add(
-        &self,
-        request: tonic::Request<SpotifyAddRequest>,
-    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-        let spotify = self.get_spotify()?;
-        let req = request.into_inner();
-        let spotify_ids = req
-            .spotify_ids
-            .into_iter()
-            .map(|id| id.parse::<sonar_spotify::ResourceId>())
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|err| tonic::Status::invalid_argument(err.to_string()))?;
-        for spotify_id in spotify_ids {
-            spotify
-                .add(spotify_id)
-                .await
-                .map_err(|_| tonic::Status::internal("failed to add spotify resource"))?;
-        }
-        Ok(tonic::Response::new(()))
-    }
-    async fn spotify_remove(
-        &self,
-        request: tonic::Request<SpotifyRemoveRequest>,
-    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-        let spotify = self.get_spotify()?;
-        let req = request.into_inner();
-        let spotify_ids = req
-            .spotify_ids
-            .into_iter()
-            .map(|id| id.parse::<sonar_spotify::ResourceId>())
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|err| tonic::Status::invalid_argument(err.to_string()))?;
-        for spotify_id in spotify_ids {
-            spotify
-                .remove(spotify_id)
-                .await
-                .map_err(|_| tonic::Status::internal("failed to remove spotify resource"))?;
-        }
-        Ok(tonic::Response::new(()))
-    }
 }
 
 pub async fn client(endpoint: &str) -> eyre::Result<Client> {
@@ -651,15 +606,11 @@ pub async fn client(endpoint: &str) -> eyre::Result<Client> {
         .context("connecting to grpc server")
 }
 
-pub async fn start_server(
-    address: SocketAddr,
-    context: sonar::Context,
-    spotify: Option<sonar_spotify::Context>,
-) -> eyre::Result<()> {
+pub async fn start_server(address: SocketAddr, context: sonar::Context) -> eyre::Result<()> {
     tracing::info!("starting grpc server on {}", address);
     tonic::transport::Server::builder()
         .add_service(sonar_service_server::SonarServiceServer::new(Server::new(
-            context, spotify,
+            context,
         )))
         .serve(address)
         .await?;

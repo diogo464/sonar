@@ -20,7 +20,6 @@ pub enum ExternalMediaType {
     Album,
     Track,
     Playlist,
-    Invalid,
 }
 
 #[derive(Debug, Clone)]
@@ -70,7 +69,6 @@ impl std::fmt::Display for ExternalMediaType {
             Self::Album => write!(f, "album"),
             Self::Track => write!(f, "track"),
             Self::Playlist => write!(f, "playlist"),
-            Self::Invalid => write!(f, "invalid"),
         }
     }
 }
@@ -163,5 +161,9 @@ impl SonarExternalService {
 
     pub async fn fetch_playlist(&self, id: &ExternalMediaId) -> Result<ExternalPlaylist> {
         self.service.fetch_playlist(id).await
+    }
+
+    pub async fn download_track(&self, id: &ExternalMediaId) -> Result<ByteStream> {
+        self.service.download_track(id).await
     }
 }

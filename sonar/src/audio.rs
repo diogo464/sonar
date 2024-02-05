@@ -5,7 +5,7 @@ use lofty::AudioFile;
 use crate::{
     blob::{self, BlobStorage},
     bytestream::{self, ByteStream},
-    db::DbC,
+    db::{Db, DbC},
     ks, AudioId, ByteRange, Error, ErrorKind, Result, TrackId,
 };
 

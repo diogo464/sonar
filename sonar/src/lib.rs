@@ -16,9 +16,11 @@ pub use types::*;
 mod context;
 pub use context::*;
 
+pub mod external;
+pub use external::*;
+
 pub mod bytestream;
 pub mod ext;
-pub mod external;
 pub mod extractor;
 pub mod metadata;
 pub mod prop;
@@ -30,10 +32,10 @@ pub mod test;
 
 pub(crate) mod album;
 pub(crate) mod artist;
-pub(crate) mod download;
 pub(crate) mod audio;
 pub(crate) mod blob;
 pub(crate) mod db;
+pub(crate) mod download;
 pub(crate) mod gc;
 pub(crate) mod genre;
 pub(crate) mod image;

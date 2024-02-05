@@ -49,11 +49,11 @@ enum Command {
     Scrobble(ScrobbleArgs),
     Sync(SyncArgs),
     Pin(PinArgs),
+    External(ExternalArgs),
     Admin(AdminArgs),
     Import(ImportArgs),
     Server(ServerArgs),
     Extractor(ExtractorArgs),
-    Spotify(SpotifyArgs),
 }
 
 // Types used to generate json
@@ -295,6 +295,9 @@ async fn main() -> Result<()> {
             PinCommand::Set(cargs) => cmd_pin_set(cargs).await?,
             PinCommand::Unset(cargs) => cmd_pin_unset(cargs).await?,
         },
+        Command::External(cargs) => match cargs.command {
+            ExternalCommand::Request(cargs) => cmd_external_request(cargs).await?,
+        },
         Command::Admin(cargs) => match cargs.command {
             AdminCommand::User(cargs) => match cargs.command {
                 AdminUserCommand::List(cargs) => cmd_admin_user_list(cargs).await?,
@@ -313,11 +316,6 @@ async fn main() -> Result<()> {
         Command::Import(cargs) => cmd_import(cargs).await?,
         Command::Server(cargs) => cmd_server(cargs).await?,
         Command::Extractor(cargs) => cmd_extractor(cargs).await?,
-        Command::Spotify(cargs) => match cargs.command {
-            SpotifyCommand::List(cargs) => cmd_spotify_list(cargs).await?,
-            SpotifyCommand::Add(cargs) => cmd_spotify_add(cargs).await?,
-            SpotifyCommand::Remove(cargs) => cmd_spotify_remove(cargs).await?,
-        },
     }
 
     Ok(())
@@ -1027,6 +1025,35 @@ async fn cmd_pin_unset(args: PinUnsetArgs) -> Result<()> {
 }
 
 #[derive(Debug, Parser)]
+struct ExternalArgs {
+    #[clap(subcommand)]
+    command: ExternalCommand,
+}
+
+#[derive(Debug, Parser)]
+enum ExternalCommand {
+    Request(ExternalRequestArgs),
+}
+
+#[derive(Debug, Parser)]
+struct ExternalRequestArgs {
+    external_id: String,
+}
+
+async fn cmd_external_request(args: ExternalRequestArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    let response = client
+        .external_download_start(sonar_grpc::ExternalDownloadRequest {
+            user_id,
+            external_id: args.external_id,
+        })
+        .await?;
+    println!("{:?}", response.into_inner());
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
 struct AdminArgs {
     #[clap(subcommand)]
     command: AdminCommand,
@@ -1379,25 +1406,23 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
             sonar_listenbrainz::ListenBrainzScrobbler::new(std::env!("LISTENBRAINZ_API_KEY")),
         )
         .context("registering listenbrainz scrobbler")?;
+
+    if let (Some(username), Some(password)) = (args.spotify_username, args.spotify_password) {
+        let spotify = sonar_spotify::SpotifyService::new(sonar_spotify::LoginCredentials {
+            username,
+            password,
+        })
+        .await
+        .context("creating spotify context")?;
+        config
+            .register_external_service(1, "spotify", spotify)
+            .context("registering spotify")?;
+    }
+
     let context = sonar::new(config).await.context("creating sonar context")?;
-
-    let spotify =
-        if let (Some(username), Some(password)) = (args.spotify_username, args.spotify_password) {
-            let spotify = sonar_spotify::Context::new(
-                context.clone(),
-                sonar_spotify::LoginCredentials { username, password },
-                data_dir.join("spotify"),
-            )
-            .await
-            .context("creating spotify context")?;
-            Some(spotify)
-        } else {
-            None
-        };
-
     let grpc_context = context.clone();
     let f0 = tokio::spawn(async move {
-        sonar_grpc::start_server(args.address, grpc_context, spotify)
+        sonar_grpc::start_server(args.address, grpc_context)
             .await
             .context("starting grpc server")?;
         Ok::<(), eyre::Report>(())
@@ -1451,63 +1476,6 @@ async fn cmd_extractor(args: ExtractorArgs) -> Result<()> {
         }
     }
 
-    Ok(())
-}
-
-#[derive(Debug, Parser)]
-struct SpotifyArgs {
-    #[clap(subcommand)]
-    command: SpotifyCommand,
-}
-
-#[derive(Debug, Parser)]
-enum SpotifyCommand {
-    List(SpotifyListArgs),
-    Add(SpotifyAddArgs),
-    Remove(SpotifyRemoveArgs),
-}
-
-#[derive(Debug, Parser)]
-struct SpotifyListArgs {}
-
-async fn cmd_spotify_list(_args: SpotifyListArgs) -> Result<()> {
-    let mut client = create_client().await?;
-    let response = client
-        .spotify_list(sonar_grpc::SpotifyListRequest {})
-        .await?;
-    for id in response.into_inner().spotify_ids {
-        println!("{}", id);
-    }
-    Ok(())
-}
-
-#[derive(Debug, Parser)]
-struct SpotifyAddArgs {
-    uri: String,
-}
-
-async fn cmd_spotify_add(args: SpotifyAddArgs) -> Result<()> {
-    let mut client = create_client().await?;
-    client
-        .spotify_add(sonar_grpc::SpotifyAddRequest {
-            spotify_ids: vec![args.uri],
-        })
-        .await?;
-    Ok(())
-}
-
-#[derive(Debug, Parser)]
-struct SpotifyRemoveArgs {
-    uri: String,
-}
-
-async fn cmd_spotify_remove(args: SpotifyRemoveArgs) -> Result<()> {
-    let mut client = create_client().await?;
-    client
-        .spotify_remove(sonar_grpc::SpotifyRemoveRequest {
-            spotify_ids: vec![args.uri],
-        })
-        .await?;
     Ok(())
 }
 

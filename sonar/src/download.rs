@@ -4,15 +4,16 @@ use std::{
 };
 
 use crate::{
-    album, artist,
+    album, artist, audio,
+    blob::BlobStorage,
     db::Db,
     external::{
         ExternalAlbum, ExternalArtist, ExternalMediaId, ExternalMediaType, ExternalPlaylist,
         ExternalTrack, SonarExternalService,
     },
-    playlist, track, Album, AlbumCreate, AlbumId, Artist, ArtistCreate, ArtistId, Context, Error,
-    ExternalDownload, ExternalDownloadDelete, ExternalDownloadRequest, ExternalDownloadStatus,
-    Playlist, PlaylistCreate, Result, Track, TrackCreate, TrackId, UserId,
+    playlist, track, Album, AlbumCreate, AlbumId, Artist, ArtistCreate, ArtistId, AudioCreate,
+    Context, Error, ErrorKind, ExternalDownload, ExternalDownloadDelete, ExternalDownloadRequest,
+    ExternalDownloadStatus, Playlist, PlaylistCreate, Result, Track, TrackCreate, TrackId, UserId,
 };
 
 type Sender<T> = tokio::sync::mpsc::Sender<T>;
@@ -74,12 +75,17 @@ impl Drop for Inner {
 pub struct DownloadManager(Arc<Inner>);
 
 impl DownloadManager {
-    pub fn new(db: Db, mut services: Vec<SonarExternalService>) -> Self {
+    pub fn new(
+        db: Db,
+        storage: Arc<dyn BlobStorage>,
+        mut services: Vec<SonarExternalService>,
+    ) -> Self {
         let (sender, receiver) = tokio::sync::mpsc::channel(DOWNLOAD_MANAGER_CAPACITY);
         let list = Arc::new(Mutex::new(Vec::new()));
         services.sort_by_key(|s| s.priority());
         let mut process = Process {
             db,
+            storage,
             sender: sender.clone(),
             receiver,
             list: list.clone(),
@@ -131,6 +137,7 @@ struct ProcessDownload {
 
 struct Process {
     db: Db,
+    storage: Arc<dyn BlobStorage>,
     sender: Sender<Message>,
     receiver: Receiver<Message>,
     list: SharedList,
@@ -163,11 +170,13 @@ impl Process {
 
                     let handle = tokio::spawn({
                         let db = self.db.clone();
+                        let storage = self.storage.clone();
                         let sender = self.sender.clone();
                         let services = self.external_services.clone();
                         let external_id = download_id.external_id.clone();
                         async move {
-                            download_task(db, sender, &services, user_id, external_id).await;
+                            download_task(db, storage, sender, &services, user_id, external_id)
+                                .await;
                         }
                     });
 
@@ -227,12 +236,13 @@ impl Process {
 
 async fn download_task(
     db: Db,
+    storage: Arc<dyn BlobStorage>,
     sender: Sender<Message>,
     services: &[SonarExternalService],
     user_id: UserId,
     external_id: ExternalMediaId,
 ) {
-    let message = match download(&db, services, user_id, &external_id).await {
+    let message = match download(&db, &*storage, services, user_id, &external_id).await {
         Ok(_) => Message::Complete {
             user_id,
             external_id,
@@ -248,6 +258,7 @@ async fn download_task(
 
 async fn download(
     db: &Db,
+    storage: &dyn BlobStorage,
     services: &[SonarExternalService],
     user_id: UserId,
     external_id: &ExternalMediaId,
@@ -267,7 +278,7 @@ async fn download(
                         find_service_for(services, external_id, ExternalMediaType::Track).await?;
                     let external_track = track_service.fetch_track(external_id).await?;
                     let track = find_or_create_track(db, &external_track, album.id).await?;
-                    download_track(track_service, external_id, track.id).await?;
+                    download_track(db, storage, track_service, external_id, track.id).await?;
                 }
             }
             Ok(())
@@ -285,7 +296,7 @@ async fn download(
                     find_service_for(services, external_id, ExternalMediaType::Track).await?;
                 let external_track = track_service.fetch_track(external_id).await?;
                 let track = find_or_create_track(db, &external_track, album.id).await?;
-                download_track(track_service, external_id, track.id).await?;
+                download_track(db, storage, track_service, external_id, track.id).await?;
             }
             Ok(())
         }
@@ -301,7 +312,7 @@ async fn download(
             let artist = find_or_create_artist(db, &external_artist).await?;
             let album = find_or_create_album(db, &external_album, artist.id).await?;
             let track = find_or_create_track(db, &external_track, album.id).await?;
-            download_track(service, external_id, track.id).await?;
+            download_track(db, storage, service, external_id, track.id).await?;
             Ok(())
         }
         ExternalMediaType::Playlist => {
@@ -322,7 +333,7 @@ async fn download(
                 let artist = find_or_create_artist(db, &external_artist).await?;
                 let album = find_or_create_album(db, &external_album, artist.id).await?;
                 let track = find_or_create_track(db, &external_track, album.id).await?;
-                download_track(track_service, external_id, track.id).await?;
+                download_track(db, storage, track_service, external_id, track.id).await?;
                 playlist_tracks.push(track.id);
             }
             let playlist = find_or_create_playlist(db, &external_playlist, user_id).await?;
@@ -334,10 +345,6 @@ async fn download(
 
             Ok(())
         }
-        ExternalMediaType::Invalid => Err(Error::internal(format!(
-            "invalid id type for {}: {}",
-            media_type, external_id
-        ))),
     }
 }
 
@@ -399,11 +406,22 @@ async fn find_or_create_playlist(
 }
 
 async fn download_track(
-    services: &SonarExternalService,
+    db: &Db,
+    storage: &dyn BlobStorage,
+    service: &SonarExternalService,
     external_id: &ExternalMediaId,
     track_id: TrackId,
 ) -> Result<()> {
-    todo!()
+    let stream = service.download_track(external_id).await?;
+    let create = AudioCreate {
+        stream,
+        filename: Some(external_id.as_str().to_owned()),
+    };
+    let mut tx = db.begin().await?;
+    let audio = audio::create(&mut tx, storage, create).await?;
+    audio::set_preferred(&mut tx, audio.id, track_id).await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 async fn find_service<'s>(
@@ -414,7 +432,9 @@ async fn find_service<'s>(
         match service.validate_id(external_id).await {
             Ok(id_type) => return Ok((service, id_type)),
             Err(err) => {
-                tracing::warn!("failed to validate id: {}: {}", service.identifier(), err);
+                if err.kind() != ErrorKind::Invalid {
+                    tracing::warn!("failed to validate id: {}: {}", service.identifier(), err);
+                }
             }
         }
     }
