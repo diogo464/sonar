@@ -1392,7 +1392,8 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     let storage_backend = sonar::StorageBackend::Filesystem {
         path: data_dir.join("storage"),
     };
-    let mut config = sonar::Config::new(database_url, storage_backend);
+    let search_backend = sonar::SearchBackend::BuiltIn;
+    let mut config = sonar::Config::new(database_url, storage_backend, search_backend);
     config
         .register_extractor("lofty", sonar_extractor_lofty::LoftyExtractor)
         .context("registering lofty extractor")?;

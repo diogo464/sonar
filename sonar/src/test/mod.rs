@@ -314,7 +314,11 @@ impl Extractor for StaticMetadataExtractor {
 }
 
 pub fn create_config_memory() -> crate::Config {
-    crate::Config::new(":memory:", crate::StorageBackend::Memory)
+    crate::Config::new(
+        ":memory:",
+        crate::StorageBackend::Memory,
+        crate::SearchBackend::BuiltIn,
+    )
 }
 
 pub async fn create_context_memory() -> Context {

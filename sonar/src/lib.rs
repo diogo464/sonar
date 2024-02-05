@@ -45,6 +45,7 @@ pub(crate) mod pin;
 pub(crate) mod playlist;
 pub(crate) mod property;
 pub(crate) mod scrobble;
+pub(crate) mod search;
 pub(crate) mod track;
 pub(crate) mod user;
 
@@ -60,6 +61,7 @@ pub use property::{
     PropertyUpdateAction, PropertyValue,
 };
 pub use scrobble::{Scrobble, ScrobbleCreate, ScrobbleUpdate};
+pub use search::{SearchFlags, SearchQuery, SearchResult};
 pub use track::{Lyrics, LyricsKind, Track, TrackCreate, TrackLyrics, TrackUpdate};
 pub use user::{
     InvalidUserTokenError, InvalidUsernameError, User, UserCreate, UserToken, UserUpdate, Username,

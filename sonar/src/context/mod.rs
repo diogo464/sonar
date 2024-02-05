@@ -35,16 +35,26 @@ use crate::{
 
 mod scrobbler_process;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub enum StorageBackend {
+    #[default]
     Memory,
-    Filesystem { path: PathBuf },
+    Filesystem {
+        path: PathBuf,
+    },
+}
+
+#[derive(Debug, Default, Clone)]
+pub enum SearchBackend {
+    #[default]
+    BuiltIn,
 }
 
 #[derive(Debug)]
 pub struct Config {
     database_url: String,
     storage_backend: StorageBackend,
+    search_backend: SearchBackend,
     extractors: Vec<SonarExtractor>,
     scrobblers: Vec<SonarScrobbler>,
     providers: Vec<SonarMetadataProvider>,
@@ -54,10 +64,15 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(database_url: impl Into<String>, storage_backend: StorageBackend) -> Self {
+    pub fn new(
+        database_url: impl Into<String>,
+        storage_backend: StorageBackend,
+        search_backend: SearchBackend,
+    ) -> Self {
         Self {
             database_url: database_url.into(),
             storage_backend,
+            search_backend,
             extractors: Vec::new(),
             scrobblers: Vec::new(),
             providers: Vec::new(),
