@@ -378,6 +378,18 @@ pub async fn create_track(ctx: &Context, album: AlbumId, name: &str) -> Track {
     create_track_with_audio_opt(ctx, album, name, None).await
 }
 
+pub async fn create_artist_album_track(
+    ctx: &Context,
+    artist_name: &str,
+    album_name: &str,
+    track_name: &str,
+) -> (Artist, Album, Track) {
+    let artist = create_artist(ctx, artist_name).await;
+    let album = create_album(ctx, artist.id, album_name).await;
+    let track = create_track(ctx, album.id, track_name).await;
+    (artist, album, track)
+}
+
 pub async fn create_track_with_audio(
     ctx: &Context,
     album: AlbumId,

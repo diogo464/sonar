@@ -88,3 +88,25 @@ async fn playlist_get_tracks_one() {
     assert_eq!(tracks[0].playlist, playlist.id);
     assert_eq!(tracks[0].track, track.id);
 }
+
+#[tokio::test]
+async fn playlist_clear() {
+    let ctx = sonar::test::create_context_memory().await;
+    let user = sonar::test::create_user(&ctx, "user").await;
+    let playlist = sonar::test::create_playlist(&ctx, user.id, "Playlist").await;
+    let (_artist, _album, track) = create_artist_album_track(&ctx).await;
+    sonar::playlist_insert_tracks(&ctx, playlist.id, &[track.id])
+        .await
+        .unwrap();
+    let tracks = sonar::playlist_list_tracks(&ctx, playlist.id, sonar::ListParams::default())
+        .await
+        .unwrap();
+    assert_eq!(tracks.len(), 1);
+    sonar::playlist_clear_tracks(&ctx, playlist.id)
+        .await
+        .unwrap();
+    let tracks = sonar::playlist_list_tracks(&ctx, playlist.id, sonar::ListParams::default())
+        .await
+        .unwrap();
+    assert_eq!(tracks.len(), 0);
+}

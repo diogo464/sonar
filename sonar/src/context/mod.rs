@@ -23,14 +23,15 @@ use crate::{
     },
     pin, playlist, property, scrobble,
     scrobbler::{self, SonarScrobbler},
+    search::{BuiltInSearchEngine, SearchEngine, SearchResults},
     track, user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId,
     ArtistUpdate, Audio, AudioCreate, AudioDownload, AudioId, ByteRange, Error, ErrorKind,
     ExternalDownload, ExternalDownloadDelete, ExternalDownloadRequest, ExternalSubscription,
     ExternalSubscriptionCreate, ExternalSubscriptionDelete, ImageCreate, ImageDownload, ImageId,
     Import, ListParams, Lyrics, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack,
     PlaylistUpdate, Properties, PropertyKey, PropertyUpdate, Result, Scrobble, ScrobbleCreate,
-    ScrobbleId, ScrobbleUpdate, SonarId, Track, TrackCreate, TrackId, TrackUpdate, User,
-    UserCreate, UserId, UserToken, Username, ValueUpdate,
+    ScrobbleId, ScrobbleUpdate, SearchQuery, SonarId, Track, TrackCreate, TrackId, TrackUpdate,
+    User, UserCreate, UserId, UserToken, Username, ValueUpdate,
 };
 
 mod scrobbler_process;
@@ -171,6 +172,7 @@ pub struct Context {
     tokens: Arc<Mutex<HashMap<UserToken, UserId>>>,
     storage: Arc<dyn BlobStorage>,
     importer: Arc<Importer>,
+    search: Arc<dyn SearchEngine>,
     extractors: Arc<Vec<SonarExtractor>>,
     scrobblers: Arc<Vec<SonarScrobbler>>,
     providers: Arc<Vec<SonarMetadataProvider>>,
@@ -205,11 +207,18 @@ pub async fn new(mut config: Config) -> Result<Context> {
 
     let downloads = DownloadManager::new(db.clone(), storage.clone(), config.external.clone());
 
+    let search_engine = match config.search_backend {
+        SearchBackend::BuiltIn => {
+            Arc::new(BuiltInSearchEngine::new(db.clone())) as Arc<dyn SearchEngine>
+        }
+    };
+
     let context = Context {
         db,
         tokens: Default::default(),
         storage,
         importer: Arc::new(importer),
+        search: search_engine,
         extractors: Arc::new(config.extractors),
         scrobblers: Arc::new(config.scrobblers),
         providers: Arc::new(config.providers),
@@ -567,6 +576,12 @@ pub async fn track_get_lyrics(context: &Context, track_id: TrackId) -> Result<Ly
 }
 
 #[tracing::instrument]
+pub async fn audio_list_by_track(context: &Context, track_id: TrackId) -> Result<Vec<Audio>> {
+    let mut conn = context.db.acquire().await?;
+    audio::list_by_track(&mut conn, track_id).await
+}
+
+#[tracing::instrument]
 pub async fn audio_create(context: &Context, create: AudioCreate) -> Result<Audio> {
     let mut tx = context.db.begin().await?;
     let result = audio::create(&mut tx, &*context.storage, create).await;
@@ -710,6 +725,15 @@ pub async fn playlist_remove_tracks(
     let result = playlist::remove_tracks(&mut tx, id, tracks).await;
     tx.commit().await?;
     result
+}
+
+#[tracing::instrument]
+pub async fn search(
+    context: &Context,
+    user_id: UserId,
+    query: SearchQuery,
+) -> Result<SearchResults> {
+    context.search.search(user_id, &query).await
 }
 
 #[tracing::instrument]

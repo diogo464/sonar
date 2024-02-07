@@ -59,3 +59,52 @@ async fn get_user_one() {
     assert_eq!(user.id, user2.id);
     assert_eq!(user.username, user2.username);
 }
+
+#[tokio::test]
+async fn password_min_8() {
+    let ctx = sonar::test::create_context_memory().await;
+    let result = sonar::user_create(
+        &ctx,
+        sonar::UserCreate {
+            username: "User".parse().unwrap(),
+            password: "1234567".to_string(),
+            avatar: None,
+        },
+    )
+    .await;
+    assert!(result.is_err());
+
+    let result = sonar::user_create(
+        &ctx,
+        sonar::UserCreate {
+            username: "User".parse().unwrap(),
+            password: "12345678".to_string(),
+            avatar: None,
+        },
+    )
+    .await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn login() {
+    let ctx = sonar::test::create_context_memory().await;
+    let user = sonar::test::create_user_with_password(&ctx, "User", "admin1234").await;
+
+    let (user_id, token) = sonar::user_login(&ctx, &sonar::Username::new("User").unwrap(), "admin1234")
+        .await
+        .unwrap();
+    assert_eq!(user.id, user_id);
+
+    let user_id = sonar::user_validate_token(&ctx, &token).await.unwrap();
+    assert_eq!(user.id, user_id);
+}
+
+#[tokio::test]
+async fn login_failed() {
+    let ctx = sonar::test::create_context_memory().await;
+    let _user = sonar::test::create_user_with_password(&ctx, "User", "admin1234").await;
+
+    let result = sonar::user_login(&ctx, &sonar::Username::new("User").unwrap(), "wrong").await;
+    assert!(result.is_err());
+}

@@ -23,7 +23,10 @@ impl sonar::external::ExternalService for Service1 {
         } else if id.as_str() == SERVICE1_ID_TRACK {
             Ok(ExternalMediaType::Track)
         } else {
-            Ok(ExternalMediaType::Invalid)
+            Err(sonar::Error::new(
+                sonar::ErrorKind::Invalid,
+                "invalid external id",
+            ))
         }
     }
     async fn fetch_artist(&self, id: &ExternalMediaId) -> Result<ExternalArtist> {
@@ -79,7 +82,7 @@ impl sonar::external::ExternalService for Service1 {
 }
 
 #[tokio::test]
-async fn download_track() {
+async fn external_download_track() {
     let mut config = sonar::test::create_config_memory();
     config
         .register_external_service(1, "service1", Service1)

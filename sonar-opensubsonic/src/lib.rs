@@ -232,10 +232,15 @@ impl OpenSubsonicServer for Server {
             .iter()
             .map(|track| track.track)
             .collect::<Vec<_>>();
+
         let tracks = sonar::track_get_bulk(&self.context, &track_ids).await.m()?;
+        let albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks);
+        let artists = sonar::ext::get_tracks_artists_map(&self.context, &tracks);
+        let (albums, artists) = tokio::try_join!(albums, artists).m()?;
+
         Ok(PlaylistWithSongs {
             playlist: playlist_from_playlist(playlist),
-            entry: child_from_playlist_tracks(&playlist_tracks, &tracks),
+            entry: child_from_playlist_tracks(&playlist_tracks, &tracks, &albums, &artists),
         })
     }
 
@@ -288,9 +293,12 @@ impl OpenSubsonicServer for Server {
             .map(|track| track.track)
             .collect::<Vec<_>>();
         let tracks = sonar::track_get_bulk(&self.context, &track_ids).await.m()?;
+        let albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks);
+        let artists = sonar::ext::get_tracks_artists_map(&self.context, &tracks);
+        let (albums, artists) = tokio::try_join!(albums, artists).m()?;
         Ok(PlaylistWithSongs {
             playlist: playlist_from_playlist(playlist),
-            entry: child_from_playlist_tracks(&playlist_tracks, &tracks),
+            entry: child_from_playlist_tracks(&playlist_tracks, &tracks, &albums, &artists),
         })
     }
 
@@ -463,17 +471,19 @@ fn playlist_from_playlist(playlist: sonar::Playlist) -> Playlist {
 fn child_from_playlist_tracks(
     playlist_tracks: &[sonar::PlaylistTrack],
     tracks: &[sonar::Track],
+    albums: &HashMap<sonar::AlbumId, sonar::Album>,
+    artists: &HashMap<sonar::ArtistId, sonar::Artist>,
 ) -> Vec<Child> {
     let mut children = Vec::with_capacity(playlist_tracks.len());
-    for track in tracks {
+    for (idx, track) in tracks.iter().enumerate() {
         children.push(Child {
             id: track.id.to_string(),
             parent: Some(track.album.to_string()),
             is_dir: false,
             title: track.name.clone(),
-            album: None,
-            artist: None,
-            track: None,
+            album: Some(albums[&track.album].name.clone()),
+            artist: Some(artists[&track.artist].name.clone()),
+            track: Some((idx + 1) as u32),
             year: None,
             genre: None,
             cover_art: track.cover_art.map(|id| id.to_string()),

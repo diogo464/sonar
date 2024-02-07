@@ -107,6 +107,14 @@ pub async fn get(db: &mut DbC, playlist_id: PlaylistId) -> Result<Playlist> {
     Ok(Playlist::from((playlist_view, properties)))
 }
 
+pub async fn get_bulk(db: &mut DbC, playlist_ids: &[PlaylistId]) -> Result<Vec<Playlist>> {
+    let mut playlists = Vec::with_capacity(playlist_ids.len());
+    for playlist_id in playlist_ids {
+        playlists.push(get(db, *playlist_id).await?);
+    }
+    Ok(playlists)
+}
+
 pub async fn get_by_name(db: &mut DbC, user_id: UserId, name: &str) -> Result<Playlist> {
     match find_by_name(db, user_id, name).await? {
         Some(playlist) => Ok(playlist),

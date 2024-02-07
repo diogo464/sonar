@@ -23,6 +23,44 @@ async fn album_create_one() {
 }
 
 #[tokio::test]
+async fn album_update_one() {
+    let ctx = sonar::test::create_context_memory().await;
+    let artist = sonar::test::create_artist(&ctx, "artist").await;
+    let create = sonar::AlbumCreate {
+        name: "Album".to_string(),
+        artist: artist.id,
+        cover_art: None,
+        properties: sonar::test::create_simple_properties(),
+    };
+    let album = sonar::album_create(&ctx, create).await.unwrap();
+    assert_eq!(album.name, "Album");
+    assert_eq!(album.properties.len(), 2);
+
+    sonar::album_update(
+        &ctx,
+        album.id,
+        sonar::AlbumUpdate {
+            name: sonar::ValueUpdate::Set("Album2".to_string()),
+            artist: Default::default(),
+            cover_art: Default::default(),
+            properties: vec![sonar::PropertyUpdate {
+                key: sonar::PropertyKey::new_const("test-key"),
+                action: sonar::PropertyUpdateAction::Set(sonar::PropertyValue::new_uncheked(
+                    "value1",
+                )),
+            }],
+        },
+    )
+    .await
+    .unwrap();
+
+    let album = sonar::album_get(&ctx, album.id).await.unwrap();
+    assert_eq!(album.name, "Album2");
+    assert_eq!(album.properties.len(), 3);
+    assert_eq!(album.properties.get("test-key").unwrap().as_str(), "value1");
+}
+
+#[tokio::test]
 async fn album_list_one() {
     let ctx = sonar::test::create_context_memory().await;
     let artist = sonar::test::create_artist(&ctx, "artist").await;

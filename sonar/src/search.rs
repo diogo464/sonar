@@ -1,9 +1,9 @@
 use crate::{
-    async_trait, Album, AlbumId, Artist, ArtistId, Playlist, PlaylistId, Result, Track, TrackId,
+    async_trait, Album, AlbumId, Artist, ArtistId, Playlist, PlaylistId, Result, Track, TrackId, UserId,
 };
 
 mod builtin;
-pub use builtin::BuiltinSearchEngine;
+pub use builtin::BuiltInSearchEngine;
 
 pub type SearchFlags = u32;
 
@@ -32,6 +32,30 @@ pub enum SearchResult {
     Playlist(Playlist),
 }
 
+impl From<Artist> for SearchResult {
+    fn from(artist: Artist) -> Self {
+        Self::Artist(artist)
+    }
+}
+
+impl From<Album> for SearchResult {
+    fn from(album: Album) -> Self {
+        Self::Album(album)
+    }
+}
+
+impl From<Track> for SearchResult {
+    fn from(track: Track) -> Self {
+        Self::Track(track)
+    }
+}
+
+impl From<Playlist> for SearchResult {
+    fn from(playlist: Playlist) -> Self {
+        Self::Playlist(playlist)
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct SearchResults {
     pub results: Vec<SearchResult>,
@@ -39,7 +63,7 @@ pub struct SearchResults {
 
 #[async_trait]
 pub trait SearchEngine: std::fmt::Debug + Send + Sync + 'static {
-    async fn search(&self, query: &SearchQuery) -> Result<SearchResults>;
+    async fn search(&self, user_id: UserId, query: &SearchQuery) -> Result<SearchResults>;
     async fn synchronize_artist(&self, artist: ArtistId);
     async fn syncrhonize_album(&self, album: AlbumId);
     async fn synchronize_track(&self, track: TrackId);
