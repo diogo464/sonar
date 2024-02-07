@@ -12,23 +12,48 @@ use crate::{
         ExternalTrack, SonarExternalService,
     },
     playlist, track, Album, AlbumCreate, AlbumId, Artist, ArtistCreate, ArtistId, AudioCreate,
-    Error, ErrorKind, ExternalDownload, ExternalDownloadStatus, Playlist, PlaylistCreate, Result,
-    Track, TrackCreate, TrackId, UserId,
+    Error, ErrorKind, Playlist, PlaylistCreate, Result, Track, TrackCreate, TrackId, UserId,
 };
 
 type Sender<T> = tokio::sync::mpsc::Sender<T>;
 type Receiver<T> = tokio::sync::mpsc::Receiver<T>;
-type SharedList = Arc<Mutex<Vec<ExternalDownload>>>;
+type SharedList = Arc<Mutex<Vec<Download>>>;
 
 const DOWNLOAD_MANAGER_CAPACITY: usize = 8;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DownloadStatus {
+    Downloading,
+    Complete,
+    Failed,
+}
+
+#[derive(Debug, Clone)]
+pub struct Download {
+    pub external_id: ExternalMediaId,
+    pub status: DownloadStatus,
+    pub description: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DownloadCreate {
+    pub user_id: UserId,
+    pub external_id: ExternalMediaId,
+}
+
+#[derive(Debug, Clone)]
+pub struct DownloadDelete {
+    pub user_id: UserId,
+    pub external_id: ExternalMediaId,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct DownloadId {
+struct DownloadKey {
     user_id: UserId,
     external_id: ExternalMediaId,
 }
 
-impl DownloadId {
+impl DownloadKey {
     fn new(user_id: UserId, external_id: ExternalMediaId) -> Self {
         Self {
             user_id,
@@ -72,9 +97,9 @@ impl Drop for Inner {
 }
 
 #[derive(Debug, Clone)]
-pub struct DownloadManager(Arc<Inner>);
+pub struct DownloadController(Arc<Inner>);
 
-impl DownloadManager {
+impl DownloadController {
     pub fn new(
         db: Db,
         storage: Arc<dyn BlobStorage>,
@@ -100,7 +125,7 @@ impl DownloadManager {
         }))
     }
 
-    pub fn list(&self) -> Vec<ExternalDownload> {
+    pub fn list(&self) -> Vec<Download> {
         self.0.list.lock().unwrap().clone()
     }
 
@@ -130,7 +155,7 @@ impl DownloadManager {
 struct ProcessDownload {
     user_id: UserId,
     external_id: ExternalMediaId,
-    status: ExternalDownloadStatus,
+    status: DownloadStatus,
     description: String,
     handle: tokio::task::AbortHandle,
 }
@@ -141,7 +166,7 @@ struct Process {
     sender: Sender<Message>,
     receiver: Receiver<Message>,
     list: SharedList,
-    downloads: HashMap<DownloadId, ProcessDownload>,
+    downloads: HashMap<DownloadKey, ProcessDownload>,
     external_services: Arc<[SonarExternalService]>,
 }
 
@@ -161,9 +186,9 @@ impl Process {
                     user_id,
                     external_id,
                 } => {
-                    let download_id = DownloadId::new(user_id, external_id);
+                    let download_id = DownloadKey::new(user_id, external_id);
                     if let Some(download) = self.downloads.get(&download_id) {
-                        if download.status == ExternalDownloadStatus::Downloading {
+                        if download.status == DownloadStatus::Downloading {
                             return;
                         }
                     }
@@ -183,7 +208,7 @@ impl Process {
                     let download = ProcessDownload {
                         user_id,
                         external_id: download_id.external_id.clone(),
-                        status: ExternalDownloadStatus::Downloading,
+                        status: DownloadStatus::Downloading,
                         description: String::new(),
                         handle: handle.abort_handle(),
                     };
@@ -194,7 +219,7 @@ impl Process {
                     user_id,
                     external_id,
                 } => {
-                    let download_id = DownloadId::new(user_id, external_id);
+                    let download_id = DownloadKey::new(user_id, external_id);
                     if let Some(download) = self.downloads.remove(&download_id) {
                         download.handle.abort();
                     }
@@ -203,9 +228,9 @@ impl Process {
                     user_id,
                     external_id,
                 } => {
-                    let download_id = DownloadId::new(user_id, external_id);
+                    let download_id = DownloadKey::new(user_id, external_id);
                     if let Some(download) = self.downloads.get_mut(&download_id) {
-                        download.status = ExternalDownloadStatus::Complete;
+                        download.status = DownloadStatus::Complete;
                     }
                 }
                 Message::Failed {
@@ -213,9 +238,9 @@ impl Process {
                     external_id,
                     error,
                 } => {
-                    let download_id = DownloadId::new(user_id, external_id);
+                    let download_id = DownloadKey::new(user_id, external_id);
                     if let Some(download) = self.downloads.get_mut(&download_id) {
-                        download.status = ExternalDownloadStatus::Failed;
+                        download.status = DownloadStatus::Failed;
                         download.description = error;
                     }
                 }
@@ -225,7 +250,7 @@ impl Process {
     }
 
     fn update_list(&mut self) {
-        let list = self.downloads.values().map(|d| ExternalDownload {
+        let list = self.downloads.values().map(|d| Download {
             external_id: d.external_id.clone(),
             status: d.status,
             description: d.description.clone(),

@@ -69,7 +69,6 @@ CREATE INDEX pin_namespace_identifier_user ON pin(namespace, identifier, user);
 CREATE TABLE subscription (
 	user			INTEGER NOT NULL REFERENCES user(id),
 	external_id		TEXT NOT NULL,
-	external_service	TEXT,
 	PRIMARY KEY (user, external_id)
 );
 CREATE INDEX subscription_user ON subscription(user);

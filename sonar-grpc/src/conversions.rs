@@ -278,8 +278,8 @@ impl TryFrom<SearchRequest> for (sonar::UserId, sonar::SearchQuery) {
     }
 }
 
-impl From<sonar::metadata::TrackMetadata> for TrackMetadata {
-    fn from(value: sonar::metadata::TrackMetadata) -> Self {
+impl From<sonar::TrackMetadata> for TrackMetadata {
+    fn from(value: sonar::TrackMetadata) -> Self {
         Self {
             name: value.name,
             properties: convert_properties_to_pb(value.properties),
@@ -288,8 +288,8 @@ impl From<sonar::metadata::TrackMetadata> for TrackMetadata {
     }
 }
 
-impl From<sonar::metadata::AlbumTracksMetadata> for MetadataAlbumTracksResponse {
-    fn from(value: sonar::metadata::AlbumTracksMetadata) -> Self {
+impl From<sonar::AlbumTracksMetadata> for MetadataAlbumTracksResponse {
+    fn from(value: sonar::AlbumTracksMetadata) -> Self {
         Self {
             tracks: value
                 .tracks

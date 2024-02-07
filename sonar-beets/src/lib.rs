@@ -4,7 +4,7 @@ use std::{
 };
 
 use serde::Deserialize;
-use sonar::metadata::prelude::*;
+use sonar::metadata_prelude::*;
 use tokio::process::Command;
 
 const BEETS_CONFIG_TEMPLATE: &str = include_str!("config.yaml");
@@ -40,7 +40,7 @@ const TAG_MUSICBRAINZ_RELEASE_GROUP_ID: &str = "MusicBrainz Release Group Id";
 const TAG_MUSICBRAINZ_RELEASE_TRACK_ID: &str = "MusicBrainz Release Track Id";
 
 #[derive(Debug, Default)]
-pub struct BeetsMetadataImporter;
+pub struct BeetsMetadataProvider;
 
 #[derive(Debug, Deserialize)]
 struct FFprobeOutput {
@@ -58,7 +58,7 @@ struct PreparedDirectory {
 }
 
 #[sonar::async_trait]
-impl sonar::metadata::MetadataProvider for BeetsMetadataImporter {
+impl MetadataProvider for BeetsMetadataProvider {
     fn supports(&self, kind: MetadataRequestKind) -> bool {
         match kind {
             MetadataRequestKind::Album => true,

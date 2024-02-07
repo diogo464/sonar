@@ -154,6 +154,22 @@ pub async fn create(db: &mut DbC, create: PlaylistCreate) -> Result<Playlist> {
     get(db, playlist_id).await
 }
 
+pub async fn duplicate(db: &mut DbC, playlist_id: PlaylistId, new_name: &str) -> Result<Playlist> {
+    let playlist = get(db, playlist_id).await?;
+    let playlist_tracks = list_tracks(db, playlist_id, ListParams::default()).await?;
+    let new_playlist = create(
+        db,
+        PlaylistCreate {
+            name: new_name.to_owned(),
+            owner: playlist.owner,
+            tracks: playlist_tracks.iter().map(|t| t.track).collect(),
+            properties: playlist.properties.clone(),
+        },
+    )
+    .await?;
+    Ok(new_playlist)
+}
+
 pub async fn find_or_create_by_name(
     db: &mut DbC,
     user_id: UserId,

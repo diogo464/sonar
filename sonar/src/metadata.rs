@@ -7,14 +7,6 @@ use crate::{
 };
 
 pub mod prelude {
-    pub use super::{
-        AlbumMetadata, AlbumMetadataRequest, AlbumTracksMetadata, AlbumTracksMetadataRequest,
-        ArtistMetadata, ArtistMetadataRequest, MetadataRequestKind, TrackMetadata,
-        TrackMetadataRequest,
-    };
-    pub use crate::{
-        Album, AlbumId, Artist, ArtistId, Error, ErrorKind, Properties, Result, Track, TrackId,
-    };
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

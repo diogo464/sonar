@@ -1,10 +1,6 @@
 use sonar::{
-    bytestream::ByteStream,
-    external::{
-        ExternalAlbum, ExternalArtist, ExternalMediaId, ExternalMediaType, ExternalPlaylist,
-        ExternalTrack,
-    },
-    Result,
+    bytestream::ByteStream, ExternalAlbum, ExternalArtist, ExternalMediaId, ExternalMediaType,
+    ExternalPlaylist, ExternalTrack, Result,
 };
 
 struct Service1;
@@ -14,7 +10,7 @@ const SERVICE1_ID_ALBUM: &'static str = "service1:album:1";
 const SERVICE1_ID_TRACK: &'static str = "service1:track:1";
 
 #[sonar::async_trait]
-impl sonar::external::ExternalService for Service1 {
+impl sonar::ExternalService for Service1 {
     async fn validate_id(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
         if id.as_str() == SERVICE1_ID_ARTIST {
             Ok(ExternalMediaType::Artist)
@@ -90,7 +86,7 @@ async fn external_download_track() {
 
     let ctx = sonar::new(config).await.unwrap();
     let user = sonar::test::create_user(&ctx, "user").await;
-    sonar::external_download_request(
+    sonar::download_request(
         &ctx,
         sonar::ExternalDownloadRequest {
             user_id: user.id,

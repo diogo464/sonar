@@ -342,6 +342,25 @@ impl sonar_service_server::SonarService for Server {
         let playlist = sonar::playlist_create(&self.context, create).await.m()?;
         Ok(tonic::Response::new(playlist.into()))
     }
+    async fn playlist_duplicate(
+        &self,
+        request: tonic::Request<PlaylistDuplicateRequest>,
+    ) -> std::result::Result<tonic::Response<Playlist>, tonic::Status> {
+        let req = request.into_inner();
+        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
+        let playlist_id = req.playlist_id.parse::<sonar::PlaylistId>().m()?;
+        let new_name = req.new_playlist_name;
+        let playlist = sonar::playlist_get(&self.context, playlist_id).await.m()?;
+        if playlist.owner != user_id {
+            return Err(tonic::Status::permission_denied(
+                "not the owner of the playlist",
+            ));
+        }
+        let playlist = sonar::playlist_duplicate(&self.context, playlist_id, &new_name)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(playlist.into()))
+    }
     async fn playlist_update(
         &self,
         request: tonic::Request<PlaylistUpdateRequest>,
@@ -499,40 +518,40 @@ impl sonar_service_server::SonarService for Server {
         }
         Ok(tonic::Response::new(()))
     }
-    async fn external_subscription_list(
+    async fn subscription_list(
         &self,
-        request: tonic::Request<ExternalSubscriptionListRequest>,
-    ) -> std::result::Result<tonic::Response<ExternalSubscriptionListResponse>, tonic::Status> {
+        request: tonic::Request<SubscriptionListRequest>,
+    ) -> std::result::Result<tonic::Response<SubscriptionListResponse>, tonic::Status> {
         todo!()
     }
-    async fn external_subscription_create(
+    async fn subscription_create(
         &self,
-        request: tonic::Request<ExternalSubscriptionCreateRequest>,
+        request: tonic::Request<SubscriptionCreateRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         todo!()
     }
-    async fn external_subscription_delete(
+    async fn subscription_delete(
         &self,
-        request: tonic::Request<ExternalSubscriptionDeleteRequest>,
+        request: tonic::Request<SubscriptionDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         todo!()
     }
-    async fn external_download_list(
+    async fn download_list(
         &self,
-        request: tonic::Request<ExternalDownloadListRequest>,
-    ) -> std::result::Result<tonic::Response<ExternalDownloadListResponse>, tonic::Status> {
+        request: tonic::Request<DownloadListRequest>,
+    ) -> std::result::Result<tonic::Response<DownloadListResponse>, tonic::Status> {
         todo!()
     }
-    async fn external_download_start(
+    async fn download_start(
         &self,
-        request: tonic::Request<ExternalDownloadStartRequest>,
+        request: tonic::Request<DownloadStartRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
         let external_id = sonar::ExternalMediaId::from(req.external_id);
-        sonar::external_download_request(
+        sonar::download_request(
             &self.context,
-            sonar::ExternalDownloadRequest {
+            sonar::DownloadCreate {
                 user_id,
                 external_id,
             },
@@ -541,9 +560,9 @@ impl sonar_service_server::SonarService for Server {
         .m()?;
         Ok(tonic::Response::new(()))
     }
-    async fn external_download_cancel(
+    async fn download_cancel(
         &self,
-        request: tonic::Request<ExternalDownloadCancelRequest>,
+        request: tonic::Request<DownloadCancelRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         todo!()
     }

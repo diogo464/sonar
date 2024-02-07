@@ -3,11 +3,8 @@ use lofty::{Accessor, AudioFile, TaggedFileExt};
 #[derive(Debug, Default)]
 pub struct LoftyExtractor;
 
-impl sonar::extractor::Extractor for LoftyExtractor {
-    fn extract(
-        &self,
-        path: &std::path::Path,
-    ) -> std::io::Result<sonar::extractor::ExtractedMetadata> {
+impl sonar::Extractor for LoftyExtractor {
+    fn extract(&self, path: &std::path::Path) -> std::io::Result<sonar::ExtractedMetadata> {
         let file = lofty::read_from_path(path)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
@@ -32,19 +29,15 @@ impl sonar::extractor::Extractor for LoftyExtractor {
             .map(sonar::Genres::from)
             .unwrap_or_default();
 
-        let cover_art = tag
-            .pictures()
-            .iter()
-            .next()
-            .map(|p| sonar::extractor::ExtractedImage {
-                mime_type: p
-                    .mime_type()
-                    .map(|x| x.to_string())
-                    .unwrap_or_else(|| "image/jpeg".to_string()),
-                data: p.data().to_vec(),
-            });
+        let cover_art = tag.pictures().iter().next().map(|p| sonar::ExtractedImage {
+            mime_type: p
+                .mime_type()
+                .map(|x| x.to_string())
+                .unwrap_or_else(|| "image/jpeg".to_string()),
+            data: p.data().to_vec(),
+        });
 
-        Ok(sonar::extractor::ExtractedMetadata {
+        Ok(sonar::ExtractedMetadata {
             title,
             album,
             artist,

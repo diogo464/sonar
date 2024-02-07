@@ -42,7 +42,7 @@ struct SubmitAdditionalInfo<'a> {
 }
 
 #[sonar::async_trait]
-impl sonar::scrobbler::Scrobbler for ListenBrainzScrobbler {
+impl sonar::Scrobbler for ListenBrainzScrobbler {
     async fn scrobble(
         &self,
         context: &sonar::Context,

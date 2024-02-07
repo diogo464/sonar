@@ -49,11 +49,11 @@ enum Command {
     Scrobble(ScrobbleArgs),
     Sync(SyncArgs),
     Pin(PinArgs),
+    Search(SearchArgs),
     External(ExternalArgs),
     Admin(AdminArgs),
     Import(ImportArgs),
     Server(ServerArgs),
-    Extractor(ExtractorArgs),
 }
 
 // Types used to generate json
@@ -231,6 +231,37 @@ impl From<sonar_grpc::Scrobble> for Scrobble {
     }
 }
 
+#[derive(Debug, Serialize)]
+enum SearchResult {
+    Artist(Artist),
+    Album(Album),
+    Track(Track),
+    Playlist(Playlist),
+}
+
+impl std::fmt::Display for SearchResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SearchResult::Artist(artist) => write!(f, "{}\t{}", artist.id, artist.name),
+            SearchResult::Album(album) => write!(f, "{}\t{}", album.id, album.name),
+            SearchResult::Track(track) => write!(f, "{}\t{}", track.id, track.name),
+            SearchResult::Playlist(playlist) => write!(f, "{}\t{}", playlist.id, playlist.name),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct SearchResults(Vec<SearchResult>);
+
+impl std::fmt::Display for SearchResults {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for result in &self.0 {
+            writeln!(f, "{}", result)?;
+        }
+        Ok(())
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
@@ -279,6 +310,7 @@ async fn main() -> Result<()> {
         Command::Playlist(cargs) => match cargs.command {
             PlaylistCommand::List(cargs) => cmd_playlist_list(cargs).await?,
             PlaylistCommand::Create(cargs) => cmd_playlist_create(cargs).await?,
+            PlaylistCommand::Duplicate(cargs) => cmd_playlist_duplicate(cargs).await?,
             PlaylistCommand::Update(cargs) => cmd_playlist_update(cargs).await?,
             PlaylistCommand::Delete(cargs) => cmd_playlist_delete(cargs).await?,
             PlaylistCommand::Add(cargs) => cmd_playlist_add(cargs).await?,
@@ -295,6 +327,7 @@ async fn main() -> Result<()> {
             PinCommand::Set(cargs) => cmd_pin_set(cargs).await?,
             PinCommand::Unset(cargs) => cmd_pin_unset(cargs).await?,
         },
+        Command::Search(cargs) => cmd_search(cargs).await?,
         Command::External(cargs) => match cargs.command {
             ExternalCommand::Request(cargs) => cmd_external_request(cargs).await?,
         },
@@ -315,7 +348,6 @@ async fn main() -> Result<()> {
         },
         Command::Import(cargs) => cmd_import(cargs).await?,
         Command::Server(cargs) => cmd_server(cargs).await?,
-        Command::Extractor(cargs) => cmd_extractor(cargs).await?,
     }
 
     Ok(())
@@ -729,6 +761,7 @@ struct PlaylistArgs {
 enum PlaylistCommand {
     List(PlaylistListArgs),
     Create(PlaylistCreateArgs),
+    Duplicate(PlaylistDuplicateArgs),
     Update(PlaylistUpdateArgs),
     Delete(PlaylistDeleteArgs),
     Add(PlaylistAddArgs),
@@ -774,6 +807,27 @@ async fn cmd_playlist_create(args: PlaylistCreateArgs) -> Result<()> {
             name: args.name,
             owner_id: user_id.to_string(),
             ..Default::default()
+        })
+        .await?;
+    let playlist = Playlist::from(response.into_inner());
+    stdout_value(&playlist)?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct PlaylistDuplicateArgs {
+    id: sonar::PlaylistId,
+    new_name: String,
+}
+
+async fn cmd_playlist_duplicate(args: PlaylistDuplicateArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    let response = client
+        .playlist_duplicate(sonar_grpc::PlaylistDuplicateRequest {
+            user_id: user_id.to_string(),
+            playlist_id: args.id.to_string(),
+            new_playlist_name: args.new_name,
         })
         .await?;
     let playlist = Playlist::from(response.into_inner());
@@ -1025,6 +1079,77 @@ async fn cmd_pin_unset(args: PinUnsetArgs) -> Result<()> {
 }
 
 #[derive(Debug, Parser)]
+struct SearchArgs {
+    query: String,
+
+    #[clap(long, default_value = "50")]
+    limit: u32,
+
+    #[clap(long)]
+    artist: bool,
+
+    #[clap(long)]
+    album: bool,
+
+    #[clap(long)]
+    track: bool,
+
+    #[clap(long)]
+    playlist: bool,
+}
+
+async fn cmd_search(args: SearchArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+
+    let mut request = sonar_grpc::SearchRequest::default();
+    request.user_id = user_id;
+    request.query = args.query;
+    request.limit = Some(args.limit);
+    if args.artist || args.album || args.track || args.playlist {
+        let mut flags = 0;
+        if args.artist {
+            flags |= sonar_grpc::search_request::Flags::FlagArtist as u32;
+        }
+        if args.album {
+            flags |= sonar_grpc::search_request::Flags::FlagAlbum as u32;
+        }
+        if args.track {
+            flags |= sonar_grpc::search_request::Flags::FlagTrack as u32;
+        }
+        if args.playlist {
+            flags |= sonar_grpc::search_request::Flags::FlagPlaylist as u32;
+        }
+        request.flags = Some(flags);
+    }
+
+    let response = client.search(request).await?;
+    let response = response.into_inner();
+    let mut results = vec![];
+    for result in response.results {
+        results.push(match result.result.unwrap() {
+            sonar_grpc::search_result::Result::Artist(artist) => {
+                SearchResult::Artist(Artist::from(artist))
+            }
+            sonar_grpc::search_result::Result::Album(album) => {
+                SearchResult::Album(Album::from(album))
+            }
+            sonar_grpc::search_result::Result::Track(track) => {
+                SearchResult::Track(Track::from(track))
+            }
+            sonar_grpc::search_result::Result::Playlist(playlist) => {
+                SearchResult::Playlist(Playlist::from(playlist))
+            }
+        });
+    }
+
+    let results = SearchResults(results);
+    stdout_value(&results)?;
+
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
 struct ExternalArgs {
     #[clap(subcommand)]
     command: ExternalCommand,
@@ -1044,7 +1169,7 @@ async fn cmd_external_request(args: ExternalRequestArgs) -> Result<()> {
     let mut client = create_client().await?;
     let (user_id, _) = auth_read().await?;
     let response = client
-        .external_download_start(sonar_grpc::ExternalDownloadStartRequest {
+        .download_start(sonar_grpc::DownloadStartRequest {
             user_id,
             external_id: args.external_id,
         })
@@ -1398,7 +1523,7 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
         .register_extractor("lofty", sonar_extractor_lofty::LoftyExtractor)
         .context("registering lofty extractor")?;
     config
-        .register_provider("beets", sonar_beets::BeetsMetadataImporter)
+        .register_provider("beets", sonar_beets::BeetsMetadataProvider)
         .context("registering beets metadata importer")?;
     config
         .register_scrobbler_for_user(
@@ -1444,41 +1569,41 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Parser)]
-struct ExtractorArgs {
-    files: Vec<PathBuf>,
-}
-
-async fn cmd_extractor(args: ExtractorArgs) -> Result<()> {
-    use sonar::extractor::Extractor;
-
-    let extractors = [("lofty", Box::new(sonar_extractor_lofty::LoftyExtractor))];
-
-    for file in args.files {
-        for extractor in extractors.iter() {
-            tracing::info!(
-                "extracting metadata from {} using {}",
-                file.display(),
-                extractor.0
-            );
-            let extracted = match extractor.1.extract(&file) {
-                Ok(extracted) => extracted,
-                Err(err) => {
-                    tracing::warn!(
-                        "failed to extract metadata from {}: {}",
-                        file.display(),
-                        err
-                    );
-                    continue;
-                }
-            };
-
-            tracing::info!("extracted metadata:\n{:#?}", extracted);
-        }
-    }
-
-    Ok(())
-}
+// #[derive(Debug, Parser)]
+// struct ExtractorArgs {
+//     files: Vec<PathBuf>,
+// }
+//
+// async fn cmd_extractor(args: ExtractorArgs) -> Result<()> {
+//     use sonar::extractor::Extractor;
+//
+//     let extractors = [("lofty", Box::new(sonar_extractor_lofty::LoftyExtractor))];
+//
+//     for file in args.files {
+//         for extractor in extractors.iter() {
+//             tracing::info!(
+//                 "extracting metadata from {} using {}",
+//                 file.display(),
+//                 extractor.0
+//             );
+//             let extracted = match extractor.1.extract(&file) {
+//                 Ok(extracted) => extracted,
+//                 Err(err) => {
+//                     tracing::warn!(
+//                         "failed to extract metadata from {}: {}",
+//                         file.display(),
+//                         err
+//                     );
+//                     continue;
+//                 }
+//             };
+//
+//             tracing::info!("extracted metadata:\n{:#?}", extracted);
+//         }
+//     }
+//
+//     Ok(())
+// }
 
 async fn list_files_in_directories(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     let mut queue = paths;
