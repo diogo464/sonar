@@ -75,7 +75,7 @@ impl SearchEngine for BuiltInSearchEngine {
         Ok(results)
     }
     async fn synchronize_artist(&self, _artist: ArtistId) {}
-    async fn syncrhonize_album(&self, _album: AlbumId) {}
+    async fn synchronize_album(&self, _album: AlbumId) {}
     async fn synchronize_track(&self, _track: TrackId) {}
     async fn synchronize_playlist(&self, _playlist: PlaylistId) {}
     async fn synchronize_all(&self) {}

@@ -405,6 +405,7 @@ pub async fn artist_create(context: &Context, create: ArtistCreate) -> Result<Ar
     let mut tx = context.db.begin().await?;
     let result = artist::create(&mut tx, create).await?;
     tx.commit().await?;
+    on_artist_crud(context, result.id).await;
     Ok(result)
 }
 
@@ -417,6 +418,7 @@ pub async fn artist_update(
     let mut tx = context.db.begin().await?;
     let result = artist::update(&mut tx, id, update).await?;
     tx.commit().await?;
+    on_artist_crud(context, id).await;
     Ok(result)
 }
 
@@ -425,6 +427,7 @@ pub async fn artist_delete(context: &Context, id: ArtistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = artist::delete(&mut tx, id).await?;
     tx.commit().await?;
+    on_artist_crud(context, id).await;
     Ok(result)
 }
 
@@ -472,6 +475,7 @@ pub async fn album_create(context: &Context, create: AlbumCreate) -> Result<Albu
     let mut tx = context.db.begin().await?;
     let result = album::create(&mut tx, create).await?;
     tx.commit().await?;
+    on_album_crud(context, result.id).await;
     Ok(result)
 }
 
@@ -480,6 +484,7 @@ pub async fn album_update(context: &Context, id: AlbumId, update: AlbumUpdate) -
     let mut tx = context.db.begin().await?;
     let result = album::update(&mut tx, id, update).await?;
     tx.commit().await?;
+    on_album_crud(context, id).await;
     Ok(result)
 }
 
@@ -488,6 +493,7 @@ pub async fn album_delete(context: &Context, id: AlbumId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = album::delete(&mut tx, id).await?;
     tx.commit().await?;
+    on_album_crud(context, id).await;
     Ok(result)
 }
 
@@ -532,6 +538,7 @@ pub async fn track_create(context: &Context, create: TrackCreate) -> Result<Trac
     let mut tx = context.db.begin().await?;
     let result = track::create(&mut tx, create).await?;
     tx.commit().await?;
+    on_track_crud(context, result.id).await;
     Ok(result)
 }
 
@@ -540,6 +547,7 @@ pub async fn track_update(context: &Context, id: TrackId, update: TrackUpdate) -
     let mut tx = context.db.begin().await?;
     let result = track::update(&mut tx, id, update).await?;
     tx.commit().await?;
+    on_track_crud(context, id).await;
     Ok(result)
 }
 
@@ -548,6 +556,7 @@ pub async fn track_delete(context: &Context, id: TrackId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = track::delete(&mut tx, id).await?;
     tx.commit().await?;
+    on_track_crud(context, id).await;
     Ok(result)
 }
 
@@ -662,6 +671,7 @@ pub async fn playlist_create(context: &Context, create: PlaylistCreate) -> Resul
     let mut tx = context.db.begin().await?;
     let result = playlist::create(&mut tx, create).await?;
     tx.commit().await?;
+    on_playlist_crud(context, result.id).await;
     Ok(result)
 }
 
@@ -674,6 +684,7 @@ pub async fn playlist_update(
     let mut tx = context.db.begin().await?;
     let result = playlist::update(&mut tx, id, update).await?;
     tx.commit().await?;
+    on_playlist_crud(context, id).await;
     Ok(result)
 }
 
@@ -682,6 +693,7 @@ pub async fn playlist_delete(context: &Context, id: PlaylistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = playlist::delete(&mut tx, id).await?;
     tx.commit().await?;
+    on_playlist_crud(context, id).await;
     Ok(result)
 }
 
@@ -1010,4 +1022,29 @@ pub async fn metadata_view_album_tracks(
 
 pub async fn metadata_view_track(_context: &Context, _track_id: TrackId) -> Result<()> {
     todo!()
+}
+
+async fn on_artist_crud(context: &Context, artist_id: ArtistId) {
+    let search = context.search.clone();
+    tokio::spawn(async move {
+        search.synchronize_artist(artist_id).await;
+    });
+}
+async fn on_album_crud(context: &Context, album_id: AlbumId) {
+    let search = context.search.clone();
+    tokio::spawn(async move {
+        search.synchronize_album(album_id).await;
+    });
+}
+async fn on_track_crud(context: &Context, track_id: TrackId) {
+    let search = context.search.clone();
+    tokio::spawn(async move {
+        search.synchronize_track(track_id).await;
+    });
+}
+async fn on_playlist_crud(context: &Context, playlist_id: PlaylistId) {
+    let search = context.search.clone();
+    tokio::spawn(async move {
+        search.synchronize_playlist(playlist_id).await;
+    });
 }

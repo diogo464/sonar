@@ -65,6 +65,7 @@ service SonarService {
 	rpc ExternalDownloadCancel(ExternalDownloadCancelRequest) returns (google.protobuf.Empty);
 
 	rpc Import(stream ImportRequest) returns (Track);
+	rpc Search(SearchRequest) returns (SearchResponse);
 
 	rpc MetadataFetch(MetadataFetchRequest) returns (google.protobuf.Empty);
 
@@ -451,6 +452,35 @@ message ImportRequest {
 	optional string filepath = 2;
 	optional uint32 artist_id = 3;
 	optional uint32 album_id = 4;
+}
+
+message SearchResult {
+	oneof result {
+		Artist artist = 1;
+		Album album = 2;
+		Track track = 3;
+		Playlist playlist = 4;
+	}
+}
+
+message SearchRequest {
+	enum Flags {
+		FLAG_NONE = 0x00;
+		FLAG_ARTIST = 0x01;
+		FLAG_ALBUM = 0x02;
+		FLAG_TRACK = 0x04;
+		FLAG_PLAYLIST = 0x08;
+		FLAG_ALL = 0xFF;
+	}
+
+	string user_id = 1;
+	string query = 2;
+	optional uint32 limit = 3;
+	optional uint32 flags = 4;
+}
+
+message SearchResponse {
+	repeated SearchResult results = 1;
 }
 
 enum MetadataFetchKind {

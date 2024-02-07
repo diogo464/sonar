@@ -65,7 +65,7 @@ pub struct SearchResults {
 pub trait SearchEngine: std::fmt::Debug + Send + Sync + 'static {
     async fn search(&self, user_id: UserId, query: &SearchQuery) -> Result<SearchResults>;
     async fn synchronize_artist(&self, artist: ArtistId);
-    async fn syncrhonize_album(&self, album: AlbumId);
+    async fn synchronize_album(&self, album: AlbumId);
     async fn synchronize_track(&self, track: TrackId);
     async fn synchronize_playlist(&self, playlist: PlaylistId);
     async fn synchronize_all(&self);

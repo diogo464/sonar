@@ -583,6 +583,17 @@ impl sonar_service_server::SonarService for Server {
         .m()?;
         Ok(tonic::Response::new(track.into()))
     }
+    async fn search(
+        &self,
+        request: tonic::Request<SearchRequest>,
+    ) -> std::result::Result<tonic::Response<SearchResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let (user_id, query) = TryFrom::try_from(req)?;
+        let results = sonar::search(&self.context, user_id, query).await.m()?;
+        Ok(tonic::Response::new(SearchResponse {
+            results: results.results.into_iter().map(Into::into).collect(),
+        }))
+    }
     async fn metadata_fetch(
         &self,
         request: tonic::Request<MetadataFetchRequest>,

@@ -226,6 +226,58 @@ impl TryFrom<ScrobbleCreateRequest> for sonar::ScrobbleCreate {
     }
 }
 
+impl From<sonar::SearchResult> for SearchResult {
+    fn from(value: sonar::SearchResult) -> Self {
+        match value {
+            sonar::SearchResult::Artist(v) => SearchResult {
+                result: Some(crate::search_result::Result::Artist(v.into())),
+            },
+            sonar::SearchResult::Album(v) => SearchResult {
+                result: Some(crate::search_result::Result::Album(v.into())),
+            },
+            sonar::SearchResult::Track(v) => SearchResult {
+                result: Some(crate::search_result::Result::Track(v.into())),
+            },
+            sonar::SearchResult::Playlist(v) => SearchResult {
+                result: Some(crate::search_result::Result::Playlist(v.into())),
+            },
+        }
+    }
+}
+
+impl TryFrom<SearchRequest> for (sonar::UserId, sonar::SearchQuery) {
+    type Error = tonic::Status;
+
+    fn try_from(value: SearchRequest) -> Result<Self, Self::Error> {
+        let user_id = parse_userid(value.user_id)?;
+        let flags = match value.flags {
+            Some(f) => {
+                let mut flags = sonar::SearchQuery::FLAG_NONE;
+                if f & (crate::search_request::Flags::FlagArtist as u32) != 0 {
+                    flags |= sonar::SearchQuery::FLAG_ARTIST;
+                }
+                if f & (crate::search_request::Flags::FlagAlbum as u32) != 0 {
+                    flags |= sonar::SearchQuery::FLAG_ALBUM;
+                }
+                if f & (crate::search_request::Flags::FlagTrack as u32) != 0 {
+                    flags |= sonar::SearchQuery::FLAG_TRACK;
+                }
+                if f & (crate::search_request::Flags::FlagPlaylist as u32) != 0 {
+                    flags |= sonar::SearchQuery::FLAG_PLAYLIST;
+                }
+                flags
+            }
+            None => sonar::SearchQuery::FLAG_ALL,
+        };
+        let query = sonar::SearchQuery {
+            query: value.query,
+            limit: value.limit.map(|x| x as u32),
+            flags,
+        };
+        Ok((user_id, query))
+    }
+}
+
 impl From<sonar::metadata::TrackMetadata> for TrackMetadata {
     fn from(value: sonar::metadata::TrackMetadata) -> Self {
         Self {
