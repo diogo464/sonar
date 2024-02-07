@@ -50,7 +50,8 @@ enum Command {
     Sync(SyncArgs),
     Pin(PinArgs),
     Search(SearchArgs),
-    External(ExternalArgs),
+    Subscription(SubscriptionArgs),
+    Download(DownloadArgs),
     Admin(AdminArgs),
     Import(ImportArgs),
     Server(ServerArgs),
@@ -328,8 +329,15 @@ async fn main() -> Result<()> {
             PinCommand::Unset(cargs) => cmd_pin_unset(cargs).await?,
         },
         Command::Search(cargs) => cmd_search(cargs).await?,
-        Command::External(cargs) => match cargs.command {
-            ExternalCommand::Request(cargs) => cmd_external_request(cargs).await?,
+        Command::Subscription(cargs) => match cargs.command {
+            SubscriptionCommand::List(cargs) => cmd_subscription_list(cargs).await?,
+            SubscriptionCommand::Create(cargs) => cmd_subscription_create(cargs).await?,
+            SubscriptionCommand::Delete(cargs) => cmd_subscription_delete(cargs).await?,
+        },
+        Command::Download(cargs) => match cargs.command {
+            DownloadCommand::List(cargs) => cmd_download_list(cargs).await?,
+            DownloadCommand::Start(cargs) => cmd_download_start(cargs).await?,
+            DownloadCommand::Stop(cargs) => cmd_download_stop(cargs).await?,
         },
         Command::Admin(cargs) => match cargs.command {
             AdminCommand::User(cargs) => match cargs.command {
@@ -1150,32 +1158,82 @@ async fn cmd_search(args: SearchArgs) -> Result<()> {
 }
 
 #[derive(Debug, Parser)]
-struct ExternalArgs {
+struct SubscriptionArgs {
     #[clap(subcommand)]
-    command: ExternalCommand,
+    command: SubscriptionCommand,
 }
 
 #[derive(Debug, Parser)]
-enum ExternalCommand {
-    Request(ExternalRequestArgs),
+enum SubscriptionCommand {
+    List(SubscriptionListArgs),
+    Create(SubscriptionCreateArgs),
+    Delete(SubscriptionDeleteArgs),
 }
 
 #[derive(Debug, Parser)]
-struct ExternalRequestArgs {
+struct SubscriptionListArgs {
+    #[clap(flatten)]
+    params: ListParams,
+}
+
+async fn cmd_subscription_list(args: SubscriptionListArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct SubscriptionCreateArgs {
     external_id: String,
 }
 
-async fn cmd_external_request(args: ExternalRequestArgs) -> Result<()> {
-    let mut client = create_client().await?;
-    let (user_id, _) = auth_read().await?;
-    let response = client
-        .download_start(sonar_grpc::DownloadStartRequest {
-            user_id,
-            external_id: args.external_id,
-        })
-        .await?;
-    println!("{:?}", response.into_inner());
-    Ok(())
+async fn cmd_subscription_create(args: SubscriptionCreateArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct SubscriptionDeleteArgs {
+    external_id: String,
+}
+
+async fn cmd_subscription_delete(args: SubscriptionDeleteArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct DownloadArgs {
+    #[clap(subcommand)]
+    command: DownloadCommand,
+}
+
+#[derive(Debug, Parser)]
+enum DownloadCommand {
+    List(DownloadListArgs),
+    Start(DownloadStartArgs),
+    Stop(DownloadStopArgs),
+}
+
+#[derive(Debug, Parser)]
+struct DownloadListArgs {}
+
+async fn cmd_download_list(args: DownloadListArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct DownloadStartArgs {
+    external_id: String,
+}
+
+async fn cmd_download_start(args: DownloadStartArgs) -> Result<()> {
+    todo!()
+}
+
+#[derive(Debug, Parser)]
+struct DownloadStopArgs {
+    external_id: String,
+}
+
+async fn cmd_download_stop(args: DownloadStopArgs) -> Result<()> {
+    todo!()
 }
 
 #[derive(Debug, Parser)]
