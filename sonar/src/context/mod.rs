@@ -250,9 +250,9 @@ pub async fn user_list(context: &Context, params: ListParams) -> Result<Vec<User
 #[tracing::instrument]
 pub async fn user_create(context: &Context, create: UserCreate) -> Result<User> {
     let mut tx = context.db.begin().await?;
-    let result = user::create(&mut tx, create).await;
+    let result = user::create(&mut tx, create).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -270,9 +270,9 @@ pub async fn user_lookup(context: &Context, username: &Username) -> Result<Optio
 #[tracing::instrument]
 pub async fn user_delete(context: &Context, user_id: UserId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = user::delete(&mut tx, user_id).await;
+    let result = user::delete(&mut tx, user_id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -344,9 +344,9 @@ pub async fn user_property_update(
     updates: &[PropertyUpdate],
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = property::user_update(&mut tx, user_id, id, updates).await;
+    let result = property::user_update(&mut tx, user_id, id, updates).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 /// List all item identifiers that have a user property with the given key.
@@ -363,17 +363,17 @@ pub async fn list_with_user_property(
 #[tracing::instrument(skip(create))]
 pub async fn image_create(context: &Context, create: ImageCreate) -> Result<ImageId> {
     let mut tx = context.db.begin().await?;
-    let result = image::create(&mut tx, &*context.storage, create).await;
+    let result = image::create(&mut tx, &*context.storage, create).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn image_delete(context: &Context, image_id: ImageId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = image::delete(&mut tx, image_id).await;
+    let result = image::delete(&mut tx, image_id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -403,9 +403,9 @@ pub async fn artist_get_bulk(context: &Context, artist_ids: &[ArtistId]) -> Resu
 #[tracing::instrument]
 pub async fn artist_create(context: &Context, create: ArtistCreate) -> Result<Artist> {
     let mut tx = context.db.begin().await?;
-    let result = artist::create(&mut tx, create).await;
+    let result = artist::create(&mut tx, create).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -415,17 +415,17 @@ pub async fn artist_update(
     update: ArtistUpdate,
 ) -> Result<Artist> {
     let mut tx = context.db.begin().await?;
-    let result = artist::update(&mut tx, id, update).await;
+    let result = artist::update(&mut tx, id, update).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn artist_delete(context: &Context, id: ArtistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = artist::delete(&mut tx, id).await;
+    let result = artist::delete(&mut tx, id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -434,9 +434,9 @@ pub async fn artist_find_or_create_by_name(
     create: ArtistCreate,
 ) -> Result<Artist> {
     let mut tx = context.db.begin().await?;
-    let result = artist::find_or_create_by_name(&mut tx, create).await;
+    let result = artist::find_or_create_by_name(&mut tx, create).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -470,33 +470,33 @@ pub async fn album_get_bulk(context: &Context, album_ids: &[AlbumId]) -> Result<
 #[tracing::instrument]
 pub async fn album_create(context: &Context, create: AlbumCreate) -> Result<Album> {
     let mut tx = context.db.begin().await?;
-    let result = album::create(&mut tx, create).await;
+    let result = album::create(&mut tx, create).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn album_update(context: &Context, id: AlbumId, update: AlbumUpdate) -> Result<Album> {
     let mut tx = context.db.begin().await?;
-    let result = album::update(&mut tx, id, update).await;
+    let result = album::update(&mut tx, id, update).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn album_delete(context: &Context, id: AlbumId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = album::delete(&mut tx, id).await;
+    let result = album::delete(&mut tx, id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn album_find_or_create_by_name(context: &Context, create: AlbumCreate) -> Result<Album> {
     let mut tx = context.db.begin().await?;
-    let result = album::find_or_create_by_name(&mut tx, create).await;
+    let result = album::find_or_create_by_name(&mut tx, create).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -530,33 +530,33 @@ pub async fn track_get_bulk(context: &Context, track_ids: &[TrackId]) -> Result<
 #[tracing::instrument]
 pub async fn track_create(context: &Context, create: TrackCreate) -> Result<Track> {
     let mut tx = context.db.begin().await?;
-    let result = track::create(&mut tx, create).await;
+    let result = track::create(&mut tx, create).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn track_update(context: &Context, id: TrackId, update: TrackUpdate) -> Result<Track> {
     let mut tx = context.db.begin().await?;
-    let result = track::update(&mut tx, id, update).await;
+    let result = track::update(&mut tx, id, update).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn track_delete(context: &Context, id: TrackId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = track::delete(&mut tx, id).await;
+    let result = track::delete(&mut tx, id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn track_find_or_create_by_name(context: &Context, create: TrackCreate) -> Result<Track> {
     let mut tx = context.db.begin().await?;
-    let result = track::find_or_create_by_name(&mut tx, create).await;
+    let result = track::find_or_create_by_name(&mut tx, create).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -584,33 +584,33 @@ pub async fn audio_list_by_track(context: &Context, track_id: TrackId) -> Result
 #[tracing::instrument]
 pub async fn audio_create(context: &Context, create: AudioCreate) -> Result<Audio> {
     let mut tx = context.db.begin().await?;
-    let result = audio::create(&mut tx, &*context.storage, create).await;
+    let result = audio::create(&mut tx, &*context.storage, create).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn audio_delete(context: &Context, audio_id: AudioId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = audio::delete(&mut tx, audio_id).await;
+    let result = audio::delete(&mut tx, audio_id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn audio_link(context: &Context, audio_id: AudioId, track_id: TrackId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = audio::link(&mut tx, audio_id, track_id).await;
+    let result = audio::link(&mut tx, audio_id, track_id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn audio_unlink(context: &Context, audio_id: AudioId, track_id: TrackId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = audio::unlink(&mut tx, audio_id, track_id).await;
+    let result = audio::unlink(&mut tx, audio_id, track_id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -620,9 +620,9 @@ pub async fn audio_set_preferred(
     track_id: TrackId,
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = audio::set_preferred(&mut tx, audio_id, track_id).await;
+    let result = audio::set_preferred(&mut tx, audio_id, track_id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -660,9 +660,9 @@ pub async fn playlist_find_by_name(
 #[tracing::instrument]
 pub async fn playlist_create(context: &Context, create: PlaylistCreate) -> Result<Playlist> {
     let mut tx = context.db.begin().await?;
-    let result = playlist::create(&mut tx, create).await;
+    let result = playlist::create(&mut tx, create).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -672,17 +672,17 @@ pub async fn playlist_update(
     update: PlaylistUpdate,
 ) -> Result<Playlist> {
     let mut tx = context.db.begin().await?;
-    let result = playlist::update(&mut tx, id, update).await;
+    let result = playlist::update(&mut tx, id, update).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn playlist_delete(context: &Context, id: PlaylistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = playlist::delete(&mut tx, id).await;
+    let result = playlist::delete(&mut tx, id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -698,9 +698,9 @@ pub async fn playlist_list_tracks(
 #[tracing::instrument]
 pub async fn playlist_clear_tracks(context: &Context, id: PlaylistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = playlist::clear_tracks(&mut tx, id).await;
+    let result = playlist::clear_tracks(&mut tx, id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -710,9 +710,9 @@ pub async fn playlist_insert_tracks(
     tracks: &[TrackId],
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = playlist::insert_tracks(&mut tx, id, tracks).await;
+    let result = playlist::insert_tracks(&mut tx, id, tracks).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -722,9 +722,9 @@ pub async fn playlist_remove_tracks(
     tracks: &[TrackId],
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = playlist::remove_tracks(&mut tx, id, tracks).await;
+    let result = playlist::remove_tracks(&mut tx, id, tracks).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -751,10 +751,10 @@ pub async fn scrobble_get(context: &Context, scrobble_id: ScrobbleId) -> Result<
 #[tracing::instrument]
 pub async fn scrobble_create(context: &Context, create: ScrobbleCreate) -> Result<Scrobble> {
     let mut tx = context.db.begin().await?;
-    let result = scrobble::create(&mut tx, create).await;
+    let result = scrobble::create(&mut tx, create).await?;
     tx.commit().await?;
     context.scrobbler_notify.notify_waiters();
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -764,17 +764,17 @@ pub async fn scrobble_update(
     update: ScrobbleUpdate,
 ) -> Result<Scrobble> {
     let mut tx = context.db.begin().await?;
-    let result = scrobble::update(&mut tx, id, update).await;
+    let result = scrobble::update(&mut tx, id, update).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
 pub async fn scrobble_delete(context: &Context, id: ScrobbleId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = scrobble::delete(&mut tx, id).await;
+    let result = scrobble::delete(&mut tx, id).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
@@ -803,9 +803,9 @@ pub(crate) async fn scrobble_register_submission(
     scrobbler: &str,
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = scrobble::register_submission(&mut tx, scrobble_id, scrobbler).await;
+    let result = scrobble::register_submission(&mut tx, scrobble_id, scrobbler).await?;
     tx.commit().await?;
-    result
+    Ok(result)
 }
 
 #[tracing::instrument]
