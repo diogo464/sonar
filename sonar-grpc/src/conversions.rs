@@ -278,6 +278,26 @@ impl TryFrom<SearchRequest> for (sonar::UserId, sonar::SearchQuery) {
     }
 }
 
+impl From<sonar::Subscription> for Subscription {
+    fn from(value: sonar::Subscription) -> Self {
+        Self {
+            user_id: value.user.to_string(),
+            external_id: value.external_id.to_string(),
+            description: value.description.unwrap_or_default(),
+        }
+    }
+}
+
+impl From<sonar::Download> for Download {
+    fn from(value: sonar::Download) -> Self {
+        Self {
+            user_id: value.user_id.to_string(),
+            external_id: value.external_id.to_string(),
+            description: value.description,
+        }
+    }
+}
+
 impl From<sonar::TrackMetadata> for TrackMetadata {
     fn from(value: sonar::TrackMetadata) -> Self {
         Self {

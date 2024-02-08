@@ -64,7 +64,15 @@ impl Error {
 
 impl std::fmt::Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        <Self as std::fmt::Display>::fmt(self, f)
+        match &self.source {
+            Some(source) => write!(f, "{}: {}", self.message, source),
+            None => write!(f, "{}", self.message),
+        }?;
+        f.write_str("\n\n")?;
+        for frame in self.backtrace.frames() {
+            f.write_str(&format!("{:?}\n", frame))?;
+        }
+        Ok(())
     }
 }
 
@@ -74,10 +82,6 @@ impl std::fmt::Display for Error {
             Some(source) => write!(f, "{}: {}", self.message, source),
             None => write!(f, "{}", self.message),
         }?;
-        f.write_str("\n\n")?;
-        for frame in self.backtrace.frames() {
-            f.write_str(&format!("{:?}\n", frame))?;
-        }
         Ok(())
     }
 }

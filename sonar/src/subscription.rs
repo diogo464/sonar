@@ -1,9 +1,13 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
-use crate::{db::Db, external::SonarExternalService, ExternalMediaId, Result, UserId};
+use crate::{
+    db::Db, download::DownloadController, external::SonarExternalService, ExternalMediaId, Result,
+    UserId,
+};
 
 #[derive(Debug, Clone)]
 pub struct Subscription {
@@ -30,26 +34,52 @@ struct SubscriptionKey {
     external_id: ExternalMediaId,
 }
 
+impl SubscriptionKey {
+    fn new(user: UserId, external_id: ExternalMediaId) -> Self {
+        Self { user, external_id }
+    }
+}
+
+#[derive(Debug)]
+struct SubscriptionState {
+    last_download: Instant,
+    description: String,
+}
+
 // TODO: fetch descriptions
 #[derive(Debug)]
 struct State {
     db: Db,
+    downloads: DownloadController,
     _services: Vec<SonarExternalService>,
-    descriptions: Mutex<HashMap<SubscriptionKey, String>>,
+    subscriptions: Mutex<HashMap<SubscriptionKey, SubscriptionState>>,
 }
 
+// NOTE: this never gets dropped
 #[derive(Debug, Clone)]
 pub(crate) struct SubscriptionController(Arc<State>);
 
 impl SubscriptionController {
-    pub async fn new(db: Db, mut services: Vec<SonarExternalService>) -> Self {
+    pub async fn new(
+        db: Db,
+        mut services: Vec<SonarExternalService>,
+        downloads: DownloadController,
+    ) -> Self {
         services.sort_by_key(|s| s.priority());
 
-        Self(Arc::new(State {
+        let controller = Self(Arc::new(State {
             db,
+            downloads,
             _services: services,
-            descriptions: Default::default(),
-        }))
+            subscriptions: Default::default(),
+        }));
+        tokio::spawn({
+            let controller = controller.clone();
+            async move {
+                controller.update_loop().await;
+            }
+        });
+        controller
     }
 
     pub async fn list(&self, user_id: UserId) -> Result<Vec<Subscription>> {
@@ -58,7 +88,7 @@ impl SubscriptionController {
             .await?;
 
         let mut subscriptions = Vec::with_capacity(rows.len());
-        let descriptions = self.0.descriptions.lock().unwrap();
+        let states = self.0.subscriptions.lock().unwrap();
         for row in rows {
             let external_id = ExternalMediaId::from(row.external_id);
             let user_id = UserId::from_db(row.user);
@@ -66,11 +96,11 @@ impl SubscriptionController {
                 user: user_id,
                 external_id,
             };
-            let description = descriptions.get(&key).cloned();
+            let state = states.get(&key);
             subscriptions.push(Subscription {
                 user: key.user,
                 external_id: key.external_id,
-                description,
+                description: state.map(|s| s.description.clone()),
             });
         }
 
@@ -98,6 +128,57 @@ impl SubscriptionController {
         )
         .execute(&self.0.db)
         .await?;
+        Ok(())
+    }
+
+    async fn update_loop(&self) {
+        loop {
+            if let Err(err) = self.try_update().await {
+                tracing::error!("subscription update error: {}", err);
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+        }
+    }
+    async fn try_update(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let state = &self.0;
+        let rows = sqlx::query!("SELECT * FROM subscription")
+            .fetch_all(&state.db)
+            .await?;
+
+        let download_queue = {
+            let mut subscriptions = state.subscriptions.lock().unwrap();
+            for row in rows {
+                let user_id = UserId::from_db(row.user);
+                let external_id = ExternalMediaId::from(row.external_id);
+                let key = SubscriptionKey::new(user_id, external_id);
+                if !subscriptions.contains_key(&key) {
+                    let state = SubscriptionState {
+                        last_download: Instant::now(),
+                        description: Default::default(),
+                    };
+                    subscriptions.insert(key, state);
+                }
+            }
+
+            let sync_interval = std::time::Duration::from_secs(24 * 60 * 60);
+            let mut download_queue = Vec::new();
+            for (key, state) in subscriptions.iter_mut() {
+                let elapsed = state.last_download.elapsed();
+                if elapsed > sync_interval {
+                    state.last_download = Instant::now();
+                    download_queue.push(key.clone());
+                } else {
+                    tracing::debug!("skipping download for {:?}. elapsed: {:?}", key, elapsed);
+                }
+            }
+            download_queue
+        };
+
+        for key in download_queue {
+            tracing::info!("requesting download for {:?}", key);
+            state.downloads.request(key.user, key.external_id).await;
+        }
+
         Ok(())
     }
 }

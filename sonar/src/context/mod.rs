@@ -214,7 +214,8 @@ pub async fn new(config: Config) -> Result<Context> {
         }
     };
 
-    let subscriptions = SubscriptionController::new(db.clone(), config.external.clone()).await;
+    let subscriptions =
+        SubscriptionController::new(db.clone(), config.external.clone(), downloads.clone()).await;
 
     let context = Context {
         db,
@@ -884,8 +885,8 @@ pub async fn subscription_delete(context: &Context, delete: SubscriptionDelete) 
 }
 
 #[tracing::instrument]
-pub async fn download_list(context: &Context) -> Result<Vec<Download>> {
-    Ok(context.downloads.list())
+pub async fn download_list(context: &Context, user_id: UserId) -> Result<Vec<Download>> {
+    Ok(context.downloads.list(user_id))
 }
 
 #[tracing::instrument]

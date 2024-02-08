@@ -10,7 +10,7 @@ use eyre::{Context, Result};
 use serde::Serialize;
 use sonar::Properties;
 use tokio_stream::StreamExt;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 const IMPORT_FILETYPES: &[&str] = &["flac", "mp3", "ogg", "opus", "wav"];
 
@@ -263,6 +263,54 @@ impl std::fmt::Display for SearchResults {
     }
 }
 
+#[derive(Debug, Serialize)]
+struct Subscription {
+    user: String,
+    external_id: String,
+}
+
+impl From<sonar_grpc::Subscription> for Subscription {
+    fn from(value: sonar_grpc::Subscription) -> Self {
+        Self {
+            user: value.user_id,
+            external_id: value.external_id,
+        }
+    }
+}
+
+impl std::fmt::Display for Subscription {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\t{}", self.user, self.external_id)
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct Download {
+    user: String,
+    external_id: String,
+    description: String,
+}
+
+impl From<sonar_grpc::Download> for Download {
+    fn from(value: sonar_grpc::Download) -> Self {
+        Self {
+            user: value.user_id,
+            external_id: value.external_id,
+            description: value.description,
+        }
+    }
+}
+
+impl std::fmt::Display for Download {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}",
+            self.user, self.external_id, self.description
+        )
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
@@ -277,7 +325,10 @@ async fn main() -> Result<()> {
         let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
         tracing_subscriber::registry()
             .with(opentelemetry)
-            .with(tracing_subscriber::fmt::layer())
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_filter(tracing_subscriber::EnvFilter::from_default_env()),
+            )
             .try_init()?;
     } else {
         tracing_subscriber::fmt::init();
@@ -294,18 +345,21 @@ async fn main() -> Result<()> {
             ArtistCommand::Create(cargs) => cmd_artist_create(cargs).await?,
             ArtistCommand::Update(cargs) => cmd_artist_update(cargs).await?,
             ArtistCommand::Delete(cargs) => cmd_artist_delete(cargs).await?,
+            ArtistCommand::Search(cargs) => cmd_artist_search(cargs).await?,
         },
         Command::Album(cargs) => match cargs.command {
             AlbumCommand::List(cargs) => cmd_album_list(cargs).await?,
             AlbumCommand::Create(cargs) => cmd_album_create(cargs).await?,
             AlbumCommand::Update(cargs) => cmd_album_update(cargs).await?,
             AlbumCommand::Delete(cargs) => cmd_album_delete(cargs).await?,
+            AlbumCommand::Search(cargs) => cmd_album_search(cargs).await?,
         },
         Command::Track(cargs) => match cargs.command {
             TrackCommand::List(cargs) => cmd_track_list(cargs).await?,
             TrackCommand::Create(cargs) => cmd_track_create(cargs).await?,
             TrackCommand::Update(cargs) => cmd_track_update(cargs).await?,
             TrackCommand::Delete(cargs) => cmd_track_delete(cargs).await?,
+            TrackCommand::Search(cargs) => cmd_track_search(cargs).await?,
             TrackCommand::Download(cargs) => cmd_track_download(cargs).await?,
         },
         Command::Playlist(cargs) => match cargs.command {
@@ -417,6 +471,7 @@ enum ArtistCommand {
     Create(ArtistCreateArgs),
     Update(ArtistUpdateArgs),
     Delete(ArtistDeleteArgs),
+    Search(ArtistSearchArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -518,6 +573,35 @@ async fn cmd_artist_delete(args: ArtistDeleteArgs) -> Result<()> {
 }
 
 #[derive(Debug, Parser)]
+struct ArtistSearchArgs {
+    query: String,
+}
+
+async fn cmd_artist_search(args: ArtistSearchArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    let response = client
+        .search(sonar_grpc::SearchRequest {
+            user_id,
+            query: args.query,
+            ..Default::default()
+        })
+        .await?;
+    let mut artists = Vec::new();
+    response
+        .into_inner()
+        .results
+        .into_iter()
+        .for_each(|result| {
+            if let Some(sonar_grpc::search_result::Result::Artist(artist)) = result.result {
+                artists.push(Artist::from(artist));
+            }
+        });
+    stdout_values(&artists)?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
 struct AlbumArgs {
     #[clap(subcommand)]
     command: AlbumCommand,
@@ -529,6 +613,7 @@ enum AlbumCommand {
     Create(AlbumCreateArgs),
     Update(AlbumUpdateArgs),
     Delete(AlbumDeleteArgs),
+    Search(AlbumSearchArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -629,6 +714,35 @@ async fn cmd_album_delete(args: AlbumDeleteArgs) -> Result<()> {
 }
 
 #[derive(Debug, Parser)]
+struct AlbumSearchArgs {
+    query: String,
+}
+
+async fn cmd_album_search(args: AlbumSearchArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    let response = client
+        .search(sonar_grpc::SearchRequest {
+            user_id,
+            query: args.query,
+            ..Default::default()
+        })
+        .await?;
+    let mut albums = Vec::new();
+    response
+        .into_inner()
+        .results
+        .into_iter()
+        .for_each(|result| {
+            if let Some(sonar_grpc::search_result::Result::Album(album)) = result.result {
+                albums.push(Album::from(album));
+            }
+        });
+    stdout_values(&albums)?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
 struct TrackArgs {
     #[clap(subcommand)]
     command: TrackCommand,
@@ -640,6 +754,7 @@ enum TrackCommand {
     Create(TrackCreateArgs),
     Update(TrackUpdateArgs),
     Delete(TrackDeleteArgs),
+    Search(TrackSearchArgs),
     Download(TrackDownloadArgs),
 }
 
@@ -744,6 +859,35 @@ async fn cmd_track_delete(args: TrackDeleteArgs) -> Result<()> {
             track_id: args.id.to_string(),
         })
         .await?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct TrackSearchArgs {
+    query: String,
+}
+
+async fn cmd_track_search(args: TrackSearchArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    let response = client
+        .search(sonar_grpc::SearchRequest {
+            user_id,
+            query: args.query,
+            ..Default::default()
+        })
+        .await?;
+    let mut tracks = Vec::new();
+    response
+        .into_inner()
+        .results
+        .into_iter()
+        .for_each(|result| {
+            if let Some(sonar_grpc::search_result::Result::Track(track)) = result.result {
+                tracks.push(Track::from(track));
+            }
+        });
+    stdout_values(&tracks)?;
     Ok(())
 }
 
@@ -1176,8 +1320,20 @@ struct SubscriptionListArgs {
     params: ListParams,
 }
 
-async fn cmd_subscription_list(args: SubscriptionListArgs) -> Result<()> {
-    todo!()
+async fn cmd_subscription_list(_args: SubscriptionListArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    let response = client
+        .subscription_list(sonar_grpc::SubscriptionListRequest { user_id })
+        .await?;
+    let subscriptions = response
+        .into_inner()
+        .subscriptions
+        .into_iter()
+        .map(Subscription::from)
+        .collect::<Vec<_>>();
+    stdout_values(&subscriptions)?;
+    Ok(())
 }
 
 #[derive(Debug, Parser)]
@@ -1186,7 +1342,15 @@ struct SubscriptionCreateArgs {
 }
 
 async fn cmd_subscription_create(args: SubscriptionCreateArgs) -> Result<()> {
-    todo!()
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    client
+        .subscription_create(sonar_grpc::SubscriptionCreateRequest {
+            user_id,
+            external_id: args.external_id,
+        })
+        .await?;
+    Ok(())
 }
 
 #[derive(Debug, Parser)]
@@ -1195,7 +1359,15 @@ struct SubscriptionDeleteArgs {
 }
 
 async fn cmd_subscription_delete(args: SubscriptionDeleteArgs) -> Result<()> {
-    todo!()
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    client
+        .subscription_delete(sonar_grpc::SubscriptionDeleteRequest {
+            user_id,
+            external_id: args.external_id,
+        })
+        .await?;
+    Ok(())
 }
 
 #[derive(Debug, Parser)]
@@ -1215,7 +1387,22 @@ enum DownloadCommand {
 struct DownloadListArgs {}
 
 async fn cmd_download_list(args: DownloadListArgs) -> Result<()> {
-    todo!()
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    let response = client
+        .download_list(sonar_grpc::DownloadListRequest {
+            user_id,
+            ..Default::default()
+        })
+        .await?;
+    let downloads = response
+        .into_inner()
+        .downloads
+        .into_iter()
+        .map(Download::from)
+        .collect::<Vec<_>>();
+    stdout_values(&downloads)?;
+    Ok(())
 }
 
 #[derive(Debug, Parser)]
@@ -1224,7 +1411,15 @@ struct DownloadStartArgs {
 }
 
 async fn cmd_download_start(args: DownloadStartArgs) -> Result<()> {
-    todo!()
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    client
+        .download_start(sonar_grpc::DownloadStartRequest {
+            user_id,
+            external_id: args.external_id,
+        })
+        .await?;
+    Ok(())
 }
 
 #[derive(Debug, Parser)]
@@ -1233,7 +1428,15 @@ struct DownloadStopArgs {
 }
 
 async fn cmd_download_stop(args: DownloadStopArgs) -> Result<()> {
-    todo!()
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    client
+        .download_cancel(sonar_grpc::DownloadCancelRequest {
+            user_id,
+            external_id: args.external_id,
+        })
+        .await?;
+    Ok(())
 }
 
 #[derive(Debug, Parser)]

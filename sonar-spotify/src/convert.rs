@@ -17,6 +17,8 @@ pub async fn convert(input: &Path, output: &Path) -> Result<()> {
         .arg("-1")
         .arg("-ar")
         .arg("48000")
+        .arg("-ab")
+        .arg("320k")
         .arg("-ac")
         .arg("2")
         .arg("-f")
@@ -54,6 +56,8 @@ pub async fn convert_samples_i16(source: ConvertSamplesSource<'_>, output: &Path
 
     cmd.arg("-ar")
         .arg("48000")
+        .arg("-ab")
+        .arg("320k")
         .arg("-ac")
         .arg("2")
         .arg("-f")

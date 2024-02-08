@@ -30,6 +30,7 @@ pub enum DownloadStatus {
 
 #[derive(Debug, Clone)]
 pub struct Download {
+    pub user_id: UserId,
     pub external_id: ExternalMediaId,
     pub status: DownloadStatus,
     pub description: String,
@@ -125,8 +126,15 @@ impl DownloadController {
         }))
     }
 
-    pub fn list(&self) -> Vec<Download> {
-        self.0.list.lock().unwrap().clone()
+    pub fn list(&self, user_id: UserId) -> Vec<Download> {
+        self.0
+            .list
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|d| d.user_id == user_id)
+            .cloned()
+            .collect()
     }
 
     pub async fn request(&self, user_id: UserId, external_id: ExternalMediaId) {
@@ -251,6 +259,7 @@ impl Process {
 
     fn update_list(&mut self) {
         let list = self.downloads.values().map(|d| Download {
+            user_id: d.user_id,
             external_id: d.external_id.clone(),
             status: d.status,
             description: d.description.clone(),

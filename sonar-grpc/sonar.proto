@@ -439,6 +439,7 @@ message Download {
 }
 
 message DownloadListRequest {
+	string user_id = 1;
 }
 
 message DownloadListResponse {

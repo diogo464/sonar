@@ -522,25 +522,59 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<SubscriptionListRequest>,
     ) -> std::result::Result<tonic::Response<SubscriptionListResponse>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
+        let subscriptions = sonar::subscription_list(&self.context, user_id).await.m()?;
+        let subscriptions = subscriptions.into_iter().map(Into::into).collect();
+        Ok(tonic::Response::new(SubscriptionListResponse {
+            subscriptions,
+        }))
     }
     async fn subscription_create(
         &self,
         request: tonic::Request<SubscriptionCreateRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
+        let external_id = sonar::ExternalMediaId::from(req.external_id);
+        sonar::subscription_create(
+            &self.context,
+            sonar::SubscriptionCreate {
+                user: user_id,
+                external_id,
+            },
+        )
+        .await
+        .m()?;
+        Ok(tonic::Response::new(()))
     }
     async fn subscription_delete(
         &self,
         request: tonic::Request<SubscriptionDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
+        let external_id = sonar::ExternalMediaId::from(req.external_id);
+        sonar::subscription_delete(
+            &self.context,
+            sonar::SubscriptionDelete {
+                user: user_id,
+                external_id,
+            },
+        )
+        .await
+        .m()?;
+        Ok(tonic::Response::new(()))
     }
     async fn download_list(
         &self,
         request: tonic::Request<DownloadListRequest>,
     ) -> std::result::Result<tonic::Response<DownloadListResponse>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
+        let downloads = sonar::download_list(&self.context, user_id).await.m()?;
+        let downloads = downloads.into_iter().map(Into::into).collect();
+        Ok(tonic::Response::new(DownloadListResponse { downloads }))
     }
     async fn download_start(
         &self,
@@ -564,7 +598,19 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<DownloadCancelRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-        todo!()
+        let req = request.into_inner();
+        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
+        let external_id = sonar::ExternalMediaId::from(req.external_id);
+        sonar::download_delete(
+            &self.context,
+            sonar::DownloadDelete {
+                user_id,
+                external_id,
+            },
+        )
+        .await
+        .m()?;
+        Ok(tonic::Response::new(()))
     }
     async fn import(
         &self,
