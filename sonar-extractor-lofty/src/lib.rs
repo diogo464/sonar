@@ -19,7 +19,10 @@ impl sonar::Extractor for LoftyExtractor {
 
         let title = tag.title().map(|x| x.to_string());
         let album = tag.album().map(|x| x.to_string());
-        let artist = tag.artist().map(|x| x.to_string());
+        let artist = match tag.get_string(&lofty::ItemKey::AlbumArtist) {
+            Some(x) => Some(x.to_string()),
+            None => tag.artist().map(|x| x.to_string()),
+        };
         let track_number = tag.track();
         let disc_number = tag.disk();
         let duration = properties.duration();
