@@ -2,6 +2,7 @@
 #![feature(const_trait_impl)]
 #![feature(concat_idents)]
 #![feature(backtrace_frames)]
+#![feature(let_chains)]
 #![feature(is_sorted)]
 
 mod error;
@@ -53,8 +54,8 @@ pub use artist::{Artist, ArtistCreate, ArtistUpdate};
 pub use audio::{Audio, AudioCreate, AudioDownload};
 pub use download::{Download, DownloadCreate, DownloadDelete, DownloadStatus};
 pub use external::{
-    ExternalAlbum, ExternalArtist, ExternalMediaId, ExternalMediaType, ExternalPlaylist,
-    ExternalService, ExternalTrack,
+    ExternalAlbum, ExternalArtist, ExternalImage, ExternalMediaId, ExternalMediaType,
+    ExternalPlaylist, ExternalService, ExternalTrack,
 };
 pub use extractor::{ExtractedImage, ExtractedMetadata, Extractor};
 pub use genre::{Genre, GenreUpdateAction, Genres, InvalidGenreError};

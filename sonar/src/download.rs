@@ -6,13 +6,15 @@ use std::{
 use crate::{
     album, artist, audio,
     blob::BlobStorage,
+    bytestream,
     db::Db,
     external::{
         ExternalAlbum, ExternalArtist, ExternalMediaId, ExternalMediaType, ExternalPlaylist,
         ExternalTrack, SonarExternalService,
     },
-    playlist, track, Album, AlbumCreate, AlbumId, Artist, ArtistCreate, ArtistId, AudioCreate,
-    Error, ErrorKind, Playlist, PlaylistCreate, Result, Track, TrackCreate, TrackId, UserId,
+    image, playlist, track, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate,
+    ArtistId, AudioCreate, Error, ErrorKind, ImageCreate, Playlist, PlaylistCreate, Result, Track,
+    TrackCreate, TrackId, UserId, ValueUpdate,
 };
 
 type Sender<T> = tokio::sync::mpsc::Sender<T>;
@@ -306,7 +308,7 @@ async fn download(
                 let album_service =
                     find_service_for(services, external_id, ExternalMediaType::Album).await?;
                 let external_album = album_service.fetch_album(external_id).await?;
-                let album = find_or_create_album(db, &external_album, artist.id).await?;
+                let album = find_or_create_album(db, storage, &external_album, artist.id).await?;
                 for external_id in external_album.tracks.iter() {
                     let track_service =
                         find_service_for(services, external_id, ExternalMediaType::Track).await?;
@@ -324,7 +326,7 @@ async fn download(
                     .await?;
             let external_artist = artist_service.fetch_artist(&external_album.artist).await?;
             let artist = find_or_create_artist(db, &external_artist).await?;
-            let album = find_or_create_album(db, &external_album, artist.id).await?;
+            let album = find_or_create_album(db, storage, &external_album, artist.id).await?;
             for external_id in external_album.tracks.iter() {
                 let track_service =
                     find_service_for(services, external_id, ExternalMediaType::Track).await?;
@@ -344,7 +346,7 @@ async fn download(
                     .await?;
             let external_artist = artist_service.fetch_artist(&external_album.artist).await?;
             let artist = find_or_create_artist(db, &external_artist).await?;
-            let album = find_or_create_album(db, &external_album, artist.id).await?;
+            let album = find_or_create_album(db, storage, &external_album, artist.id).await?;
             let track = find_or_create_track(db, &external_track, album.id).await?;
             download_track(db, storage, service, external_id, track.id).await?;
             Ok(())
@@ -365,7 +367,7 @@ async fn download(
                         .await?;
                 let external_artist = artist_service.fetch_artist(&external_album.artist).await?;
                 let artist = find_or_create_artist(db, &external_artist).await?;
-                let album = find_or_create_album(db, &external_album, artist.id).await?;
+                let album = find_or_create_album(db, storage, &external_album, artist.id).await?;
                 let track = find_or_create_track(db, &external_track, album.id).await?;
                 download_track(db, storage, track_service, external_id, track.id).await?;
                 playlist_tracks.push(track.id);
@@ -394,6 +396,7 @@ async fn find_or_create_artist(db: &Db, external_artist: &ExternalArtist) -> Res
 
 async fn find_or_create_album(
     db: &Db,
+    storage: &dyn BlobStorage,
     external_album: &ExternalAlbum,
     artist_id: ArtistId,
 ) -> Result<Album> {
@@ -404,6 +407,25 @@ async fn find_or_create_album(
         properties: external_album.properties.clone(),
     };
     let album = album::find_or_create_by_name_tx(db, create).await?;
+    if let Some(ref cover) = external_album.cover
+        && album.cover_art.is_none()
+    {
+        let mut tx = db.begin().await?;
+        if let Ok(image_id) = image::create(
+            &mut tx,
+            storage,
+            ImageCreate {
+                data: bytestream::from_bytes(cover.data.clone()),
+            },
+        )
+        .await
+        {
+            let mut update = AlbumUpdate::default();
+            update.cover_art = ValueUpdate::Set(image_id);
+            album::update(&mut tx, album.id, update).await?;
+            tx.commit().await?;
+        }
+    }
     Ok(album)
 }
 

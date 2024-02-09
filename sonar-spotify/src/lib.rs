@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use sonar::{
-    bytestream::ByteStream, ExternalAlbum, ExternalArtist, ExternalMediaId, ExternalMediaType,
-    ExternalPlaylist, ExternalTrack, Result,
+    bytestream::ByteStream, ExternalAlbum, ExternalArtist, ExternalImage, ExternalMediaId,
+    ExternalMediaType, ExternalPlaylist, ExternalTrack, Result,
 };
 pub use spotdl::{session::LoginCredentials, Resource, ResourceId, SpotifyId};
 
@@ -77,6 +77,7 @@ impl sonar::ExternalService for SpotifyService {
                 .into_iter()
                 .map(|id| ExternalMediaId::new(id.to_string()))
                 .collect(),
+            cover: None,
             properties: properties_for_resource(resource_id.id),
         })
     }
@@ -94,6 +95,18 @@ impl sonar::ExternalService for SpotifyService {
             .get_album(resource_id.id)
             .await
             .map_err(sonar::Error::wrap)?;
+        let cover = match album.cover {
+            Some(url) => Some(ExternalImage {
+                data: reqwest::get(url)
+                    .await
+                    .map_err(sonar::Error::wrap)?
+                    .bytes()
+                    .await
+                    .map_err(sonar::Error::wrap)?
+                    .to_vec(),
+            }),
+            None => None,
+        };
         Ok(ExternalAlbum {
             name: album.name,
             artist: ExternalMediaId::new(album.artists[0].to_string()),
@@ -103,6 +116,7 @@ impl sonar::ExternalService for SpotifyService {
                 .flat_map(|disc| disc.tracks)
                 .map(|id| ExternalMediaId::new(id.to_string()))
                 .collect(),
+            cover,
             properties: properties_for_resource(resource_id.id),
         })
     }

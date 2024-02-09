@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{async_trait, bytestream::ByteStream, Properties, Result, UserId};
+use crate::{async_trait, bytestream::ByteStream, Properties, Result};
 
 // requirements and use cases for an external service:
 // - we should be able to subscribe/unsubscribe to some type of external media.
@@ -22,10 +22,24 @@ pub enum ExternalMediaType {
     Playlist,
 }
 
+#[derive(Clone)]
+pub struct ExternalImage {
+    pub data: Vec<u8>,
+}
+
+impl std::fmt::Debug for ExternalImage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExternalImage")
+            .field("data", &self.data.len())
+            .finish()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ExternalArtist {
     pub name: String,
     pub albums: Vec<ExternalMediaId>,
+    pub cover: Option<ExternalImage>,
     pub properties: Properties,
 }
 
@@ -34,6 +48,7 @@ pub struct ExternalAlbum {
     pub name: String,
     pub artist: ExternalMediaId,
     pub tracks: Vec<ExternalMediaId>,
+    pub cover: Option<ExternalImage>,
     pub properties: Properties,
 }
 
