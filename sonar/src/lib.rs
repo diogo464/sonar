@@ -87,7 +87,7 @@ pub mod metadata_prelude {
     pub use crate::{
         Album, AlbumId, AlbumMetadata, AlbumMetadataRequest, AlbumTracksMetadata,
         AlbumTracksMetadataRequest, Artist, ArtistId, ArtistMetadata, ArtistMetadataRequest, Error,
-        ErrorKind, MetadataRequestKind, Properties, Result, Track, TrackId, TrackMetadata,
-        TrackMetadataRequest,MetadataProvider
+        ErrorKind, MetadataProvider, MetadataRequestKind, Properties, Result, Track, TrackId,
+        TrackMetadata, TrackMetadataRequest,
     };
 }

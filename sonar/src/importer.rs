@@ -95,6 +95,28 @@ pub async fn import(
         handles.push(handle);
     }
 
+    let path_components = import
+        .filepath
+        .as_ref()
+        .map(|x| x.split('/').collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    let mut path_name = None;
+    let mut path_album = None;
+    let mut path_artist = None;
+    if path_components.len() >= 3 {
+        path_name = path_components
+            .last()
+            .map(|x| x.split_once('.').map(|(name, _)| name).unwrap_or(x))
+            .map(|x| x.to_string());
+        path_album = path_components
+            .get(path_components.len() - 2)
+            .map(|x| x.to_string());
+        path_artist = path_components
+            .get(path_components.len() - 3)
+            .map(|x| x.to_string());
+    }
+
     let mut metadatas = Vec::with_capacity(handles.len());
     for handle in handles {
         if let Ok(Ok(metadata)) = handle.await {
@@ -105,6 +127,7 @@ pub async fn import(
     let track_name = match metadatas
         .iter()
         .find_map(|metadata| metadata.title.as_deref())
+        .or(path_name.as_deref())
     {
         Some(track_name) => track_name,
         None => {
@@ -122,6 +145,7 @@ pub async fn import(
         let artist_name = match metadatas
             .iter()
             .find_map(|metadata| metadata.artist.as_deref())
+            .or(path_artist.as_deref())
         {
             Some(artist_name) => artist_name,
             None => {
@@ -152,6 +176,7 @@ pub async fn import(
         let album_name = match metadatas
             .iter()
             .find_map(|metadata| metadata.album.as_deref())
+            .or(path_album.as_deref())
         {
             Some(album_name) => album_name,
             None => {

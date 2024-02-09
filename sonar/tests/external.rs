@@ -88,7 +88,7 @@ async fn external_download_track() {
     let user = sonar::test::create_user(&ctx, "user").await;
     sonar::download_request(
         &ctx,
-        sonar::ExternalDownloadRequest {
+        sonar::DownloadCreate {
             user_id: user.id,
             external_id: ExternalMediaId::new("service1:track:1"),
         },

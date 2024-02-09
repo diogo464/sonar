@@ -1,4 +1,4 @@
-use sonar::{extractor::ExtractedMetadata, Genres};
+use sonar::{ExtractedMetadata, Genres};
 
 #[tokio::test]
 async fn import_simple() {
@@ -113,4 +113,65 @@ async fn import_merge_metadata() {
     assert_eq!(track.name, metadata2.title.unwrap());
     assert_eq!(track.album, album.id);
     assert_eq!(track.duration, sonar::test::SMALL_AUDIO_MP3_DURATION);
+}
+
+#[tokio::test]
+async fn import_no_metadata_with_filepath() {
+    let extractor = sonar::test::StaticMetadataExtractor::new(ExtractedMetadata::default());
+    let mut config = sonar::test::create_config_memory();
+    config.register_extractor("extractor", extractor).unwrap();
+    let ctx = sonar::test::create_context(config).await;
+
+    sonar::import(
+        &ctx,
+        sonar::Import {
+            artist: None,
+            album: None,
+            filepath: Some("artist/album/test.mp3".to_string()),
+            stream: sonar::test::create_stream(sonar::test::SMALL_AUDIO_MP3),
+        },
+    )
+    .await
+    .unwrap();
+
+    let artists = sonar::artist_list(&ctx, Default::default()).await.unwrap();
+    let albums = sonar::album_list(&ctx, Default::default()).await.unwrap();
+    let tracks = sonar::track_list(&ctx, Default::default()).await.unwrap();
+
+    assert_eq!(artists.len(), 1);
+    assert_eq!(albums.len(), 1);
+    assert_eq!(tracks.len(), 1);
+
+    let artist = &artists[0];
+    assert_eq!(artist.name, "artist");
+
+    let album = &albums[0];
+    assert_eq!(album.name, "album");
+    assert_eq!(album.artist, artist.id);
+
+    let track = &tracks[0];
+    assert_eq!(track.name, "test");
+    assert_eq!(track.album, album.id);
+    assert_eq!(track.duration, sonar::test::SMALL_AUDIO_MP3_DURATION);
+}
+
+#[tokio::test]
+#[should_panic]
+async fn import_no_metadata_without_filepath() {
+    let extractor = sonar::test::StaticMetadataExtractor::new(ExtractedMetadata::default());
+    let mut config = sonar::test::create_config_memory();
+    config.register_extractor("extractor", extractor).unwrap();
+    let ctx = sonar::test::create_context(config).await;
+
+    sonar::import(
+        &ctx,
+        sonar::Import {
+            artist: None,
+            album: None,
+            filepath: None,
+            stream: sonar::test::create_stream(sonar::test::SMALL_AUDIO_MP3),
+        },
+    )
+    .await
+    .unwrap();
 }
