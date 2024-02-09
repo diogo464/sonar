@@ -126,6 +126,7 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Track>> {
         .collect())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list_by_album(
     db: &mut DbC,
     album_id: AlbumId,
@@ -151,6 +152,7 @@ pub async fn list_by_album(
         .collect())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list_album_id_pairs(db: &mut DbC) -> Result<Vec<(AlbumId, TrackId)>> {
     let rows = sqlx::query!("SELECT album, id FROM track")
         .fetch_all(db)
@@ -164,6 +166,7 @@ pub async fn list_album_id_pairs(db: &mut DbC) -> Result<Vec<(AlbumId, TrackId)>
     Ok(pairs)
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get(db: &mut DbC, track_id: TrackId) -> Result<Track> {
     let track_view = sqlx::query_as!(TrackView, "SELECT * FROM sqlx_track WHERE id = ?", track_id)
         .fetch_one(&mut *db)
@@ -172,6 +175,7 @@ pub async fn get(db: &mut DbC, track_id: TrackId) -> Result<Track> {
     Ok(Track::from((track_view, properties)))
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, track_ids: &[TrackId]) -> Result<Vec<Track>> {
     // NOTE: sqlite doesn't support binding arrays. the alternative would be to generate a
     // query string with all the ids or create a temporary table with those ids and then use a
@@ -183,6 +187,7 @@ pub async fn get_bulk(db: &mut DbC, track_ids: &[TrackId]) -> Result<Vec<Track>>
     Ok(tracks)
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn create(db: &mut DbC, create: TrackCreate) -> Result<Track> {
     let album_id = create.album.to_db();
     let cover_art = create.cover_art.map(|id| id.to_db());
@@ -206,6 +211,7 @@ pub async fn create(db: &mut DbC, create: TrackCreate) -> Result<Track> {
     get(db, track_id).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Result<Track> {
     tracing::info!("updating track {} with {:?}", track_id, update);
     if let Some(new_name) = match update.name {
@@ -267,6 +273,7 @@ pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Res
     get(db, track_id).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn delete(db: &mut DbC, track_id: TrackId) -> Result<()> {
     sqlx::query!("DELETE FROM track WHERE id = ?", track_id)
         .execute(&mut *db)
@@ -275,6 +282,7 @@ pub async fn delete(db: &mut DbC, track_id: TrackId) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn find_or_create_by_name(db: &mut DbC, create_: TrackCreate) -> Result<Track> {
     let track_name = &create_.name;
     let track_id = sqlx::query_scalar!(
@@ -292,6 +300,7 @@ pub async fn find_or_create_by_name(db: &mut DbC, create_: TrackCreate) -> Resul
     create(db, create_).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn find_or_create_by_name_tx(db: &Db, create_: TrackCreate) -> Result<Track> {
     let mut tx = db.begin().await?;
     let result = find_or_create_by_name(&mut tx, create_).await;
@@ -301,6 +310,7 @@ pub async fn find_or_create_by_name_tx(db: &Db, create_: TrackCreate) -> Result<
     result
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn download(
     db: &mut DbC,
     storage: &dyn BlobStorage,
@@ -318,6 +328,7 @@ pub async fn download(
     }
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get_lyrics(db: &mut DbC, track_id: TrackId) -> Result<Lyrics> {
     let lyrics_kind = sqlx::query_scalar!("SELECT lyrics_kind FROM track WHERE id = ?", track_id)
         .fetch_one(&mut *db)
@@ -388,6 +399,7 @@ async fn set_lyrics(db: &mut DbC, track_id: TrackId, lyrics: TrackLyrics) -> Res
     Ok(())
 }
 
+#[tracing::instrument(skip(db))]
 async fn clear_lyrics(db: &mut DbC, track_id: TrackId) -> Result<()> {
     sqlx::query!("UPDATE track SET lyrics_kind = NULL WHERE id = ?", track_id)
         .execute(&mut *db)

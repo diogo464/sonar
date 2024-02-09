@@ -58,6 +58,7 @@ impl From<(ScrobbleView, Properties)> for Scrobble {
     }
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Scrobble>> {
     let (offset, limit) = params.to_db_offset_limit();
     let views = sqlx::query_as!(
@@ -77,6 +78,7 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Scrobble>> {
         .collect())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get(db: &mut DbC, scrobble_id: ScrobbleId) -> Result<Scrobble> {
     let scrobble_view = sqlx::query_as!(
         ScrobbleView,
@@ -89,6 +91,7 @@ pub async fn get(db: &mut DbC, scrobble_id: ScrobbleId) -> Result<Scrobble> {
     Ok(Scrobble::from((scrobble_view, properties)))
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, scrobble_ids: &[ScrobbleId]) -> Result<Vec<Scrobble>> {
     let mut scrobbles = Vec::with_capacity(scrobble_ids.len());
     for scrobble_id in scrobble_ids {
@@ -97,6 +100,7 @@ pub async fn get_bulk(db: &mut DbC, scrobble_ids: &[ScrobbleId]) -> Result<Vec<S
     Ok(scrobbles)
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn create(db: &mut DbC, create: ScrobbleCreate) -> Result<Scrobble> {
     let track_id = create.track.to_db();
     let user_id = create.user.to_db();
@@ -117,6 +121,7 @@ pub async fn create(db: &mut DbC, create: ScrobbleCreate) -> Result<Scrobble> {
     get(db, ScrobbleId::from_db(scrobble_id)).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn update(
     db: &mut DbC,
     scrobble_id: ScrobbleId,
@@ -126,6 +131,7 @@ pub async fn update(
     get(db, scrobble_id).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn delete(db: &mut DbC, scrobble_id: ScrobbleId) -> Result<()> {
     let scrobble_id = scrobble_id.to_db();
     sqlx::query!("DELETE FROM scrobble WHERE id = ?", scrobble_id)
@@ -134,6 +140,7 @@ pub async fn delete(db: &mut DbC, scrobble_id: ScrobbleId) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list_unsubmitted(db: &mut DbC, scrobbler: &str) -> Result<Vec<Scrobble>> {
     let rows = sqlx::query!(
         "
@@ -156,6 +163,7 @@ LIMIT 100
     get_bulk(db, &ids).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list_unsubmitted_for_user(
     db: &mut DbC,
     user_id: UserId,
@@ -183,6 +191,7 @@ LIMIT 100
     get_bulk(db, &ids).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn register_submission(
     db: &mut DbC,
     scrobble_id: ScrobbleId,

@@ -76,6 +76,7 @@ impl From<(PlaylistView, Properties)> for Playlist {
     }
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Playlist>> {
     let (offset, limit) = params.to_db_offset_limit();
     let views = sqlx::query_as!(
@@ -95,6 +96,7 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Playlist>> {
         .collect())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get(db: &mut DbC, playlist_id: PlaylistId) -> Result<Playlist> {
     let playlist_view = sqlx::query_as!(
         PlaylistView,
@@ -107,6 +109,7 @@ pub async fn get(db: &mut DbC, playlist_id: PlaylistId) -> Result<Playlist> {
     Ok(Playlist::from((playlist_view, properties)))
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, playlist_ids: &[PlaylistId]) -> Result<Vec<Playlist>> {
     let mut playlists = Vec::with_capacity(playlist_ids.len());
     for playlist_id in playlist_ids {
@@ -115,6 +118,7 @@ pub async fn get_bulk(db: &mut DbC, playlist_ids: &[PlaylistId]) -> Result<Vec<P
     Ok(playlists)
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get_by_name(db: &mut DbC, user_id: UserId, name: &str) -> Result<Playlist> {
     match find_by_name(db, user_id, name).await? {
         Some(playlist) => Ok(playlist),
@@ -122,6 +126,7 @@ pub async fn get_by_name(db: &mut DbC, user_id: UserId, name: &str) -> Result<Pl
     }
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn find_by_name(db: &mut DbC, user_id: UserId, name: &str) -> Result<Option<Playlist>> {
     let playlist_id = sqlx::query_scalar!(
         "SELECT id FROM playlist WHERE owner = ? AND name = ?",
@@ -136,6 +141,7 @@ pub async fn find_by_name(db: &mut DbC, user_id: UserId, name: &str) -> Result<O
     }
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn create(db: &mut DbC, create: PlaylistCreate) -> Result<Playlist> {
     let name = create.name.as_str();
     let playlist_id = sqlx::query!(
@@ -154,6 +160,7 @@ pub async fn create(db: &mut DbC, create: PlaylistCreate) -> Result<Playlist> {
     get(db, playlist_id).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn duplicate(db: &mut DbC, playlist_id: PlaylistId, new_name: &str) -> Result<Playlist> {
     let playlist = get(db, playlist_id).await?;
     let playlist_tracks = list_tracks(db, playlist_id, ListParams::default()).await?;
@@ -170,6 +177,7 @@ pub async fn duplicate(db: &mut DbC, playlist_id: PlaylistId, new_name: &str) ->
     Ok(new_playlist)
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn find_or_create_by_name(
     db: &mut DbC,
     user_id: UserId,
@@ -181,6 +189,7 @@ pub async fn find_or_create_by_name(
     }
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn find_or_create_by_name_tx(db: &Db, create_: PlaylistCreate) -> Result<Playlist> {
     let mut tx = db.begin().await?;
     let result = find_or_create_by_name(&mut tx, create_.owner, create_).await;
@@ -190,6 +199,7 @@ pub async fn find_or_create_by_name_tx(db: &Db, create_: PlaylistCreate) -> Resu
     result
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn update(
     db: &mut DbC,
     playlist_id: PlaylistId,
@@ -213,6 +223,7 @@ pub async fn update(
     get(db, playlist_id).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn delete(db: &mut DbC, playlist_id: PlaylistId) -> Result<()> {
     sqlx::query!("DELETE FROM playlist WHERE id = ?", playlist_id)
         .execute(&mut *db)
@@ -221,6 +232,7 @@ pub async fn delete(db: &mut DbC, playlist_id: PlaylistId) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list_tracks(
     db: &mut DbC,
     playlist_id: PlaylistId,
@@ -242,6 +254,7 @@ pub async fn list_tracks(
         .collect())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list_tracks_in_all_playlists(db: &mut DbC) -> Result<Vec<TrackId>> {
     let tracks = sqlx::query_scalar!("SELECT track FROM playlist_track")
         .fetch_all(&mut *db)
@@ -249,6 +262,7 @@ pub async fn list_tracks_in_all_playlists(db: &mut DbC) -> Result<Vec<TrackId>> 
     Ok(tracks.into_iter().map(TrackId::from_db).collect())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn clear_tracks(db: &mut DbC, playlist_id: PlaylistId) -> Result<()> {
     sqlx::query!("DELETE FROM playlist_track WHERE playlist = ?", playlist_id)
         .execute(&mut *db)
@@ -273,6 +287,7 @@ pub async fn insert_tracks(
     Ok(())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn remove_tracks(
     db: &mut DbC,
     playlist_id: PlaylistId,

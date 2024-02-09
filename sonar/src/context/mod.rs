@@ -4,7 +4,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use sqlx::Executor;
 use tokio::sync::Notify;
 
 use crate::{
@@ -253,13 +252,13 @@ pub async fn new(config: Config) -> Result<Context> {
     Ok(context)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn user_list(context: &Context, params: ListParams) -> Result<Vec<User>> {
     let mut conn = context.db.acquire().await?;
     user::list(&mut conn, params).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn user_create(context: &Context, create: UserCreate) -> Result<User> {
     let mut tx = context.db.begin().await?;
     let result = user::create(&mut tx, create).await?;
@@ -267,19 +266,19 @@ pub async fn user_create(context: &Context, create: UserCreate) -> Result<User> 
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn user_get(context: &Context, user_id: UserId) -> Result<User> {
     let mut conn = context.db.acquire().await?;
     user::get(&mut conn, user_id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn user_lookup(context: &Context, username: &Username) -> Result<Option<UserId>> {
     let mut conn = context.db.acquire().await?;
     user::lookup(&mut conn, username).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn user_delete(context: &Context, user_id: UserId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = user::delete(&mut tx, user_id).await?;
@@ -287,7 +286,7 @@ pub async fn user_delete(context: &Context, user_id: UserId) -> Result<()> {
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn user_authenticate(
     context: &Context,
     username: &Username,
@@ -297,7 +296,7 @@ pub async fn user_authenticate(
     user::authenticate(&mut conn, username, password).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn user_login(
     context: &Context,
     username: &Username,
@@ -313,13 +312,13 @@ pub async fn user_login(
     Ok((user_id, token))
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn user_logout(context: &Context, token: &UserToken) -> Result<()> {
     context.tokens.lock().unwrap().remove(token);
     Ok(())
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn user_validate_token(context: &Context, token: &UserToken) -> Result<UserId> {
     let tokens = context.tokens.lock().unwrap();
     if let Some(user_id) = tokens.get(token) {
@@ -329,7 +328,7 @@ pub async fn user_validate_token(context: &Context, token: &UserToken) -> Result
     }
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn user_property_get(
     context: &Context,
     user_id: UserId,
@@ -339,7 +338,7 @@ pub async fn user_property_get(
     property::user_get(&mut conn, user_id, id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn user_property_get_bulk(
     context: &Context,
     user_id: UserId,
@@ -362,7 +361,7 @@ pub async fn user_property_update(
 }
 
 /// List all item identifiers that have a user property with the given key.
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn list_with_user_property(
     context: &Context,
     user_id: UserId,
@@ -380,7 +379,7 @@ pub async fn image_create(context: &Context, create: ImageCreate) -> Result<Imag
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn image_delete(context: &Context, image_id: ImageId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = image::delete(&mut tx, image_id).await?;
@@ -388,31 +387,31 @@ pub async fn image_delete(context: &Context, image_id: ImageId) -> Result<()> {
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn image_download(context: &Context, image_id: ImageId) -> Result<ImageDownload> {
     let mut conn = context.db.acquire().await?;
     image::download(&mut conn, &*context.storage, image_id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn artist_list(context: &Context, params: ListParams) -> Result<Vec<Artist>> {
     let mut conn = context.db.acquire().await?;
     artist::list(&mut conn, params).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn artist_get(context: &Context, artist_id: ArtistId) -> Result<Artist> {
     let mut conn = context.db.acquire().await?;
     artist::get(&mut conn, artist_id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn artist_get_bulk(context: &Context, artist_ids: &[ArtistId]) -> Result<Vec<Artist>> {
     let mut conn = context.db.acquire().await?;
     artist::get_bulk(&mut conn, artist_ids).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn artist_create(context: &Context, create: ArtistCreate) -> Result<Artist> {
     let mut tx = context.db.begin().await?;
     let result = artist::create(&mut tx, create).await?;
@@ -421,7 +420,7 @@ pub async fn artist_create(context: &Context, create: ArtistCreate) -> Result<Ar
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn artist_update(
     context: &Context,
     id: ArtistId,
@@ -434,7 +433,7 @@ pub async fn artist_update(
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn artist_delete(context: &Context, id: ArtistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = artist::delete(&mut tx, id).await?;
@@ -443,7 +442,7 @@ pub async fn artist_delete(context: &Context, id: ArtistId) -> Result<()> {
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn artist_find_or_create_by_name(
     context: &Context,
     create: ArtistCreate,
@@ -454,13 +453,13 @@ pub async fn artist_find_or_create_by_name(
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn album_list(context: &Context, params: ListParams) -> Result<Vec<Album>> {
     let mut conn = context.db.acquire().await?;
     album::list(&mut conn, params).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn album_list_by_artist(
     context: &Context,
     artist_id: ArtistId,
@@ -470,19 +469,19 @@ pub async fn album_list_by_artist(
     album::list_by_artist(&mut conn, artist_id, params).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn album_get(context: &Context, album_id: AlbumId) -> Result<Album> {
     let mut conn = context.db.acquire().await?;
     album::get(&mut conn, album_id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn album_get_bulk(context: &Context, album_ids: &[AlbumId]) -> Result<Vec<Album>> {
     let mut conn = context.db.acquire().await?;
     album::get_bulk(&mut conn, album_ids).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn album_create(context: &Context, create: AlbumCreate) -> Result<Album> {
     let mut tx = context.db.begin().await?;
     let result = album::create(&mut tx, create).await?;
@@ -491,7 +490,7 @@ pub async fn album_create(context: &Context, create: AlbumCreate) -> Result<Albu
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn album_update(context: &Context, id: AlbumId, update: AlbumUpdate) -> Result<Album> {
     let mut tx = context.db.begin().await?;
     let result = album::update(&mut tx, id, update).await?;
@@ -500,7 +499,7 @@ pub async fn album_update(context: &Context, id: AlbumId, update: AlbumUpdate) -
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn album_delete(context: &Context, id: AlbumId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = album::delete(&mut tx, id).await?;
@@ -509,7 +508,7 @@ pub async fn album_delete(context: &Context, id: AlbumId) -> Result<()> {
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn album_find_or_create_by_name(context: &Context, create: AlbumCreate) -> Result<Album> {
     let mut tx = context.db.begin().await?;
     let result = album::find_or_create_by_name(&mut tx, create).await?;
@@ -517,13 +516,13 @@ pub async fn album_find_or_create_by_name(context: &Context, create: AlbumCreate
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn track_list(context: &Context, params: ListParams) -> Result<Vec<Track>> {
     let mut conn = context.db.acquire().await?;
     track::list(&mut conn, params).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn track_list_by_album(
     context: &Context,
     album_id: AlbumId,
@@ -533,19 +532,19 @@ pub async fn track_list_by_album(
     track::list_by_album(&mut conn, album_id, params).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn track_get(context: &Context, track_id: TrackId) -> Result<Track> {
     let mut conn = context.db.acquire().await?;
     track::get(&mut conn, track_id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn track_get_bulk(context: &Context, track_ids: &[TrackId]) -> Result<Vec<Track>> {
     let mut conn = context.db.acquire().await?;
     track::get_bulk(&mut conn, track_ids).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn track_create(context: &Context, create: TrackCreate) -> Result<Track> {
     let mut tx = context.db.begin().await?;
     let result = track::create(&mut tx, create).await?;
@@ -554,7 +553,7 @@ pub async fn track_create(context: &Context, create: TrackCreate) -> Result<Trac
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn track_update(context: &Context, id: TrackId, update: TrackUpdate) -> Result<Track> {
     let mut tx = context.db.begin().await?;
     let result = track::update(&mut tx, id, update).await?;
@@ -563,7 +562,7 @@ pub async fn track_update(context: &Context, id: TrackId, update: TrackUpdate) -
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn track_delete(context: &Context, id: TrackId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = track::delete(&mut tx, id).await?;
@@ -572,7 +571,7 @@ pub async fn track_delete(context: &Context, id: TrackId) -> Result<()> {
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn track_find_or_create_by_name(context: &Context, create: TrackCreate) -> Result<Track> {
     let mut tx = context.db.begin().await?;
     let result = track::find_or_create_by_name(&mut tx, create).await?;
@@ -580,7 +579,7 @@ pub async fn track_find_or_create_by_name(context: &Context, create: TrackCreate
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn track_download(
     context: &Context,
     track_id: TrackId,
@@ -590,19 +589,19 @@ pub async fn track_download(
     track::download(&mut conn, &*context.storage, track_id, range).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn track_get_lyrics(context: &Context, track_id: TrackId) -> Result<Lyrics> {
     let mut conn = context.db.acquire().await?;
     track::get_lyrics(&mut conn, track_id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn audio_list_by_track(context: &Context, track_id: TrackId) -> Result<Vec<Audio>> {
     let mut conn = context.db.acquire().await?;
     audio::list_by_track(&mut conn, track_id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn audio_create(context: &Context, create: AudioCreate) -> Result<Audio> {
     let mut tx = context.db.begin().await?;
     let result = audio::create(&mut tx, &*context.storage, create).await?;
@@ -610,7 +609,7 @@ pub async fn audio_create(context: &Context, create: AudioCreate) -> Result<Audi
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn audio_delete(context: &Context, audio_id: AudioId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = audio::delete(&mut tx, audio_id).await?;
@@ -618,7 +617,7 @@ pub async fn audio_delete(context: &Context, audio_id: AudioId) -> Result<()> {
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn audio_link(context: &Context, audio_id: AudioId, track_id: TrackId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = audio::link(&mut tx, audio_id, track_id).await?;
@@ -626,7 +625,7 @@ pub async fn audio_link(context: &Context, audio_id: AudioId, track_id: TrackId)
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn audio_unlink(context: &Context, audio_id: AudioId, track_id: TrackId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = audio::unlink(&mut tx, audio_id, track_id).await?;
@@ -634,7 +633,7 @@ pub async fn audio_unlink(context: &Context, audio_id: AudioId, track_id: TrackI
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn audio_set_preferred(
     context: &Context,
     audio_id: AudioId,
@@ -646,19 +645,19 @@ pub async fn audio_set_preferred(
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_list(context: &Context, params: ListParams) -> Result<Vec<Playlist>> {
     let mut conn = context.db.acquire().await?;
     playlist::list(&mut conn, params).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_get(context: &Context, playlist_id: PlaylistId) -> Result<Playlist> {
     let mut conn = context.db.acquire().await?;
     playlist::get(&mut conn, playlist_id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_get_by_name(
     context: &Context,
     user_id: UserId,
@@ -668,7 +667,7 @@ pub async fn playlist_get_by_name(
     playlist::get_by_name(&mut conn, user_id, name).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_find_by_name(
     context: &Context,
     user_id: UserId,
@@ -678,7 +677,7 @@ pub async fn playlist_find_by_name(
     playlist::find_by_name(&mut conn, user_id, name).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_create(context: &Context, create: PlaylistCreate) -> Result<Playlist> {
     let mut tx = context.db.begin().await?;
     let result = playlist::create(&mut tx, create).await?;
@@ -687,7 +686,7 @@ pub async fn playlist_create(context: &Context, create: PlaylistCreate) -> Resul
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_duplicate(
     context: &Context,
     playlist_id: PlaylistId,
@@ -700,7 +699,7 @@ pub async fn playlist_duplicate(
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_update(
     context: &Context,
     id: PlaylistId,
@@ -713,7 +712,7 @@ pub async fn playlist_update(
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_delete(context: &Context, id: PlaylistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = playlist::delete(&mut tx, id).await?;
@@ -722,7 +721,7 @@ pub async fn playlist_delete(context: &Context, id: PlaylistId) -> Result<()> {
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_list_tracks(
     context: &Context,
     id: PlaylistId,
@@ -732,7 +731,7 @@ pub async fn playlist_list_tracks(
     playlist::list_tracks(&mut conn, id, params).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_clear_tracks(context: &Context, id: PlaylistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = playlist::clear_tracks(&mut tx, id).await?;
@@ -740,7 +739,7 @@ pub async fn playlist_clear_tracks(context: &Context, id: PlaylistId) -> Result<
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_insert_tracks(
     context: &Context,
     id: PlaylistId,
@@ -752,7 +751,7 @@ pub async fn playlist_insert_tracks(
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn playlist_remove_tracks(
     context: &Context,
     id: PlaylistId,
@@ -764,7 +763,7 @@ pub async fn playlist_remove_tracks(
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn search(
     context: &Context,
     user_id: UserId,
@@ -773,19 +772,19 @@ pub async fn search(
     context.search.search(user_id, &query).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn scrobble_list(context: &Context, params: ListParams) -> Result<Vec<Scrobble>> {
     let mut conn = context.db.acquire().await?;
     scrobble::list(&mut conn, params).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn scrobble_get(context: &Context, scrobble_id: ScrobbleId) -> Result<Scrobble> {
     let mut conn = context.db.acquire().await?;
     scrobble::get(&mut conn, scrobble_id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn scrobble_create(context: &Context, create: ScrobbleCreate) -> Result<Scrobble> {
     let mut tx = context.db.begin().await?;
     let result = scrobble::create(&mut tx, create).await?;
@@ -794,7 +793,7 @@ pub async fn scrobble_create(context: &Context, create: ScrobbleCreate) -> Resul
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn scrobble_update(
     context: &Context,
     id: ScrobbleId,
@@ -806,7 +805,7 @@ pub async fn scrobble_update(
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn scrobble_delete(context: &Context, id: ScrobbleId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     let result = scrobble::delete(&mut tx, id).await?;
@@ -814,7 +813,7 @@ pub async fn scrobble_delete(context: &Context, id: ScrobbleId) -> Result<()> {
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub(crate) async fn scrobble_list_unsubmitted(
     context: &Context,
     scrobbler: &str,
@@ -823,7 +822,7 @@ pub(crate) async fn scrobble_list_unsubmitted(
     scrobble::list_unsubmitted(&mut conn, scrobbler).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub(crate) async fn scrobble_list_unsubmitted_for_user(
     context: &Context,
     scrobbler: &str,
@@ -833,7 +832,7 @@ pub(crate) async fn scrobble_list_unsubmitted_for_user(
     scrobble::list_unsubmitted_for_user(&mut conn, user_id, scrobbler).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub(crate) async fn scrobble_register_submission(
     context: &Context,
     scrobble_id: ScrobbleId,
@@ -845,13 +844,13 @@ pub(crate) async fn scrobble_register_submission(
     Ok(result)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn pin_list(context: &Context, user_id: UserId) -> Result<Vec<SonarId>> {
     let mut conn = context.db.acquire().await?;
     pin::list(&mut conn, user_id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn pin_set(context: &Context, user_id: UserId, id: SonarId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     pin::set(&mut tx, user_id, id).await?;
@@ -859,7 +858,7 @@ pub async fn pin_set(context: &Context, user_id: UserId, id: SonarId) -> Result<
     Ok(())
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn pin_unset(context: &Context, user_id: UserId, id: SonarId) -> Result<()> {
     let mut tx = context.db.begin().await?;
     pin::unset(&mut tx, user_id, id).await?;
@@ -867,7 +866,7 @@ pub async fn pin_unset(context: &Context, user_id: UserId, id: SonarId) -> Resul
     Ok(())
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn external_service_list(context: &Context) -> Result<Vec<String>> {
     Ok(context
         .external
@@ -876,27 +875,27 @@ pub async fn external_service_list(context: &Context) -> Result<Vec<String>> {
         .collect())
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn subscription_list(context: &Context, user_id: UserId) -> Result<Vec<Subscription>> {
     context.subscriptions.list(user_id).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn subscription_create(context: &Context, create: SubscriptionCreate) -> Result<()> {
     context.subscriptions.create(create).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn subscription_delete(context: &Context, delete: SubscriptionDelete) -> Result<()> {
     context.subscriptions.delete(delete).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn download_list(context: &Context, user_id: UserId) -> Result<Vec<Download>> {
     Ok(context.downloads.list(user_id))
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn download_request(context: &Context, request: DownloadCreate) -> Result<()> {
     Ok(context
         .downloads
@@ -904,7 +903,7 @@ pub async fn download_request(context: &Context, request: DownloadCreate) -> Res
         .await)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn download_delete(context: &Context, delete: DownloadDelete) -> Result<()> {
     Ok(context
         .downloads
@@ -912,7 +911,7 @@ pub async fn download_delete(context: &Context, delete: DownloadDelete) -> Resul
         .await)
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn garbage_collection_candidates(context: &Context) -> Result<Vec<SonarId>> {
     let mut conn = context.db.acquire().await?;
     gc::list_gc_candidates(&mut conn).await
@@ -930,7 +929,7 @@ pub async fn import(context: &Context, import: Import) -> Result<Track> {
     .await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn metadata_fetch_album(context: &Context, album_id: AlbumId) -> Result<()> {
     let metadata = metadata_view_album(context, album_id).await?;
 
@@ -961,7 +960,7 @@ pub async fn metadata_fetch_album(context: &Context, album_id: AlbumId) -> Resul
     Ok(())
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn metadata_fetch_album_tracks(context: &Context, album_id: AlbumId) -> Result<()> {
     let metadata = metadata_view_album_tracks(context, album_id).await?;
     for (track_id, track_metadata) in metadata.tracks {
@@ -974,12 +973,12 @@ pub async fn metadata_fetch_album_tracks(context: &Context, album_id: AlbumId) -
     Ok(())
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(_context))]
 pub async fn metadata_view_artist(_context: &Context, _artist_id: ArtistId) -> Result<()> {
     todo!()
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn metadata_view_album(context: &Context, album_id: AlbumId) -> Result<AlbumMetadata> {
     let album = album_get(context, album_id).await?;
     let artist = artist_get(context, album.artist).await?;
@@ -1002,7 +1001,7 @@ pub async fn metadata_view_album(context: &Context, album_id: AlbumId) -> Result
     Ok(Default::default())
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context))]
 pub async fn metadata_view_album_tracks(
     context: &Context,
     album_id: AlbumId,

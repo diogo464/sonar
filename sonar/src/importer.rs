@@ -24,6 +24,8 @@ pub struct Import {
 impl std::fmt::Debug for Import {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Import")
+            .field("artist", &self.artist)
+            .field("album", &self.album)
             .field("filename", &self.filepath)
             .finish()
     }
@@ -40,6 +42,7 @@ pub fn new(config: Config) -> Importer {
     Importer { config, semaphore }
 }
 
+#[tracing::instrument(skip(importer, db, storage, extractors))]
 pub async fn import(
     importer: &Importer,
     db: &Db,

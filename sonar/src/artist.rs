@@ -53,6 +53,7 @@ impl From<(ArtistView, Properties)> for Artist {
     }
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Artist>> {
     let (offset, limit) = params.to_db_offset_limit();
     let views = sqlx::query_as!(
@@ -72,6 +73,7 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Artist>> {
         .collect())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list_ids(db: &mut DbC) -> Result<Vec<ArtistId>> {
     let ids = sqlx::query_scalar!("SELECT id FROM artist")
         .fetch_all(&mut *db)
@@ -79,6 +81,7 @@ pub async fn list_ids(db: &mut DbC) -> Result<Vec<ArtistId>> {
     Ok(ids.into_iter().map(ArtistId::from_db).collect())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get(db: &mut DbC, artist_id: ArtistId) -> Result<Artist> {
     let artist_id = artist_id.to_db();
     let artist_view = sqlx::query_as!(
@@ -92,6 +95,7 @@ pub async fn get(db: &mut DbC, artist_id: ArtistId) -> Result<Artist> {
     Ok(From::from((artist_view, properties)))
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, artist_ids: &[ArtistId]) -> Result<Vec<Artist>> {
     let mut artists = Vec::with_capacity(artist_ids.len());
     for artist_id in artist_ids {
@@ -100,6 +104,7 @@ pub async fn get_bulk(db: &mut DbC, artist_ids: &[ArtistId]) -> Result<Vec<Artis
     Ok(artists)
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn create(db: &mut DbC, create: ArtistCreate) -> Result<Artist> {
     let cover_art = create.cover_art.map(|id| id.to_db());
     let artist_id = sqlx::query!(
@@ -115,6 +120,7 @@ pub async fn create(db: &mut DbC, create: ArtistCreate) -> Result<Artist> {
     get(db, artist_id).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn update(db: &mut DbC, artist_id: ArtistId, update: ArtistUpdate) -> Result<Artist> {
     tracing::info!("updating artist {} with {:?}", artist_id, update);
     let new_name = match update.name {
@@ -140,6 +146,7 @@ pub async fn delete(db: &mut DbC, artist_id: ArtistId) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn find_or_create_by_name(db: &mut DbC, create_: ArtistCreate) -> Result<Artist> {
     let artist_name = &create_.name;
     let artist_id = sqlx::query_scalar!(r#"SELECT id FROM artist WHERE name = ?"#, artist_name)
@@ -153,6 +160,7 @@ pub async fn find_or_create_by_name(db: &mut DbC, create_: ArtistCreate) -> Resu
     create(db, create_).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn find_or_create_by_name_tx(db: &Db, create_: ArtistCreate) -> Result<Artist> {
     let mut tx = db.begin().await?;
     let result = find_or_create_by_name(&mut tx, create_).await;

@@ -14,6 +14,7 @@ impl BuiltInSearchEngine {
 
 #[async_trait]
 impl SearchEngine for BuiltInSearchEngine {
+    #[tracing::instrument]
     async fn search(&self, user_id: UserId, query: &SearchQuery) -> Result<SearchResults> {
         let mut conn = self.db.acquire().await?;
         let mut results = SearchResults::default();

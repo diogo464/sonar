@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use crate::{
     db::{Db, DbC},
-    property, AlbumId, ArtistId, DateTime, Error, ErrorKind, ImageId, ListParams, Properties,
-    PropertyUpdate, Result, Timestamp, ValueUpdate,
+    property, AlbumId, ArtistId, Error, ErrorKind, ImageId, ListParams, Properties, PropertyUpdate,
+    Result, Timestamp, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -63,6 +63,7 @@ impl From<(AlbumView, Properties)> for Album {
     }
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Album>> {
     let (offset, limit) = params.to_db_offset_limit();
     let views = sqlx::query_as!(
@@ -82,6 +83,7 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Album>> {
         .collect())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list_by_artist(
     db: &mut DbC,
     artist_id: ArtistId,
@@ -107,6 +109,7 @@ pub async fn list_by_artist(
         .collect())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list_artist_id_pairs(db: &mut DbC) -> Result<Vec<(AlbumId, ArtistId)>> {
     let rows = sqlx::query!("SELECT id, artist FROM album")
         .fetch_all(&mut *db)
@@ -117,6 +120,7 @@ pub async fn list_artist_id_pairs(db: &mut DbC) -> Result<Vec<(AlbumId, ArtistId
         .collect())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
     let album_view = sqlx::query_as!(AlbumView, "SELECT * FROM sqlx_album WHERE id = ?", album_id)
         .fetch_one(&mut *db)
@@ -125,6 +129,7 @@ pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
     Ok(From::from((album_view, properties)))
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, album_ids: &[AlbumId]) -> Result<Vec<Album>> {
     let mut albums = Vec::with_capacity(album_ids.len());
     for album_id in album_ids {
@@ -133,6 +138,7 @@ pub async fn get_bulk(db: &mut DbC, album_ids: &[AlbumId]) -> Result<Vec<Album>>
     Ok(albums)
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn create(db: &mut DbC, create: AlbumCreate) -> Result<Album> {
     let name = create.name;
     let cover_art = create.cover_art.map(|id| id.to_db());
@@ -152,6 +158,7 @@ pub async fn create(db: &mut DbC, create: AlbumCreate) -> Result<Album> {
     get(db, album_id).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Result<Album> {
     tracing::info!("updating album {} with {:?}", album_id, update);
     if let Some(new_name) = match update.name {
@@ -206,6 +213,7 @@ pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Res
     get(db, album_id).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn delete(db: &mut DbC, album_id: AlbumId) -> Result<()> {
     sqlx::query!("DELETE FROM album WHERE id = ?", album_id)
         .execute(&mut *db)
@@ -214,6 +222,7 @@ pub async fn delete(db: &mut DbC, album_id: AlbumId) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn find_or_create_by_name(db: &mut DbC, create_: AlbumCreate) -> Result<Album> {
     let name = &create_.name;
     let album_id = sqlx::query!("SELECT id FROM album WHERE name = ?", name)
@@ -228,6 +237,7 @@ pub async fn find_or_create_by_name(db: &mut DbC, create_: AlbumCreate) -> Resul
     create(db, create_).await
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn find_or_create_by_name_tx(db: &Db, create_: AlbumCreate) -> Result<Album> {
     let mut tx = db.begin().await?;
     let result = find_or_create_by_name(&mut tx, create_).await;

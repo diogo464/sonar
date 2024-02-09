@@ -41,6 +41,7 @@ impl tokio_stream::Stream for ImageDownload {
     }
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn download(
     db: &mut DbC,
     storage: &dyn BlobStorage,
@@ -57,6 +58,7 @@ pub async fn download(
     Ok(ImageDownload::new(row.mime_type, stream))
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn create(
     db: &mut DbC,
     storage: &dyn BlobStorage,
@@ -103,6 +105,7 @@ pub async fn create(
     Ok(ImageId::from_db(db_id))
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn delete(db: &mut DbC, image_id: ImageId) -> Result<()> {
     let db_id = image_id.to_db();
     sqlx::query!("DELETE FROM image WHERE id = ?", db_id)
