@@ -966,7 +966,7 @@ pub async fn metadata_fetch_album_tracks(context: &Context, album_id: AlbumId) -
     let metadata = metadata_view_album_tracks(context, album_id).await?;
     for (track_id, track_metadata) in metadata.tracks {
         let mut update = TrackUpdate::default();
-        // TODO: update cover
+        // NOTE: we don't add a cover here because we just assume the album has a cover.
         update.name = ValueUpdate::from_option_unchanged(track_metadata.name);
         update.properties = track_metadata.properties.into_property_updates();
         track_update(context, track_id, update).await?;

@@ -69,7 +69,118 @@ impl OpenSubsonicServer for Server {
         let _user_id = self.authenticate(&request).await?;
         Ok(())
     }
+    async fn search3(&self, request: Request<Search3>) -> Result<SearchResult3> {
+        const DEFAULT_LIMIT: u32 = 50;
 
+        let user_id = self.authenticate(&request).await?;
+
+        let artist;
+        let album;
+        let song;
+
+        let artist_limit = request.body.artist_count.unwrap_or(DEFAULT_LIMIT);
+        let artist_offset = request.body.artist_offset.unwrap_or(0);
+        let album_limit = request.body.album_count.unwrap_or(DEFAULT_LIMIT);
+        let album_offset = request.body.album_offset.unwrap_or(0);
+        let song_limit = request.body.song_count.unwrap_or(DEFAULT_LIMIT);
+        let song_offset = request.body.song_offset.unwrap_or(0);
+
+        if request.body.query.is_empty() {
+            let artist_params = sonar::ListParams::from((artist_offset, artist_limit));
+            let album_params = sonar::ListParams::from((album_offset, album_limit));
+            let song_params = sonar::ListParams::from((song_offset, song_limit));
+
+            let artists = sonar::artist_list(&self.context, artist_params);
+            let albums = sonar::album_list(&self.context, album_params);
+            let songs = sonar::track_list(&self.context, song_params);
+            let (artists, albums, songs) = tokio::try_join!(artists, albums, songs).m()?;
+
+            let album_artists = sonar::ext::get_albums_artists_map(&self.context, &albums);
+            let album_user_props = sonar::ext::user_property_bulk_map(
+                &self.context,
+                user_id,
+                albums.iter().map(|album| sonar::SonarId::from(album.id)),
+            );
+            let track_albums = sonar::ext::get_tracks_albums_map(&self.context, &songs);
+            let track_artists = sonar::ext::get_tracks_artists_map(&self.context, &songs);
+            let (album_artists, album_user_props, track_albums, track_artists) =
+                tokio::try_join!(album_artists, album_user_props, track_albums, track_artists)
+                    .m()?;
+
+            let albums = sonar::ext::albums_map(albums);
+
+            artist = artists.into_iter().map(artistid3_from_artist).collect();
+            album =
+                multi_albumid3_from_album_and_artist(&album_artists, &albums, &album_user_props);
+            song = songs
+                .into_iter()
+                .map(|track| {
+                    let album = &track_albums[&track.album];
+                    let artist = &track_artists[&track.artist];
+                    child_from_track_and_album_and_artist(artist, album, track)
+                })
+                .collect();
+        } else {
+            let mut flags = 0;
+            if artist_limit > 0 {
+                flags |= sonar::SearchQuery::FLAG_ARTIST;
+            }
+            if album_limit > 0 {
+                flags |= sonar::SearchQuery::FLAG_ALBUM;
+            }
+            if song_limit > 0 {
+                flags |= sonar::SearchQuery::FLAG_TRACK;
+            }
+
+            let result = sonar::search(
+                &self.context,
+                user_id,
+                sonar::SearchQuery {
+                    query: request.body.query,
+                    limit: Some(artist_limit + album_limit + song_limit),
+                    flags,
+                },
+            )
+            .await
+            .m()?;
+
+            let album_artists = sonar::ext::get_albums_artists_map(&self.context, result.albums());
+            let album_user_props = sonar::ext::user_property_bulk_map(
+                &self.context,
+                user_id,
+                result.albums().map(|album| sonar::SonarId::from(album.id)),
+            );
+            let track_albums = sonar::ext::get_tracks_albums_map(&self.context, result.tracks());
+            let track_artists = sonar::ext::get_tracks_artists_map(&self.context, result.tracks());
+            let (album_artists, album_user_props, track_albums, track_artists) =
+                tokio::try_join!(album_artists, album_user_props, track_albums, track_artists)
+                    .m()?;
+            let albums = sonar::ext::albums_map(result.albums().cloned());
+
+            artist = result
+                .artists()
+                .cloned()
+                .map(artistid3_from_artist)
+                .collect::<Vec<_>>();
+            album =
+                multi_albumid3_from_album_and_artist(&album_artists, &albums, &album_user_props);
+            song = result
+                .tracks()
+                .cloned()
+                .map(|track| {
+                    let album = &track_albums[&track.album];
+                    let artist = &track_artists[&track.artist];
+                    child_from_track_and_album_and_artist(artist, album, track)
+                })
+                .collect();
+        }
+
+        Ok(SearchResult3 {
+            artist,
+            album,
+            song,
+        })
+    }
     #[tracing::instrument]
     async fn get_artists(&self, _request: Request<GetArtists>) -> Result<ArtistsID3> {
         let artists = sonar::artist_list(&self.context, Default::default())
@@ -442,7 +553,8 @@ fn multi_albumid3_from_album_and_artist(
         let properties = &albums_user_properties[&sonar::SonarId::from(album.id)];
         let mut album = albumid3_from_album_and_artist(artist, album.clone());
         if let Some(value) = properties.get(PROPERTY_USER_STARRED) {
-            album.starred = Some(value.to_string().parse().unwrap());
+            let starred = value.as_str().parse::<sonar::DateTime>().unwrap();
+            album.starred = Some(starred.to_rfc3339().parse().unwrap());
         }
         albumid3s.push(album);
     }

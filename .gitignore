@@ -1,3 +1,5 @@
+target/
+
 # sonar-cli
 /sonar-cli/storage
 /sonar-cli/spotify-music
