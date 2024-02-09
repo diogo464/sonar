@@ -183,11 +183,18 @@ pub struct Context {
 }
 
 pub async fn new(config: Config) -> Result<Context> {
+    let opts = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(config.database_url)
+        .create_if_missing(true)
+        .read_only(false)
+        .foreign_keys(true)
+        .pragma("cache_size", format!("{}", -64 * 1024))
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
     let db = sqlx::sqlite::SqlitePoolOptions::new()
-        .connect(&config.database_url)
+        .max_connections(16)
+        .connect_with(opts)
         .await
         .map_err(|e| Error::with_source(ErrorKind::Internal, "failed to connect to database", e))?;
-    db.execute("PRAGMA foreign_keys = ON").await?;
     sqlx::migrate!("./migrations").run(&db).await.map_err(|e| {
         Error::with_source(ErrorKind::Internal, "failed to run database migrations", e)
     })?;
@@ -911,7 +918,7 @@ pub async fn garbage_collection_candidates(context: &Context) -> Result<Vec<Sona
     gc::list_gc_candidates(&mut conn).await
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(context, import))]
 pub async fn import(context: &Context, import: Import) -> Result<Track> {
     importer::import(
         &context.importer,

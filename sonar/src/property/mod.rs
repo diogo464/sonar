@@ -10,8 +10,9 @@ pub use property_value::*;
 
 mod property_update;
 pub use property_update::*;
+use sqlx::Row;
 
-use crate::{db::DbC, Result, SonarId, SonarIdentifier, UserId};
+use crate::{db::DbC, Error, Result, SonarId, SonarIdentifier, UserId};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Properties(HashMap<Cow<'static, str>, Cow<'static, str>>);
@@ -154,6 +155,7 @@ impl<'a> IntoIterator for &'a Properties {
     }
 }
 
+#[tracing::instrument(skip(db))]
 pub(crate) async fn set(
     db: &mut DbC,
     id: impl SonarIdentifier,
@@ -180,6 +182,7 @@ pub(crate) async fn set(
     Ok(())
 }
 
+#[tracing::instrument(skip(db))]
 pub(crate) async fn get(db: &mut DbC, id: impl SonarIdentifier) -> Result<Properties> {
     let namespace = id.namespace();
     let identifier = id.identifier();
@@ -197,17 +200,58 @@ pub(crate) async fn get(db: &mut DbC, id: impl SonarIdentifier) -> Result<Proper
     Ok(properties)
 }
 
+#[tracing::instrument(skip(db, ids))]
 pub(crate) async fn get_bulk(
     db: &mut DbC,
     ids: impl Iterator<Item = impl SonarIdentifier>,
 ) -> Result<Vec<Properties>> {
-    let mut properties = Vec::new();
-    for id in ids {
-        properties.push(get(db, id).await?);
+    use std::fmt::Write;
+
+    let ids = ids.collect::<Vec<_>>();
+    if ids.is_empty() {
+        return Ok(Vec::new());
     }
-    Ok(properties)
+    if !ids
+        .iter()
+        .map(|id| id.namespace())
+        .all(|n| n == ids[0].namespace())
+    {
+        panic!("get_bulk: all ids must have the same namespace");
+    }
+
+    let mut query = String::with_capacity(256 + 8 * ids.len());
+    query.push_str("SELECT identifier, key, value FROM property WHERE namespace = ");
+    query.push_str(&format!("{}", ids[0].namespace()));
+    query.push_str(" AND identifier IN (");
+    for (i, id) in ids.iter().enumerate() {
+        if i > 0 {
+            query.push_str(", ");
+        }
+        write!(&mut query, "{}", id.identifier()).unwrap();
+    }
+    query.push_str(") AND user IS NULL");
+
+    let rows = sqlx::query(&query).fetch_all(&mut *db).await?;
+    let mut properties = HashMap::with_capacity(ids.len());
+    for row in rows {
+        let mut props = Properties::new();
+        let identifier = row.get::<i64, _>(0) as u32;
+        let key = PropertyKey(row.get::<String, _>(1).into());
+        let value = PropertyValue(row.get::<String, _>(2).into());
+        props.insert(key, value);
+        properties.insert(identifier, props);
+    }
+
+    let mut result = Vec::with_capacity(ids.len());
+    for id in ids {
+        let identifier = id.identifier();
+        result.push(properties.remove(&identifier).unwrap_or_default());
+    }
+
+    Ok(result)
 }
 
+#[tracing::instrument(skip(db))]
 pub(crate) async fn update(
     db: &mut DbC,
     id: impl SonarIdentifier,
@@ -246,6 +290,7 @@ pub(crate) async fn update(
     Ok(())
 }
 
+#[tracing::instrument(skip(db))]
 pub(crate) async fn clear(db: &mut DbC, id: impl SonarIdentifier) -> Result<()> {
     let namespace = id.namespace();
     let identifier = id.identifier();

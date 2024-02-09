@@ -48,8 +48,10 @@ pub async fn import(
     import: Import,
 ) -> Result<Track> {
     // acquire permit
-    let _permit = importer.semaphore.acquire().await;
+    tracing::info!("acquiring import permit for file: {:?}", import.filepath);
+    let _permit = importer.semaphore.acquire().await.unwrap();
 
+    tracing::info!("importing file: {:?}", import.filepath);
     // write to temporary file
     let filename = import
         .filepath
@@ -58,11 +60,13 @@ pub async fn import(
         .unwrap_or("input");
     let tmp_dir = tempfile::tempdir()?;
     let tmp_filepath = tmp_dir.path().join(filename);
+    tracing::debug!("writing import to temporary file: {:?}", tmp_filepath);
     bytestream::to_file(import.stream, &tmp_filepath).await?;
 
     // check file size
     // TODO: we should have a wrapper stream that fails afetr x bytes are read so we are not
     // dumping the whole thing on disk before checking.
+    tracing::debug!("checking file size: {:?}", import.filepath);
     if tokio::fs::metadata(&tmp_filepath).await?.len() as usize > importer.config.max_import_size {
         return Err(Error::new(
             ErrorKind::Invalid,

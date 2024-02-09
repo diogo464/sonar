@@ -106,6 +106,7 @@ impl From<(TrackView, Properties)> for Track {
     }
 }
 
+#[tracing::instrument(skip(db))]
 pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Track>> {
     let (offset, limit) = params.to_db_offset_limit();
     let views = sqlx::query_as!(

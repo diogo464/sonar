@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::SocketAddr};
+use std::{collections::HashMap, net::SocketAddr, sync::Mutex};
 
 use eyre::Context;
 use opensubsonic::service::prelude::*;
@@ -11,17 +11,29 @@ const PROPERTY_USER_STARRED: PropertyKey =
 #[derive(Debug)]
 struct Server {
     context: sonar::Context,
+    tokens: Mutex<HashMap<String, sonar::UserToken>>,
 }
 
 impl Server {
     fn new(context: sonar::Context) -> Self {
-        Self { context }
+        Self {
+            context,
+            tokens: Default::default(),
+        }
     }
 
     async fn authenticate<R: SubsonicRequest>(
         &self,
         request: &Request<R>,
     ) -> Result<sonar::UserId> {
+        if let Some(token) = self.get_token(&request.username) {
+            if let Ok(user_id) = sonar::user_validate_token(&self.context, &token).await {
+                return Ok(user_id);
+            } else {
+                tracing::warn!("invalid token for user {}", request.username);
+            }
+        }
+
         let username = request.username.parse::<sonar::Username>().m()?;
         let password = match &request.authentication {
             Authentication::Password(password) => password,
@@ -32,9 +44,21 @@ impl Server {
                 ))
             }
         };
-        sonar::user_authenticate(&self.context, &username, password)
+        let (user_id, token) = sonar::user_login(&self.context, &username, password)
             .await
-            .m()
+            .m()?;
+        self.set_token(username.as_str(), token);
+        Ok(user_id)
+    }
+
+    fn get_token(&self, username: &str) -> Option<sonar::UserToken> {
+        let tokens = self.tokens.lock().unwrap();
+        tokens.get(username).cloned()
+    }
+
+    fn set_token(&self, username: &str, token: sonar::UserToken) {
+        let mut tokens = self.tokens.lock().unwrap();
+        tokens.insert(username.to_string(), token);
     }
 }
 

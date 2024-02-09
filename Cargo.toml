@@ -1,6 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["sonar", "sonar-beets", "sonar-cli", "sonar-experimental", "sonar-extractor-lofty", "sonar-grpc", "sonar-listenbrainz", "sonar-opensubsonic", "sonar-spotify"]
+members = [ "migrator","sonar", "sonar-beets", "sonar-cli", "sonar-experimental", "sonar-extractor-lofty", "sonar-grpc", "sonar-listenbrainz", "sonar-opensubsonic", "sonar-spotify"]
+
+[profile.release]
+strip = true
+opt-level = "z"
 
 [profile.dev.build-override]
 opt-level = 3

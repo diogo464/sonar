@@ -1,8 +1,9 @@
+#![feature(let_chains)]
 use std::{
-    collections::HashSet,
     net::SocketAddr,
     path::{Path, PathBuf},
-    sync::OnceLock,
+    pin::Pin,
+    sync::{Arc, OnceLock},
 };
 
 use clap::Parser;
@@ -317,10 +318,14 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    if std::matches!(args.command, Command::Server(_)) {
-        let tracer = opentelemetry_jaeger::new_agent_pipeline()
-            .with_service_name("sonar")
-            .install_simple()?;
+    if let Command::Server(ref args) = args.command
+        && args.jaeger_exporter
+    {
+        let mut tracer = opentelemetry_jaeger::new_agent_pipeline();
+        if let Some(ref endpoint) = args.jaeger_exporter_endpoint {
+            tracer = tracer.with_endpoint(endpoint);
+        }
+        let tracer = tracer.with_service_name("sonar").install_simple()?;
 
         let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
         tracing_subscriber::registry()
@@ -1723,6 +1728,12 @@ struct ServerArgs {
 
     #[clap(long, env = "SONAR_SPOTIFY_PASSWORD")]
     spotify_password: Option<String>,
+
+    #[clap(long)]
+    jaeger_exporter: bool,
+
+    #[clap(long)]
+    jaeger_exporter_endpoint: Option<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -1731,8 +1742,6 @@ struct ImportArgs {
 }
 
 async fn cmd_import(args: ImportArgs) -> Result<()> {
-    let mut client = create_client().await?;
-
     tracing::info!("scanning for files");
     let files = list_files_in_directories(args.paths)
         .await?
@@ -1743,20 +1752,35 @@ async fn cmd_import(args: ImportArgs) -> Result<()> {
                 .any(|filetype| path.extension().map(|x| x == *filetype).unwrap_or(false))
         });
 
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(16));
+    let mut handles = Vec::new();
     for filepath in files {
-        tracing::info!("importing {}", filepath.display());
-        let file = tokio::fs::File::open(&filepath).await?;
-        let reader = tokio::io::BufReader::new(file);
-        let stream =
-            tokio_util::io::ReaderStream::new(reader).map(move |x| sonar_grpc::ImportRequest {
-                chunk: x.unwrap().to_vec(),
-                filepath: Some(filepath.display().to_string()),
-                artist_id: None,
-                album_id: None,
-            });
-        let response = client.import(stream).await?;
-        let track = response.into_inner();
-        println!("{:?}", track);
+        let mut client = create_client().await?;
+        let permit = semaphore.clone().acquire_owned().await;
+        let handle = tokio::spawn(async move {
+            tracing::info!("importing {}", filepath.display());
+            let _permit = permit;
+            let file = tokio::fs::File::open(&filepath).await?;
+            let reader = tokio::io::BufReader::new(file);
+            let stream =
+                tokio_util::io::ReaderStream::new(reader).map(move |x| sonar_grpc::ImportRequest {
+                    chunk: x.unwrap().to_vec(),
+                    filepath: Some(filepath.display().to_string()),
+                    artist_id: None,
+                    album_id: None,
+                });
+            let response = client.import(stream).await?;
+            let track = response.into_inner();
+            println!("{:?}", track);
+            Ok::<(), eyre::Report>(())
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        if let Err(err) = handle.await? {
+            tracing::error!("import failed: {}", err);
+        }
     }
 
     Ok(())
@@ -1768,7 +1792,7 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
         .canonicalize()
         .context("canonicalizing data dir")?;
     let storage_dir = data_dir.join("storage");
-    let database_url = format!("sqlite://{}?mode=rwc", data_dir.join("sonar.db").display());
+    let database_url = data_dir.join("sonar.db").display().to_string();
 
     tracing::info!("starting sonar server");
     tracing::info!("\taddress: {}", args.address);
@@ -1867,31 +1891,41 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
 // }
 
 async fn list_files_in_directories(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
-    let mut queue = paths;
-    let mut files = vec![];
-    let mut inserted = HashSet::<PathBuf>::new();
-    while let Some(p) = queue.pop() {
-        let metadata = tokio::fs::metadata(&p).await?;
-        if metadata.is_dir() {
-            let mut entries = tokio::fs::read_dir(&p).await?;
-            while let Some(entry) = entries.next_entry().await? {
-                queue.push(entry.path());
-            }
-        } else if metadata.is_file() {
-            match p.canonicalize() {
-                Ok(p) => {
-                    if inserted.contains(&p) {
-                        continue;
+    type Sender = tokio::sync::mpsc::UnboundedSender<PathBuf>;
+
+    fn scan_path(
+        tx: Sender,
+        path: PathBuf,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + Sync + 'static>> {
+        Box::pin(async move {
+            if path.is_dir() {
+                let mut entries = tokio::fs::read_dir(&path).await?;
+                while let Some(entry) = entries.next_entry().await? {
+                    tokio::spawn(scan_path(tx.clone(), entry.path()));
+                }
+            } else {
+                match path.canonicalize() {
+                    Ok(p) => tx.send(p).unwrap(),
+                    Err(err) => {
+                        tracing::warn!("failed to canonicalize {}: {}", path.display(), err)
                     }
-                    inserted.insert(p.clone());
-                    files.push(p)
-                }
-                Err(err) => {
-                    tracing::warn!("failed to canonicalize {}: {}", p.display(), err);
                 }
             }
-        }
+            Ok(())
+        })
     }
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    for path in paths {
+        tokio::spawn(scan_path(tx.clone(), path));
+    }
+    drop(tx);
+
+    let mut files = Vec::new();
+    while let Some(file) = rx.recv().await {
+        files.push(file);
+    }
+
     Ok(files)
 }
 

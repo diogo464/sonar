@@ -43,7 +43,7 @@ impl std::fmt::Display for InvalidIdError {
 
 impl std::error::Error for InvalidIdError {}
 
-pub(crate) trait SonarIdentifier: Sized + Clone + Copy + 'static {
+pub(crate) trait SonarIdentifier: std::fmt::Debug + Sized + Clone + Copy + 'static {
     fn name(&self) -> &'static str;
     fn namespace(&self) -> u32;
     fn identifier(&self) -> u32;

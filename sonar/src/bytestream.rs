@@ -1,15 +1,16 @@
 use std::path::Path;
 
 use bytes::Bytes;
-use tokio::fs::File;
+use tokio::{fs::File, io::BufWriter};
 use tokio_stream::StreamExt;
 
 pub type ByteStream = Box<dyn tokio_stream::Stream<Item = std::io::Result<Bytes>> + Send + Unpin>;
 
 pub async fn to_file(stream: ByteStream, path: &Path) -> std::io::Result<()> {
-    let mut file = File::create(path).await?;
+    let file = File::create(path).await?;
+    let mut writer = BufWriter::new(file);
     let mut reader = tokio_util::io::StreamReader::new(stream);
-    tokio::io::copy(&mut reader, &mut file).await?;
+    tokio::io::copy(&mut reader, &mut writer).await?;
     Ok(())
 }
 
