@@ -36,6 +36,7 @@ impl sonar::ExternalService for Service1 {
         Ok(ExternalArtist {
             name: "artist1".to_owned(),
             albums: vec![ExternalMediaId::new(SERVICE1_ID_ALBUM)],
+            cover: None,
             properties: Default::default(),
         })
     }
@@ -51,6 +52,7 @@ impl sonar::ExternalService for Service1 {
             name: "album1".to_owned(),
             artist: ExternalMediaId::new(SERVICE1_ID_ARTIST),
             tracks: vec![ExternalMediaId::new(SERVICE1_ID_TRACK)],
+            cover: None,
             properties: Default::default(),
         })
     }
@@ -66,6 +68,7 @@ impl sonar::ExternalService for Service1 {
             name: "track1".to_owned(),
             artist: ExternalMediaId::new(SERVICE1_ID_ARTIST),
             album: ExternalMediaId::new(SERVICE1_ID_ALBUM),
+            lyrics: None,
             properties: Default::default(),
         })
     }

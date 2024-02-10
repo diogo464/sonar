@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 #[tokio::test]
 async fn track_list_empty() {
     let ctx = sonar::test::create_context_memory().await;
@@ -81,4 +83,36 @@ async fn track_download_one() {
         .unwrap();
     let downloaded = sonar::bytestream::to_bytes(download.stream).await.unwrap();
     assert_eq!(downloaded, sonar::test::SMALL_AUDIO_MP3);
+}
+
+#[tokio::test]
+async fn track_with_lyrics() {
+    let ctx = sonar::test::create_context_memory().await;
+    let artist = sonar::test::create_artist(&ctx, "artist").await;
+    let album = sonar::test::create_album(&ctx, artist.id, "album").await;
+    let lyrics = sonar::TrackLyrics {
+        kind: sonar::LyricsKind::Synced,
+        lines: vec![sonar::LyricsLine {
+            offset: Duration::from_secs(1),
+            text: "Lyrics".to_string(),
+        }],
+    };
+
+    let track = sonar::track_create(
+        &ctx,
+        sonar::TrackCreate {
+            name: "Track".to_string(),
+            album: album.id,
+            cover_art: None,
+            audio: None,
+            lyrics: Some(lyrics.clone()),
+            properties: sonar::test::create_simple_properties(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let fetched_lyrics = sonar::track_get_lyrics(&ctx, track.id).await.unwrap();
+    assert_eq!(fetched_lyrics.kind, lyrics.kind);
+    assert_eq!(fetched_lyrics.lines, lyrics.lines);
 }

@@ -182,8 +182,8 @@ pub struct Context {
 }
 
 pub async fn new(config: Config) -> Result<Context> {
-    let opts = sqlx::sqlite::SqliteConnectOptions::new()
-        .filename(config.database_url)
+    let opts: sqlx::sqlite::SqliteConnectOptions = config.database_url.parse()?;
+    let opts = opts
         .create_if_missing(true)
         .read_only(false)
         .foreign_keys(true)

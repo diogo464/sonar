@@ -22,7 +22,7 @@ pub struct Track {
     pub created_at: Timestamp,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrackLyrics {
     pub kind: LyricsKind,
     pub lines: Vec<LyricsLine>,
@@ -63,7 +63,7 @@ pub enum LyricsKind {
     Unsynced,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricsLine {
     pub offset: Duration,
     pub text: String,
@@ -216,6 +216,10 @@ pub async fn create(db: &mut DbC, create: TrackCreate) -> Result<Track> {
     property::set(db, track_id, &create.properties).await?;
     if let Some(audio_id) = create.audio {
         audio::set_preferred(db, audio_id, track_id).await?;
+    }
+
+    if let Some(lyrics) = create.lyrics {
+        set_lyrics(db, track_id, lyrics).await?;
     }
 
     get(db, track_id).await
@@ -378,6 +382,7 @@ pub async fn get_lyrics(db: &mut DbC, track_id: TrackId) -> Result<Lyrics> {
     })
 }
 
+#[tracing::instrument(skip(db))]
 async fn set_lyrics(db: &mut DbC, track_id: TrackId, lyrics: TrackLyrics) -> Result<()> {
     let kind = match lyrics.kind {
         LyricsKind::Synced => "S",

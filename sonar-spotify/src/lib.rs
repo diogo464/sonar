@@ -151,6 +151,7 @@ impl sonar::ExternalService for SpotifyService {
             name: track.name,
             artist: ExternalMediaId::new(track.artists[0].to_string()),
             album: ExternalMediaId::new(track.album.to_string()),
+            lyrics: None, // TODO: fetch lyrics
             properties: properties_for_resource(resource_id.id),
         };
         tracing::debug!("external track: {:#?}", external);
