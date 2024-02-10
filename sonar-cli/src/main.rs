@@ -176,6 +176,43 @@ impl From<sonar_grpc::Track> for Track {
 }
 
 #[derive(Debug, Serialize)]
+struct Lyrics {
+    synced: bool,
+    lines: Vec<LyricsLine>,
+}
+
+#[derive(Debug, Serialize)]
+struct LyricsLine {
+    offset: u32,
+    text: String,
+}
+
+impl std::fmt::Display for Lyrics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for line in &self.lines {
+            writeln!(f, "{}\t{}", line.offset, line.text)?;
+        }
+        Ok(())
+    }
+}
+
+impl From<sonar_grpc::Lyrics> for Lyrics {
+    fn from(value: sonar_grpc::Lyrics) -> Self {
+        Self {
+            synced: value.synced,
+            lines: value
+                .lines
+                .into_iter()
+                .map(|line| LyricsLine {
+                    offset: line.offset as u32,
+                    text: line.text,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 struct Playlist {
     id: String,
     name: String,
@@ -351,6 +388,7 @@ async fn main() -> Result<()> {
             ArtistCommand::Update(cargs) => cmd_artist_update(cargs).await?,
             ArtistCommand::Delete(cargs) => cmd_artist_delete(cargs).await?,
             ArtistCommand::Search(cargs) => cmd_artist_search(cargs).await?,
+            ArtistCommand::Albums(cargs) => cmd_artist_albums(cargs).await?,
         },
         Command::Album(cargs) => match cargs.command {
             AlbumCommand::List(cargs) => cmd_album_list(cargs).await?,
@@ -358,6 +396,7 @@ async fn main() -> Result<()> {
             AlbumCommand::Update(cargs) => cmd_album_update(cargs).await?,
             AlbumCommand::Delete(cargs) => cmd_album_delete(cargs).await?,
             AlbumCommand::Search(cargs) => cmd_album_search(cargs).await?,
+            AlbumCommand::Tracks(cargs) => cmd_album_tracks(cargs).await?,
         },
         Command::Track(cargs) => match cargs.command {
             TrackCommand::List(cargs) => cmd_track_list(cargs).await?,
@@ -365,6 +404,7 @@ async fn main() -> Result<()> {
             TrackCommand::Update(cargs) => cmd_track_update(cargs).await?,
             TrackCommand::Delete(cargs) => cmd_track_delete(cargs).await?,
             TrackCommand::Search(cargs) => cmd_track_search(cargs).await?,
+            TrackCommand::Lyrics(cargs) => cmd_track_lyrics(cargs).await?,
             TrackCommand::Download(cargs) => cmd_track_download(cargs).await?,
         },
         Command::Playlist(cargs) => match cargs.command {
@@ -412,6 +452,7 @@ async fn main() -> Result<()> {
                 AdminPlaylistCommand::Delete(cargs) => cmd_admin_playlist_delete(cargs).await?,
             },
             AdminCommand::MetadataFetch(cargs) => cmd_admin_metadata_fetch(cargs).await?,
+            AdminCommand::MetadataPreview(cargs) => cmd_admin_metadata_preview(cargs).await?,
         },
         Command::Import(cargs) => cmd_import(cargs).await?,
         Command::Server(cargs) => cmd_server(cargs).await?,
@@ -477,6 +518,7 @@ enum ArtistCommand {
     Update(ArtistUpdateArgs),
     Delete(ArtistDeleteArgs),
     Search(ArtistSearchArgs),
+    Albums(ArtistAlbumsArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -607,6 +649,29 @@ async fn cmd_artist_search(args: ArtistSearchArgs) -> Result<()> {
 }
 
 #[derive(Debug, Parser)]
+struct ArtistAlbumsArgs {
+    artist_id: sonar::ArtistId,
+}
+
+async fn cmd_artist_albums(args: ArtistAlbumsArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .album_list_by_artist(sonar_grpc::AlbumListByArtistRequest {
+            artist_id: args.artist_id.to_string(),
+            ..Default::default()
+        })
+        .await?;
+    let albums = response
+        .into_inner()
+        .albums
+        .into_iter()
+        .map(Album::from)
+        .collect::<Vec<_>>();
+    stdout_values(&albums)?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
 struct AlbumArgs {
     #[clap(subcommand)]
     command: AlbumCommand,
@@ -619,6 +684,7 @@ enum AlbumCommand {
     Update(AlbumUpdateArgs),
     Delete(AlbumDeleteArgs),
     Search(AlbumSearchArgs),
+    Tracks(AlbumTracksArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -748,6 +814,29 @@ async fn cmd_album_search(args: AlbumSearchArgs) -> Result<()> {
 }
 
 #[derive(Debug, Parser)]
+struct AlbumTracksArgs {
+    album_id: sonar::AlbumId,
+}
+
+async fn cmd_album_tracks(args: AlbumTracksArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .track_list_by_album(sonar_grpc::TrackListByAlbumRequest {
+            album_id: args.album_id.to_string(),
+            ..Default::default()
+        })
+        .await?;
+    let tracks = response
+        .into_inner()
+        .tracks
+        .into_iter()
+        .map(Track::from)
+        .collect::<Vec<_>>();
+    stdout_values(&tracks)?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
 struct TrackArgs {
     #[clap(subcommand)]
     command: TrackCommand,
@@ -760,6 +849,7 @@ enum TrackCommand {
     Update(TrackUpdateArgs),
     Delete(TrackDeleteArgs),
     Search(TrackSearchArgs),
+    Lyrics(TrackLyricsArgs),
     Download(TrackDownloadArgs),
 }
 
@@ -893,6 +983,23 @@ async fn cmd_track_search(args: TrackSearchArgs) -> Result<()> {
             }
         });
     stdout_values(&tracks)?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct TrackLyricsArgs {
+    id: sonar::TrackId,
+}
+
+async fn cmd_track_lyrics(args: TrackLyricsArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .track_lyrics(sonar_grpc::TrackLyricsRequest {
+            track_id: args.id.to_string(),
+        })
+        .await?;
+    let lyrics = Lyrics::from(response.into_inner().lyrics.unwrap());
+    stdout_value(&lyrics)?;
     Ok(())
 }
 
@@ -1455,6 +1562,7 @@ enum AdminCommand {
     User(AdminUserArgs),
     Playlist(AdminPlaylistArgs),
     MetadataFetch(AdminMetadataFetchArgs),
+    MetadataPreview(AdminMetadataPreviewArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -1705,6 +1813,23 @@ async fn cmd_admin_metadata_fetch(args: AdminMetadataFetchArgs) -> Result<()> {
             eyre::bail!("unsupported id type");
         }
     };
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct AdminMetadataPreviewArgs {
+    id: sonar::SonarId,
+}
+
+async fn cmd_admin_metadata_preview(args: AdminMetadataPreviewArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .metadata_album_tracks(sonar_grpc::MetadataAlbumTracksRequest {
+            album_id: args.id.to_string(),
+        })
+        .await?
+        .into_inner();
+    println!("{:#?}", response);
     Ok(())
 }
 

@@ -1,3 +1,8 @@
+TODO:
++ metadata preview
++ metadata fetch
+
+
 ```rust
 fn main() {
     let MIGRATION_000 = migrator::include!("migrations/000_init.sql");

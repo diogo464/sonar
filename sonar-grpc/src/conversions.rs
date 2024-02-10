@@ -137,6 +137,22 @@ impl TryFrom<TrackUpdateRequest> for (sonar::TrackId, sonar::TrackUpdate) {
     }
 }
 
+impl From<sonar::Lyrics> for Lyrics {
+    fn from(value: sonar::Lyrics) -> Self {
+        Self {
+            synced: value.kind == sonar::LyricsKind::Synced,
+            lines: value
+                .lines
+                .into_iter()
+                .map(|l| LyricsLine {
+                    offset: l.offset.as_secs() as u32,
+                    text: l.text,
+                })
+                .collect(),
+        }
+    }
+}
+
 impl From<sonar::Playlist> for Playlist {
     fn from(value: sonar::Playlist) -> Self {
         Self {
@@ -314,7 +330,7 @@ impl From<sonar::AlbumTracksMetadata> for MetadataAlbumTracksResponse {
             tracks: value
                 .tracks
                 .into_iter()
-                .map(|(id, v)| (From::from(id), From::from(v)))
+                .map(|(id, v)| (id.to_string(), From::from(v)))
                 .collect(),
         }
     }

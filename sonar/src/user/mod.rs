@@ -125,10 +125,18 @@ pub async fn authenticate(db: &mut DbC, username: &Username, password: &str) -> 
         "SELECT id, password_hash FROM user WHERE username = ?",
         username
     )
-    .fetch_one(db)
+    .fetch_optional(db)
     .await?;
-    verify_password(&row.password_hash, password)?;
-    Ok(UserId::from_db(row.id))
+    match row {
+        Some(row) => {
+            verify_password(&row.password_hash, password)?;
+            Ok(UserId::from_db(row.id))
+        }
+        None => Err(Error::new(
+            ErrorKind::Unauthorized,
+            "invalid username or password",
+        )),
+    }
 }
 
 fn generate_initial_salt_and_hash(password: &str) -> Result<String> {

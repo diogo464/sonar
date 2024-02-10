@@ -90,3 +90,18 @@ async fn artist_list_offset() {
     assert_eq!(artists.len(), 1);
     assert_eq!(artists[0].id, artist2.id);
 }
+
+#[tokio::test]
+async fn artist_update_cover_art() {
+    let ctx = sonar::test::create_context_memory().await;
+    let artist = sonar::test::create_artist(&ctx, "artist").await;
+    let cover_art = sonar::test::create_stream(sonar::test::SMALL_IMAGE_JPEG);
+    let image = sonar::image_create(&ctx, sonar::ImageCreate { data: cover_art })
+        .await
+        .unwrap();
+    let mut update = sonar::ArtistUpdate::default();
+    update.cover_art = sonar::ValueUpdate::Set(image);
+    sonar::artist_update(&ctx, artist.id, update).await.unwrap();
+    let artist = sonar::artist_get(&ctx, artist.id).await.unwrap();
+    assert_eq!(artist.cover_art.is_some(), true);
+}

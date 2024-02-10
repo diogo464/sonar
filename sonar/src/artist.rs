@@ -146,6 +146,25 @@ pub async fn update(db: &mut DbC, artist_id: ArtistId, update: ArtistUpdate) -> 
             .execute(&mut *db)
             .await?;
     }
+
+    match update.cover_art {
+        ValueUpdate::Set(image_id) => {
+            sqlx::query!(
+                "UPDATE artist SET cover_art = ? WHERE id = ?",
+                image_id,
+                artist_id
+            )
+            .execute(&mut *db)
+            .await?;
+        }
+        ValueUpdate::Unset => {
+            sqlx::query!("UPDATE artist SET cover_art = NULL WHERE id = ?", artist_id)
+                .execute(&mut *db)
+                .await?;
+        }
+        ValueUpdate::Unchanged => {}
+    }
+
     property::update(db, artist_id, &update.properties).await?;
     get(db, artist_id).await
 }

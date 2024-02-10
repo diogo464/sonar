@@ -5,7 +5,7 @@ use std::{
 
 use lofty::{Accessor, Probe, Tag, TagExt, TaggedFileExt};
 use serde::Deserialize;
-use sonar::metadata_prelude::*;
+use sonar::{bytes::Bytes, metadata_prelude::*};
 use tokio::process::Command;
 
 const BEETS_CONFIG_TEMPLATE: &str = include_str!("config.yaml");
@@ -90,12 +90,28 @@ impl MetadataProvider for BeetsMetadataProvider {
         )
         .await?;
 
-        let cover_path = prepared.album_directory.join("cover.jpg");
-        tracing::info!("reading album cover art from {}", cover_path.display());
-        let cover = tokio::fs::read(&cover_path).await?;
+        let cover_path_jpg = prepared.album_directory.join("cover.jpg");
+        let cover_path_png = prepared.album_directory.join("cover.png");
+        let cover_path = if cover_path_jpg.exists() {
+            Some(cover_path_jpg)
+        } else if cover_path_png.exists() {
+            Some(cover_path_png)
+        } else {
+            tracing::warn!("no cover art found for album");
+            None
+        };
+
+        let cover = match cover_path {
+            Some(cover_path) => {
+                tracing::info!("reading album cover art from {}", cover_path.display());
+                let cover = tokio::fs::read(&cover_path).await?;
+                Some(Bytes::from(cover))
+            }
+            None => None,
+        };
 
         Ok(AlbumMetadata {
-            cover: Some(From::from(cover)),
+            cover,
             ..Default::default()
         })
     }
@@ -249,6 +265,10 @@ async fn prepare_directory(
         tracks_paths.push((track.id, track_path));
     }
 
+    // NOTE: this is just for debugging purposes
+    tracing::debug!("running find on target before running beets directory");
+    let _ = Command::new("find").arg(&album_directory).status().await;
+
     tracing::info!("running beet import");
     let status = Command::new("beet")
         .arg("-v")
@@ -258,6 +278,9 @@ async fn prepare_directory(
         .arg(&import_path)
         .status()
         .await?;
+
+    tracing::debug!("running find on target after running beets directory");
+    let _ = Command::new("find").arg(&album_directory).status().await;
 
     if !status.success() {
         return Err(Error::new(ErrorKind::Internal, "beet import failed"));

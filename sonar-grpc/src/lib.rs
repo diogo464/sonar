@@ -314,6 +314,17 @@ impl sonar_service_server::SonarService for Server {
         sonar::track_delete(&self.context, track_id).await.m()?;
         Ok(tonic::Response::new(()))
     }
+    async fn track_lyrics(
+        &self,
+        request: tonic::Request<TrackLyricsRequest>,
+    ) -> std::result::Result<tonic::Response<TrackLyricsResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let track_id = req.track_id.parse::<sonar::TrackId>().m()?;
+        let lyrics = sonar::track_get_lyrics(&self.context, track_id).await.m()?;
+        Ok(tonic::Response::new(TrackLyricsResponse {
+            lyrics: Some(lyrics.into()),
+        }))
+    }
     async fn playlist_list(
         &self,
         request: tonic::Request<PlaylistListRequest>,
@@ -699,7 +710,7 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<MetadataAlbumTracksRequest>,
     ) -> std::result::Result<tonic::Response<MetadataAlbumTracksResponse>, tonic::Status> {
         let request = request.into_inner();
-        let album_id = sonar::AlbumId::try_from(request.album_id).m()?;
+        let album_id = request.album_id.parse::<sonar::AlbumId>().m()?;
         let metadata = sonar::metadata_view_album_tracks(&self.context, album_id)
             .await
             .m()?;

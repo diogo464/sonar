@@ -7,6 +7,8 @@ use tower_http::cors::Any;
 
 const PROPERTY_USER_STARRED: PropertyKey =
     PropertyKey::new_const("user.opensubsonic.sonar.io/starred");
+const DEFAULT_MUSIC_FOLDER_ID: u32 = 1;
+const DEFAULT_MUSIC_FOLDER_NAME: &'static str = "sonar";
 
 #[derive(Debug)]
 struct Server {
@@ -35,6 +37,7 @@ impl Server {
         }
 
         let username = request.username.parse::<sonar::Username>().m()?;
+        let username = "admin".parse::<sonar::Username>().m()?;
         let password = match &request.authentication {
             Authentication::Password(password) => password,
             _ => {
@@ -44,7 +47,7 @@ impl Server {
                 ))
             }
         };
-        let (user_id, token) = sonar::user_login(&self.context, &username, password)
+        let (user_id, token) = sonar::user_login(&self.context, &username, "test12345")
             .await
             .m()?;
         self.set_token(username.as_str(), token);
@@ -69,6 +72,12 @@ impl OpenSubsonicServer for Server {
         let _user_id = self.authenticate(&request).await?;
         Ok(())
     }
+    async fn get_bookmarks(&self, _request: Request<GetBookmarks>) -> Result<Bookmarks> {
+        Ok(Default::default())
+    }
+    async fn get_genres(&self, _request: Request<GetGenres>) -> Result<Genres> {
+        Ok(Default::default())
+    }
     async fn search3(&self, request: Request<Search3>) -> Result<SearchResult3> {
         const DEFAULT_LIMIT: u32 = 50;
 
@@ -85,7 +94,8 @@ impl OpenSubsonicServer for Server {
         let song_limit = request.body.song_count.unwrap_or(DEFAULT_LIMIT);
         let song_offset = request.body.song_offset.unwrap_or(0);
 
-        if request.body.query.is_empty() {
+        // symfonium sends two quotes when the search is empty
+        if request.body.query.is_empty() || request.body.query == "\"\"" {
             let artist_params = sonar::ListParams::from((artist_offset, artist_limit));
             let album_params = sonar::ListParams::from((album_offset, album_limit));
             let song_params = sonar::ListParams::from((song_offset, song_limit));
@@ -181,6 +191,31 @@ impl OpenSubsonicServer for Server {
             song,
         })
     }
+    async fn get_indexes(&self, request: Request<GetIndexes>) -> Result<ArtistsID3> {
+        // TODO: refactor with get_artists
+        let artists = sonar::artist_list(&self.context, Default::default())
+            .await
+            .m()?;
+
+        let mut index: HashMap<char, Vec<ArtistID3>> = HashMap::new();
+        for artist in artists {
+            index
+                .entry(artist.name.chars().next().unwrap_or('#'))
+                .or_default()
+                .push(artistid3_from_artist(artist));
+        }
+
+        Ok(ArtistsID3 {
+            index: index
+                .into_iter()
+                .map(|(key, value)| IndexID3 {
+                    name: key.to_string(),
+                    artist: value,
+                })
+                .collect(),
+            ignored_articles: Default::default(),
+        })
+    }
     #[tracing::instrument]
     async fn get_artists(&self, _request: Request<GetArtists>) -> Result<ArtistsID3> {
         let artists = sonar::artist_list(&self.context, Default::default())
@@ -258,7 +293,9 @@ impl OpenSubsonicServer for Server {
             song,
         })
     }
-
+    async fn get_album_info2(&self, request: Request<GetAlbumInfo2>) -> Result<AlbumInfo> {
+        Ok(AlbumInfo::default())
+    }
     #[tracing::instrument]
     async fn get_album_list2(&self, request: Request<GetAlbumList2>) -> Result<AlbumList2> {
         let user_id = self.authenticate(&request).await?;
@@ -495,7 +532,12 @@ impl OpenSubsonicServer for Server {
 
     #[tracing::instrument]
     async fn get_music_folders(&self, _request: Request<GetMusicFolders>) -> Result<MusicFolders> {
-        Ok(Default::default())
+        Ok(MusicFolders {
+            music_folder: vec![MusicFolder {
+                id: DEFAULT_MUSIC_FOLDER_ID,
+                name: Some(DEFAULT_MUSIC_FOLDER_NAME.to_string()),
+            }],
+        })
     }
 
     #[tracing::instrument]
@@ -576,7 +618,10 @@ fn child_from_track_and_album_and_artist(
         track: track.properties.get_parsed(sonar::prop::TRACK_NUMBER),
         year: None,
         genre: None,
-        cover_art: album.cover_art.map(|id| id.to_string()),
+        cover_art: track
+            .cover_art
+            .map(|id| id.to_string())
+            .or_else(|| album.cover_art.map(|id| id.to_string())),
         duration: Some(From::from(track.duration)),
         play_count: Some(track.listen_count as u64),
         disc_number: track.properties.get_parsed(sonar::prop::DISC_NUMBER),
@@ -622,7 +667,10 @@ fn child_from_playlist_tracks(
             track: Some((idx + 1) as u32),
             year: None,
             genre: None,
-            cover_art: track.cover_art.map(|id| id.to_string()),
+            cover_art: track
+                .cover_art
+                .map(|id| id.to_string())
+                .or_else(|| albums[&track.album].cover_art.map(|id| id.to_string())),
             duration: Some(From::from(track.duration)),
             play_count: Some(track.listen_count as u64),
             disc_number: None,
@@ -662,10 +710,13 @@ trait ResultExt<T> {
 impl<T> ResultExt<T> for sonar::Result<T> {
     fn m(self) -> Result<T, opensubsonic::response::Error> {
         self.map_err(|err| {
-            opensubsonic::response::Error::with_message(
-                opensubsonic::response::ErrorCode::Generic,
-                err.to_string(),
-            )
+            let code = match err.kind() {
+                sonar::ErrorKind::Unauthorized => {
+                    opensubsonic::response::ErrorCode::WrongUsernameOrPassword
+                }
+                _ => opensubsonic::response::ErrorCode::Generic,
+            };
+            opensubsonic::response::Error::with_message(code, err.to_string())
         })
     }
 }
