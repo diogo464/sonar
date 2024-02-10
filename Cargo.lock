@@ -3387,6 +3387,7 @@ dependencies = [
 name = "sonar-beets"
 version = "0.1.0"
 dependencies = [
+ "lofty",
  "serde",
  "serde_json",
  "sonar",

@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use lofty::{Accessor, Probe, Tag, TagExt, TaggedFileExt};
 use serde::Deserialize;
 use sonar::metadata_prelude::*;
 use tokio::process::Command;
@@ -197,7 +198,7 @@ async fn prepare_directory(
         .replace(MARKER_LIBRARY_PATH, &library_path.display().to_string())
         .replace(MARKER_DIRECTORY_PATH, &import_path.display().to_string())
         .replace(MARKER_PLUGINS, plugins);
-    tracing::debug!("beets config file content: {}", config_content);
+    tracing::debug!("beets config file content:\n{}", config_content);
     tokio::fs::write(&config_path, config_content).await?;
 
     tracing::info!("creating album directory");
@@ -210,15 +211,47 @@ async fn prepare_directory(
     tracing::info!("downloading tracks");
     for track in tracks.iter() {
         let track_name = &track.name;
-        let track_path = album_directory.join(track_name);
+        // TODO: we are just assuming mp3 but we should somehow request this explicitly or use the
+        // mime type from the track
+        let track_path = album_directory.join(track_name).with_extension("mp3");
         let download = sonar::track_download(context, track.id, Default::default()).await?;
         tracing::debug!("downloading track {} to {}", track.id, track_path.display());
         sonar::bytestream::to_file(download.stream, &track_path).await?;
+
+        // NOTE: beets seems to import better when these tags are set
+        tracing::debug!("tagging track {} with artist, album and title", track.id);
+        let _ = tokio::task::spawn_blocking({
+            let artist_name = artist_name.clone();
+            let album_name = album_name.clone();
+            let track_name = track_name.clone();
+            let track_path = track_path.clone();
+            move || {
+                let mut tagged_file = Probe::open(&track_path)
+                    .expect("ERROR: Bad path provided!")
+                    .read()
+                    .expect("ERROR: Failed to read file!");
+                let tag = match tagged_file.first_tag_mut() {
+                    Some(tag) => tag,
+                    None => {
+                        tagged_file.insert_tag(Tag::new(lofty::TagType::Id3v2));
+                        tagged_file.primary_tag_mut().unwrap()
+                    }
+                };
+                tag.set_artist(artist_name);
+                tag.set_album(album_name);
+                tag.set_title(track_name);
+                tag.save_to_path(&track_path)
+                    .expect("ERROR: Failed to save tags!");
+            }
+        })
+        .await;
+
         tracks_paths.push((track.id, track_path));
     }
 
     tracing::info!("running beet import");
     let status = Command::new("beet")
+        .arg("-v")
         .arg("-c")
         .arg(&config_path)
         .arg("import")
