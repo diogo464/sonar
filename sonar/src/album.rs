@@ -131,11 +131,28 @@ pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
 
 #[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, album_ids: &[AlbumId]) -> Result<Vec<Album>> {
-    let mut albums = Vec::with_capacity(album_ids.len());
-    for album_id in album_ids {
-        albums.push(get(db, *album_id).await?);
+    let mut query = sqlx::QueryBuilder::new("SELECT * FROM sqlx_album WHERE id IN (");
+    for (i, album_id) in album_ids.iter().enumerate() {
+        if i > 0 {
+            query.push(", ");
+        }
+        query.push(album_id.to_db());
     }
-    Ok(albums)
+    query.push(")");
+    let albums = query
+        .build_query_as::<AlbumView>()
+        .fetch_all(&mut *db)
+        .await?;
+    let album_ids = albums
+        .iter()
+        .map(|album| AlbumId::from_db(album.id))
+        .collect::<Vec<_>>();
+    let properties = property::get_bulk(db, album_ids.into_iter()).await?;
+    Ok(albums
+        .into_iter()
+        .zip(properties.into_iter())
+        .map(Album::from)
+        .collect())
 }
 
 #[tracing::instrument(skip(db))]

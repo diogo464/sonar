@@ -60,18 +60,23 @@ struct PreparedDirectory {
 #[sonar::async_trait]
 impl MetadataProvider for BeetsMetadataProvider {
     fn supports(&self, kind: MetadataRequestKind) -> bool {
+        tracing::debug!("checking if provider supports kind: {:?}", kind);
         match kind {
             MetadataRequestKind::Album => true,
             MetadataRequestKind::AlbumTracks => true,
             _ => false,
         }
     }
+    #[tracing::instrument(skip(self, context, request), fields(album = request.album.id.to_string()))]
     async fn album_metadata(
         &self,
         context: &sonar::Context,
         request: &AlbumMetadataRequest,
     ) -> Result<AlbumMetadata> {
+        tracing::info!("fetching album metadata for {:#?}", request.album);
+        tracing::debug!("creating temporary directory");
         let dir = tempfile::tempdir()?;
+        tracing::debug!("fetching album tracks");
         let tracks =
             sonar::track_list_by_album(context, request.album.id, Default::default()).await?;
         let prepared = prepare_directory(
@@ -84,8 +89,8 @@ impl MetadataProvider for BeetsMetadataProvider {
         )
         .await?;
 
-        tracing::info!("reading album cover art");
         let cover_path = prepared.album_directory.join("cover.jpg");
+        tracing::info!("reading album cover art from {}", cover_path.display());
         let cover = tokio::fs::read(&cover_path).await?;
 
         Ok(AlbumMetadata {
@@ -93,11 +98,15 @@ impl MetadataProvider for BeetsMetadataProvider {
             ..Default::default()
         })
     }
+
+    #[tracing::instrument(skip(self, context, request), fields(album = request.album.id.to_string()))]
     async fn album_tracks_metadata(
         &self,
         context: &sonar::Context,
         request: &AlbumTracksMetadataRequest,
     ) -> Result<AlbumTracksMetadata> {
+        tracing::info!("fetching album tracks metadata for {:#?}", request.album);
+        tracing::debug!("creating temporary directory");
         let dir = tempfile::tempdir()?;
         let prepared = prepare_directory(
             context,
@@ -126,6 +135,7 @@ impl MetadataProvider for BeetsMetadataProvider {
                 .await?;
 
             let ffprobe_output = String::from_utf8(ffprobe_output.stdout).map_err(Error::wrap)?;
+            tracing::debug!("ffprobe output for ({track_id}, {track_path:?}):\n{ffprobe_output}");
             let ffprobe_output: FFprobeOutput =
                 serde_json::from_str(&ffprobe_output).map_err(Error::wrap)?;
             let tags = ffprobe_output.format.tags;
@@ -163,6 +173,7 @@ impl MetadataProvider for BeetsMetadataProvider {
     }
 }
 
+#[tracing::instrument(skip_all)]
 async fn prepare_directory(
     context: &sonar::Context,
     artist: Artist,
@@ -176,6 +187,7 @@ async fn prepare_directory(
     } else {
         "''"
     };
+    tracing::info!("creating beets config file with plugins: {}", plugins);
     let config_path = temp_dir.join("config.yaml");
     let library_path = temp_dir.join("library.db");
     let import_path = temp_dir.join("data");

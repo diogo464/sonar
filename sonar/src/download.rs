@@ -279,15 +279,21 @@ async fn download_task(
     external_id: ExternalMediaId,
 ) {
     let message = match download(&db, &*storage, services, user_id, &external_id).await {
-        Ok(_) => Message::Complete {
-            user_id,
-            external_id,
-        },
-        Err(err) => Message::Failed {
-            user_id,
-            external_id,
-            error: err.to_string(),
-        },
+        Ok(_) => {
+            tracing::info!("download complete: {}", external_id);
+            Message::Complete {
+                user_id,
+                external_id,
+            }
+        }
+        Err(err) => {
+            tracing::error!("failed to download: {}: {}", external_id, err);
+            Message::Failed {
+                user_id,
+                external_id,
+                error: err.to_string(),
+            }
+        }
     };
     sender.send(message).await.unwrap();
 }

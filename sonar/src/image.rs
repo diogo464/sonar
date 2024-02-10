@@ -41,7 +41,7 @@ impl tokio_stream::Stream for ImageDownload {
     }
 }
 
-#[tracing::instrument(skip(db))]
+#[tracing::instrument(skip(db, storage))]
 pub async fn download(
     db: &mut DbC,
     storage: &dyn BlobStorage,
@@ -58,7 +58,7 @@ pub async fn download(
     Ok(ImageDownload::new(row.mime_type, stream))
 }
 
-#[tracing::instrument(skip(db))]
+#[tracing::instrument(skip(db, storage, create))]
 pub async fn create(
     db: &mut DbC,
     storage: &dyn BlobStorage,

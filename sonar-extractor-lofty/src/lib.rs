@@ -4,11 +4,14 @@ use lofty::{Accessor, AudioFile, TaggedFileExt};
 pub struct LoftyExtractor;
 
 impl sonar::Extractor for LoftyExtractor {
+    #[tracing::instrument(skip(self))]
     fn extract(&self, path: &std::path::Path) -> std::io::Result<sonar::ExtractedMetadata> {
+        tracing::info!("extracting metadata from {} using lofty", path.display());
         let file = lofty::read_from_path(path)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
         let properties = file.properties();
+        tracing::debug!("properties: {:#?}", properties);
         let tag = match file.primary_tag().or_else(|| file.first_tag()) {
             Some(tag) => tag,
             None => {
@@ -40,7 +43,7 @@ impl sonar::Extractor for LoftyExtractor {
             data: p.data().to_vec(),
         });
 
-        Ok(sonar::ExtractedMetadata {
+        let metadata = sonar::ExtractedMetadata {
             title,
             album,
             artist,
@@ -50,6 +53,8 @@ impl sonar::Extractor for LoftyExtractor {
             release_date: None,
             cover_art,
             genres,
-        })
+        };
+        tracing::debug!("metadata: {:#?}", metadata);
+        Ok(metadata)
     }
 }

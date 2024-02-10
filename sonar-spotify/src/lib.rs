@@ -44,6 +44,7 @@ impl SpotifyService {
 
 #[sonar::async_trait]
 impl sonar::ExternalService for SpotifyService {
+    #[tracing::instrument(skip(self))]
     async fn validate_id(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
         tracing::debug!("validating id: {}", id);
         let resource_id = parse_resource_id(id)?;
@@ -56,8 +57,10 @@ impl sonar::ExternalService for SpotifyService {
         };
         Ok(media_type)
     }
+
+    #[tracing::instrument(skip(self))]
     async fn fetch_artist(&self, id: &ExternalMediaId) -> Result<ExternalArtist> {
-        tracing::debug!("fetching artist: {}", id);
+        tracing::info!("fetching artist: {}", id);
         let resource_id = parse_resource_id(id)?;
         if resource_id.resource != Resource::Artist {
             return Err(sonar::Error::new(
@@ -70,6 +73,7 @@ impl sonar::ExternalService for SpotifyService {
             .get_artist(resource_id.id)
             .await
             .map_err(sonar::Error::wrap)?;
+        tracing::debug!("artist: {:#?}", artist);
         Ok(ExternalArtist {
             name: artist.name,
             albums: artist
@@ -81,8 +85,10 @@ impl sonar::ExternalService for SpotifyService {
             properties: properties_for_resource(resource_id.id),
         })
     }
+
+    #[tracing::instrument(skip(self))]
     async fn fetch_album(&self, id: &ExternalMediaId) -> Result<ExternalAlbum> {
-        tracing::debug!("fetching album: {}", id);
+        tracing::info!("fetching album: {}", id);
         let resource_id = parse_resource_id(id)?;
         if resource_id.resource != Resource::Album {
             return Err(sonar::Error::new(
@@ -95,6 +101,7 @@ impl sonar::ExternalService for SpotifyService {
             .get_album(resource_id.id)
             .await
             .map_err(sonar::Error::wrap)?;
+        tracing::debug!("album: {:#?}", album);
         let cover = match album.cover {
             Some(url) => Some(ExternalImage {
                 data: reqwest::get(url)
@@ -107,7 +114,7 @@ impl sonar::ExternalService for SpotifyService {
             }),
             None => None,
         };
-        Ok(ExternalAlbum {
+        let external = ExternalAlbum {
             name: album.name,
             artist: ExternalMediaId::new(album.artists[0].to_string()),
             tracks: album
@@ -118,10 +125,14 @@ impl sonar::ExternalService for SpotifyService {
                 .collect(),
             cover,
             properties: properties_for_resource(resource_id.id),
-        })
+        };
+        tracing::debug!("external album: {:#?}", external);
+        Ok(external)
     }
+
+    #[tracing::instrument(skip(self))]
     async fn fetch_track(&self, id: &ExternalMediaId) -> Result<ExternalTrack> {
-        tracing::debug!("fetching track: {}", id);
+        tracing::info!("fetching track: {}", id);
         let resource_id = parse_resource_id(id)?;
         if resource_id.resource != Resource::Track {
             return Err(sonar::Error::new(
@@ -134,15 +145,21 @@ impl sonar::ExternalService for SpotifyService {
             .get_track(resource_id.id)
             .await
             .map_err(sonar::Error::wrap)?;
-        Ok(ExternalTrack {
+        tracing::debug!("track: {:#?}", track);
+
+        let external = ExternalTrack {
             name: track.name,
             artist: ExternalMediaId::new(track.artists[0].to_string()),
             album: ExternalMediaId::new(track.album.to_string()),
             properties: properties_for_resource(resource_id.id),
-        })
+        };
+        tracing::debug!("external track: {:#?}", external);
+        Ok(external)
     }
+
+    #[tracing::instrument(skip(self))]
     async fn fetch_playlist(&self, id: &ExternalMediaId) -> Result<ExternalPlaylist> {
-        tracing::debug!("fetching playlist: {}", id);
+        tracing::info!("fetching playlist: {}", id);
         let resource_id = parse_resource_id(id)?;
         if resource_id.resource != Resource::Playlist {
             return Err(sonar::Error::new(
@@ -150,12 +167,15 @@ impl sonar::ExternalService for SpotifyService {
                 "invalid playlist id",
             ));
         }
+
         let playlist = self
             .fetcher
             .get_playlist(resource_id.id)
             .await
             .map_err(sonar::Error::wrap)?;
-        Ok(ExternalPlaylist {
+        tracing::debug!("playlist: {:#?}", playlist);
+
+        let external = ExternalPlaylist {
             name: playlist.name,
             tracks: playlist
                 .tracks
@@ -163,10 +183,14 @@ impl sonar::ExternalService for SpotifyService {
                 .map(|id| ExternalMediaId::new(id.to_string()))
                 .collect(),
             properties: properties_for_resource(resource_id.id),
-        })
+        };
+        tracing::debug!("external playlist: {:#?}", external);
+        Ok(external)
     }
+
+    #[tracing::instrument(skip(self))]
     async fn download_track(&self, id: &ExternalMediaId) -> Result<ByteStream> {
-        tracing::debug!("downloading track: {}", id);
+        tracing::info!("downloading track: {}", id);
         let resource_id = parse_resource_id(id)?;
         if resource_id.resource != Resource::Track {
             return Err(sonar::Error::new(
@@ -174,21 +198,29 @@ impl sonar::ExternalService for SpotifyService {
                 "invalid track id",
             ));
         }
+
+        tracing::debug!("preparing to download track: {:#?}", resource_id.id);
         let track_id = resource_id.id;
         let temp_dir = tempfile::tempdir().map_err(sonar::Error::wrap)?;
         let temp_file_path = temp_dir.path().join("samples");
         let mp3_file_path = temp_dir.path().join("track.mp3");
         let sink = spotdl::download::FileDownloadSink::from_path(&temp_file_path)
             .map_err(sonar::Error::wrap)?;
+
+        tracing::debug!("downloading track: {:#?}", track_id);
         spotdl::download::download(&self.session, sink, track_id)
             .await
             .map_err(sonar::Error::wrap)?;
+
+        tracing::debug!("converting samples to mp3: {:#?}", mp3_file_path);
         convert::convert_samples_i16(
             convert::ConvertSamplesSource::Path(&temp_file_path),
             &mp3_file_path,
         )
         .await
         .map_err(sonar::Error::wrap)?;
+
+        tracing::debug!("creating strem from file: {:#?}", mp3_file_path);
         Ok(sonar::bytestream::from_file(&mp3_file_path).await?)
     }
 }

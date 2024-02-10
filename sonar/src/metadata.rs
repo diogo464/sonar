@@ -6,9 +6,6 @@ use crate::{
     async_trait, Album, Artist, Context, Error, ErrorKind, Properties, Result, Track, TrackId,
 };
 
-pub mod prelude {
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MetadataRequestKind {
     Artist,

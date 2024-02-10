@@ -43,11 +43,13 @@ struct SubmitAdditionalInfo<'a> {
 
 #[sonar::async_trait]
 impl sonar::Scrobbler for ListenBrainzScrobbler {
+    #[tracing::instrument(skip(context,scrobble),fields(scrobble=scrobble.id.to_string()))]
     async fn scrobble(
         &self,
         context: &sonar::Context,
         scrobble: sonar::Scrobble,
     ) -> std::io::Result<()> {
+        tracing::info!("scrobbling to ListenBrainz: {:#?}", scrobble);
         let track = sonar::track_get(context, scrobble.track)
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
@@ -79,6 +81,7 @@ impl sonar::Scrobbler for ListenBrainzScrobbler {
             }],
         };
 
+        tracing::debug!("submitting to ListenBrainz: {:#?}", submit);
         let response = self
             .client
             .post("https://api.listenbrainz.org/1/submit-listens")
@@ -89,8 +92,10 @@ impl sonar::Scrobbler for ListenBrainzScrobbler {
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
         if response.status() == reqwest::StatusCode::OK {
+            tracing::info!("scrobbled successfully to ListenBrainz");
             return Ok(());
         } else if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            tracing::info!("rate limited by ListenBrainz");
             if let Some(reset_in) = response.headers().get("X-RateLimit-Reset-In") {
                 let reset_in = reset_in
                     .to_str()
@@ -104,6 +109,7 @@ impl sonar::Scrobbler for ListenBrainzScrobbler {
                 "Rate limited",
             ));
         } else {
+            tracing::warn!("failed to scrobble to ListenBrainz: {:#?}", response);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Unexpected status code: {}", response.status()),

@@ -177,14 +177,24 @@ pub async fn get(db: &mut DbC, track_id: TrackId) -> Result<Track> {
 
 #[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, track_ids: &[TrackId]) -> Result<Vec<Track>> {
-    // NOTE: sqlite doesn't support binding arrays. the alternative would be to generate a
-    // query string with all the ids or create a temporary table with those ids and then use a
-    // select
-    let mut tracks = Vec::with_capacity(track_ids.len());
-    for track_id in track_ids {
-        tracks.push(get(db, *track_id).await?);
+    let mut query = sqlx::QueryBuilder::new("SELECT * FROM sqlx_track WHERE id IN (");
+    for (i, track_id) in track_ids.iter().enumerate() {
+        if i > 0 {
+            query.push(", ");
+        }
+        query.push(track_id.to_db());
     }
-    Ok(tracks)
+    query.push(")");
+    let views = query
+        .build_query_as::<TrackView>()
+        .fetch_all(&mut *db)
+        .await?;
+    let properties = property::get_bulk(db, track_ids.iter().copied()).await?;
+    Ok(views
+        .into_iter()
+        .zip(properties.into_iter())
+        .map(Track::from)
+        .collect())
 }
 
 #[tracing::instrument(skip(db))]

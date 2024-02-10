@@ -882,7 +882,12 @@ pub async fn subscription_list(context: &Context, user_id: UserId) -> Result<Vec
 
 #[tracing::instrument(skip(context))]
 pub async fn subscription_create(context: &Context, create: SubscriptionCreate) -> Result<()> {
-    context.subscriptions.create(create).await
+    context.subscriptions.create(create.clone()).await?;
+    context
+        .downloads
+        .request(create.user, create.external_id)
+        .await;
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]

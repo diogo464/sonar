@@ -97,11 +97,24 @@ pub async fn get(db: &mut DbC, artist_id: ArtistId) -> Result<Artist> {
 
 #[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, artist_ids: &[ArtistId]) -> Result<Vec<Artist>> {
-    let mut artists = Vec::with_capacity(artist_ids.len());
-    for artist_id in artist_ids {
-        artists.push(get(db, *artist_id).await?);
+    let mut query = sqlx::QueryBuilder::new("SELECT * FROM sqlx_artist WHERE id IN (");
+    for (i, artist_id) in artist_ids.iter().enumerate() {
+        if i > 0 {
+            query.push(", ");
+        }
+        query.push(artist_id.to_db());
     }
-    Ok(artists)
+    query.push(")");
+    let views = query
+        .build_query_as::<ArtistView>()
+        .fetch_all(&mut *db)
+        .await?;
+    let properties = property::get_bulk(db, artist_ids.iter().copied()).await?;
+    Ok(views
+        .into_iter()
+        .zip(properties.into_iter())
+        .map(From::from)
+        .collect())
 }
 
 #[tracing::instrument(skip(db))]
