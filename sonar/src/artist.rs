@@ -135,7 +135,7 @@ pub async fn create(db: &mut DbC, create: ArtistCreate) -> Result<Artist> {
 
 #[tracing::instrument(skip(db))]
 pub async fn update(db: &mut DbC, artist_id: ArtistId, update: ArtistUpdate) -> Result<Artist> {
-    tracing::info!("updating artist {} with {:?}", artist_id, update);
+    tracing::info!("updating artist {} with {:#?}", artist_id, update);
     let new_name = match update.name {
         ValueUpdate::Set(name) => Some(name),
         ValueUpdate::Unset => Some("".to_string()),

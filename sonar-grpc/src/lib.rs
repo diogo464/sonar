@@ -677,8 +677,10 @@ impl sonar_service_server::SonarService for Server {
         let req = request.into_inner();
         match req.kind {
             _ if req.kind == MetadataFetchKind::Artist as i32 => {
-                let _artist_id = req.item_id.parse::<sonar::ArtistId>().m()?;
-                unimplemented!()
+                let artist_id = req.item_id.parse::<sonar::ArtistId>().m()?;
+                sonar::metadata_fetch_artist(&self.context, artist_id)
+                    .await
+                    .m()?;
             }
             _ if req.kind == MetadataFetchKind::Album as i32 => {
                 let album_id = req.item_id.parse::<sonar::AlbumId>().m()?;
@@ -693,8 +695,10 @@ impl sonar_service_server::SonarService for Server {
                     .m()?;
             }
             _ if req.kind == MetadataFetchKind::Track as i32 => {
-                let _track_id = req.item_id.parse::<sonar::TrackId>().m()?;
-                unimplemented!()
+                let track_id = req.item_id.parse::<sonar::TrackId>().m()?;
+                sonar::metadata_fetch_track(&self.context, track_id)
+                    .await
+                    .m()?;
             }
             _ => {
                 return Err(tonic::Status::invalid_argument(format!(

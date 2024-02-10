@@ -177,7 +177,7 @@ pub async fn create(db: &mut DbC, create: AlbumCreate) -> Result<Album> {
 
 #[tracing::instrument(skip(db))]
 pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Result<Album> {
-    tracing::info!("updating album {} with {:?}", album_id, update);
+    tracing::info!("updating album {} with {:#?}", album_id, update);
     if let Some(new_name) = match update.name {
         ValueUpdate::Set(name) => Some(name),
         ValueUpdate::Unset => Some("".to_owned()),
@@ -210,6 +210,11 @@ pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Res
     match update.cover_art {
         ValueUpdate::Set(image_id) => {
             let image_id = image_id.to_db();
+            sqlx::query("UPDATE album SET cover_art = ? WHERE id = ?")
+                .bind(image_id)
+                .bind(album_id.to_db())
+                .execute(&mut *db)
+                .await?;
             sqlx::query!(
                 "UPDATE album SET cover_art = ? WHERE id = ?",
                 image_id,

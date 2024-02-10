@@ -1854,6 +1854,12 @@ struct ServerArgs {
     #[clap(long, env = "SONAR_SPOTIFY_PASSWORD")]
     spotify_password: Option<String>,
 
+    #[clap(long, env = "SONAR_SPOTIFY_CLIENT_ID")]
+    spotify_client_id: Option<String>,
+
+    #[clap(long, env = "SONAR_SPOTIFY_CLIENT_SECRET")]
+    spotify_client_secret: Option<String>,
+
     #[clap(long)]
     jaeger_exporter: bool,
 
@@ -1953,6 +1959,17 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
         config
             .register_external_service(1, "spotify", spotify)
             .context("registering spotify")?;
+    }
+
+    if let (Some(client_id), Some(client_secret)) =
+        (args.spotify_client_id, args.spotify_client_secret)
+    {
+        let spotify = sonar_spotify::SpotifyMetadata::new(client_id, client_secret)
+            .await
+            .context("creating spotify metadata provider")?;
+        config
+            .register_provider("spotify", spotify)
+            .context("registering spotify metadata provider")?;
     }
 
     let context = sonar::new(config).await.context("creating sonar context")?;

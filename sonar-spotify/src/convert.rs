@@ -1,11 +1,10 @@
 use std::path::Path;
 
+use sonar::Result;
 use tokio::{
     io::{AsyncWriteExt, BufWriter},
     process::Command,
 };
-
-use crate::Result;
 
 /// convert an audio file to the standard format used by the audio player
 pub async fn convert(input: &Path, output: &Path) -> Result<()> {

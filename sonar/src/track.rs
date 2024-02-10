@@ -227,7 +227,7 @@ pub async fn create(db: &mut DbC, create: TrackCreate) -> Result<Track> {
 
 #[tracing::instrument(skip(db))]
 pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Result<Track> {
-    tracing::info!("updating track {} with {:?}", track_id, update);
+    tracing::info!("updating track {} with {:#?}", track_id, update);
     if let Some(new_name) = match update.name {
         ValueUpdate::Set(name) => Some(name),
         ValueUpdate::Unset => Some("".to_owned()),
