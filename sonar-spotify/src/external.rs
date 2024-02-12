@@ -223,7 +223,7 @@ impl sonar::ExternalService for SpotifyService {
         .await
         .map_err(sonar::Error::wrap)?;
 
-        tracing::debug!("creating strem from file: {:#?}", mp3_file_path);
+        tracing::debug!("creating stream from file: {:#?}", mp3_file_path);
         Ok(sonar::bytestream::from_file(&mp3_file_path).await?)
     }
 }
