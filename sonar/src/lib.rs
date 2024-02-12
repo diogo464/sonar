@@ -59,7 +59,7 @@ pub use external::{
     ExternalPlaylist, ExternalService, ExternalTrack,
 };
 pub use extractor::{ExtractedImage, ExtractedMetadata, Extractor};
-pub use genre::{Genre, GenreUpdateAction, Genres, InvalidGenreError};
+pub use genre::{Genre, GenreUpdate, GenreUpdateAction, Genres, InvalidGenreError};
 pub use image::{ImageCreate, ImageDownload};
 pub use importer::Import;
 pub use metadata::{

@@ -27,10 +27,10 @@ use crate::{
     subscription::SubscriptionController,
     track, user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId,
     ArtistMetadata, ArtistMetadataRequest, ArtistUpdate, Audio, AudioCreate, AudioDownload,
-    AudioId, ByteRange, Download, DownloadCreate, DownloadDelete, Error, ErrorKind, ImageCreate,
-    ImageDownload, ImageId, Import, ListParams, Lyrics, Playlist, PlaylistCreate, PlaylistId,
-    PlaylistTrack, PlaylistUpdate, Properties, PropertyKey, PropertyUpdate, Result, Scrobble,
-    ScrobbleCreate, ScrobbleId, ScrobbleUpdate, SearchQuery, SonarId, Subscription,
+    AudioId, ByteRange, Download, DownloadCreate, DownloadDelete, Error, ErrorKind, Genres,
+    ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics, Playlist, PlaylistCreate,
+    PlaylistId, PlaylistTrack, PlaylistUpdate, Properties, PropertyKey, PropertyUpdate, Result,
+    Scrobble, ScrobbleCreate, ScrobbleId, ScrobbleUpdate, SearchQuery, SonarId, Subscription,
     SubscriptionCreate, SubscriptionDelete, Track, TrackCreate, TrackId, TrackMetadata,
     TrackMetadataRequest, TrackUpdate, User, UserCreate, UserId, UserToken, Username, ValueUpdate,
 };
@@ -949,6 +949,11 @@ fn merge_metadata_covers(a: Option<Bytes>, b: Option<Bytes>) -> Option<Bytes> {
     }
 }
 
+fn merge_metadata_genres(mut a: Genres, b: Genres) -> Genres {
+    Genres::merge(&mut a, &b);
+    a
+}
+
 fn merge_metadata_properties(mut a: Properties, b: Properties) -> Properties {
     Properties::merge(&mut a, &b);
     a
@@ -1026,6 +1031,7 @@ pub async fn metadata_fetch_track(context: &Context, track_id: TrackId) -> Resul
 fn merge_metadata_artist(a: ArtistMetadata, b: ArtistMetadata) -> ArtistMetadata {
     ArtistMetadata {
         name: a.name.or(b.name),
+        genres: merge_metadata_genres(a.genres, b.genres),
         properties: merge_metadata_properties(a.properties, b.properties),
         cover: merge_metadata_covers(a.cover, b.cover),
     }
@@ -1065,6 +1071,7 @@ pub async fn metadata_view_artist(
 fn merge_metadata_album(a: AlbumMetadata, b: AlbumMetadata) -> AlbumMetadata {
     AlbumMetadata {
         name: a.name.or(b.name),
+        genres: merge_metadata_genres(a.genres, b.genres),
         properties: merge_metadata_properties(a.properties, b.properties),
         cover: merge_metadata_covers(a.cover, b.cover),
     }

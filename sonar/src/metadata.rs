@@ -3,7 +3,8 @@ use std::{collections::HashMap, sync::Arc};
 use bytes::Bytes;
 
 use crate::{
-    async_trait, Album, Artist, Context, Error, ErrorKind, Properties, Result, Track, TrackId,
+    async_trait, Album, Artist, Context, Error, ErrorKind, Genres, Properties, Result, Track,
+    TrackId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -22,6 +23,7 @@ pub struct ArtistMetadataRequest {
 #[derive(Debug, Default, Clone)]
 pub struct ArtistMetadata {
     pub name: Option<String>,
+    pub genres: Genres,
     pub properties: Properties,
     pub cover: Option<Bytes>,
 }
@@ -35,6 +37,7 @@ pub struct AlbumMetadataRequest {
 #[derive(Debug, Default, Clone)]
 pub struct AlbumMetadata {
     pub name: Option<String>,
+    pub genres: Genres,
     pub properties: Properties,
     pub cover: Option<Bytes>,
 }

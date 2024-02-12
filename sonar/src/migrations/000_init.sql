@@ -29,6 +29,15 @@ CREATE INDEX property_namespace_identifier ON property(namespace, identifier);
 CREATE INDEX property_namespace_identifier_key ON property(namespace, identifier, key);
 CREATE INDEX property_namespace_identifier_user_key ON property(namespace, identifier, user, key);
 
+CREATE TABLE genre (
+	namespace 	INTEGER NOT NULL,
+	identifier 	INTEGER NOT NULL,
+	genre		TEXT NOT NULL,
+	PRIMARY KEY(namespace, identifier, genre)
+);
+CREATE INDEX genre_genre ON genre(genre);
+CREATE INDEX genre_namespace_identifier ON genre(namespace, identifier);
+
 CREATE TABLE blob (
 	id	INTEGER PRIMARY KEY NOT NULL,
 	key	TEXT NOT NULL UNIQUE,

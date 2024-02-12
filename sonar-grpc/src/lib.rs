@@ -165,6 +165,7 @@ impl sonar_service_server::SonarService for Server {
                     .map(|id| id.parse::<sonar::ImageId>())
                     .transpose()
                     .m()?,
+                genres: convert_genres_from_pb(req.genres)?,
                 properties: convert_properties_from_pb(req.properties)?,
             },
         )

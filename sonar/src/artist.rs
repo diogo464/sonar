@@ -1,6 +1,7 @@
 use crate::{
     db::{self, Db, DbC},
-    property, ArtistId, ImageId, ListParams, Properties, PropertyUpdate, Result, Timestamp,
+    genre::{self, GenreUpdate},
+    property, ArtistId, Genres, ImageId, ListParams, Properties, PropertyUpdate, Result, Timestamp,
     ValueUpdate,
 };
 
@@ -11,6 +12,7 @@ pub struct Artist {
     pub album_count: u32,
     pub listen_count: u32,
     pub cover_art: Option<ImageId>,
+    pub genres: Genres,
     pub properties: Properties,
     pub created_at: Timestamp,
 }
@@ -19,6 +21,7 @@ pub struct Artist {
 pub struct ArtistCreate {
     pub name: String,
     pub cover_art: Option<ImageId>,
+    pub genres: Genres,
     pub properties: Properties,
 }
 
@@ -26,6 +29,7 @@ pub struct ArtistCreate {
 pub struct ArtistUpdate {
     pub name: ValueUpdate<String>,
     pub cover_art: ValueUpdate<ImageId>,
+    pub genres: Vec<GenreUpdate>,
     pub properties: Vec<PropertyUpdate>,
 }
 
@@ -39,13 +43,14 @@ struct ArtistView {
     created_at: i64,
 }
 
-impl From<(ArtistView, Properties)> for Artist {
-    fn from((value, properties): (ArtistView, Properties)) -> Self {
+impl From<(ArtistView, Genres, Properties)> for Artist {
+    fn from((value, genres, properties): (ArtistView, Genres, Properties)) -> Self {
         Artist {
             id: ArtistId::from_db(value.id),
             name: value.name,
             listen_count: value.listen_count as u32,
             cover_art: value.cover_art.map(ImageId::from_db),
+            genres,
             properties,
             album_count: value.album_count as u32,
             created_at: Timestamp::from_seconds(value.created_at as u64),
@@ -58,11 +63,8 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Artist>> {
     let views = db::list::<ArtistView>(db, "sqlx_artist", params).await?;
     let properties =
         property::get_bulk(db, views.iter().map(|view| ArtistId::from_db(view.id))).await?;
-    Ok(views
-        .into_iter()
-        .zip(properties.into_iter())
-        .map(Artist::from)
-        .collect())
+    let genres = genre::get_bulk(db, views.iter().map(|view| ArtistId::from_db(view.id))).await?;
+    Ok(db::merge_view_genres_properties(views, genres, properties))
 }
 
 #[tracing::instrument(skip(db))]
@@ -79,19 +81,17 @@ pub async fn get(db: &mut DbC, artist_id: ArtistId) -> Result<Artist> {
         .bind(artist_id)
         .fetch_one(&mut *db)
         .await?;
+    let genres = genre::get(db, ArtistId::from_db(view.id)).await?;
     let properties = property::get(db, ArtistId::from_db(view.id)).await?;
-    Ok(From::from((view, properties)))
+    Ok(From::from((view, genres, properties)))
 }
 
 #[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, artist_ids: &[ArtistId]) -> Result<Vec<Artist>> {
     let views = db::list_bulk::<ArtistView, _>(db, "sqlx_artist", artist_ids).await?;
+    let genres = genre::get_bulk(db, artist_ids.iter().copied()).await?;
     let properties = property::get_bulk(db, artist_ids.iter().copied()).await?;
-    Ok(views
-        .into_iter()
-        .zip(properties.into_iter())
-        .map(From::from)
-        .collect())
+    Ok(db::merge_view_genres_properties(views, genres, properties))
 }
 
 #[tracing::instrument(skip(db))]
@@ -103,6 +103,7 @@ pub async fn create(db: &mut DbC, create: ArtistCreate) -> Result<Artist> {
         .fetch_one(&mut *db)
         .await?;
     let artist_id = ArtistId::from_db(id);
+    genre::set(db, artist_id, &create.genres).await?;
     property::set(db, artist_id, &create.properties).await?;
     get(db, artist_id).await
 }
@@ -112,6 +113,7 @@ pub async fn update(db: &mut DbC, artist_id: ArtistId, update: ArtistUpdate) -> 
     tracing::info!("updating artist {} with {:#?}", artist_id, update);
     db::value_update_string_non_null(db, "artist", "name", artist_id, update.name).await?;
     db::value_update_id_nullable(db, "artist", "cover_art", artist_id, update.cover_art).await?;
+    genre::update(db, artist_id, &update.genres).await?;
     property::update(db, artist_id, &update.properties).await?;
     get(db, artist_id).await
 }
@@ -121,6 +123,7 @@ pub async fn delete(db: &mut DbC, artist_id: ArtistId) -> Result<()> {
         .bind(artist_id)
         .execute(&mut *db)
         .await?;
+    genre::clear(db, artist_id).await?;
     property::clear(db, artist_id).await?;
     Ok(())
 }

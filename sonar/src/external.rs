@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{async_trait, bytestream::ByteStream, Properties, Result, TrackLyrics};
+use crate::{async_trait, bytestream::ByteStream, Genres, Properties, Result, TrackLyrics};
 
 // requirements and use cases for an external service:
 // - we should be able to subscribe/unsubscribe to some type of external media.
@@ -40,6 +40,7 @@ pub struct ExternalArtist {
     pub name: String,
     pub albums: Vec<ExternalMediaId>,
     pub cover: Option<ExternalImage>,
+    pub genres: Genres,
     pub properties: Properties,
 }
 
@@ -49,6 +50,7 @@ pub struct ExternalAlbum {
     pub artist: ExternalMediaId,
     pub tracks: Vec<ExternalMediaId>,
     pub cover: Option<ExternalImage>,
+    pub genres: Genres,
     pub properties: Properties,
 }
 

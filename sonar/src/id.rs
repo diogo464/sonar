@@ -1,27 +1,27 @@
 use std::str::FromStr;
 
-pub(crate) const ID_TYPE_MASK: u32 = 0xFF00_0000;
-pub(crate) const ID_TYPE_SHIFT: u32 = 24;
+pub(crate) const ID_NAMESPACE_MASK: u32 = 0xFF00_0000;
+pub(crate) const ID_NAMESPACE_SHIFT: u32 = 24;
 
-pub(crate) const ID_TYPE_ARTIST: u32 = 1;
-pub(crate) const ID_TYPE_ALBUM: u32 = 2;
-pub(crate) const ID_TYPE_TRACK: u32 = 3;
-pub(crate) const ID_TYPE_PLAYLIST: u32 = 4;
-pub(crate) const ID_TYPE_AUDIO: u32 = 5;
-pub(crate) const ID_TYPE_IMAGE: u32 = 6;
-pub(crate) const ID_TYPE_USER: u32 = 7;
-pub(crate) const ID_TYPE_LYRICS: u32 = 8;
-pub(crate) const ID_TYPE_SCROBBLE: u32 = 9;
+pub(crate) const ID_NAMESPACE_ARTIST: u32 = 1;
+pub(crate) const ID_NAMESPACE_ALBUM: u32 = 2;
+pub(crate) const ID_NAMESPACE_TRACK: u32 = 3;
+pub(crate) const ID_NAMESPACE_PLAYLIST: u32 = 4;
+pub(crate) const ID_NAMESPACE_AUDIO: u32 = 5;
+pub(crate) const ID_NAMESPACE_IMAGE: u32 = 6;
+pub(crate) const ID_NAMESPACE_USER: u32 = 7;
+pub(crate) const ID_NAMESPACE_LYRICS: u32 = 8;
+pub(crate) const ID_NAMESPACE_SCROBBLE: u32 = 9;
 
-const ID_TYPE_ARTIST_STR: &str = "artist";
-const ID_TYPE_ALBUM_STR: &str = "album";
-const ID_TYPE_TRACK_STR: &str = "track";
-const ID_TYPE_PLAYLIST_STR: &str = "playlist";
-const ID_TYPE_AUDIO_STR: &str = "audio";
-const ID_TYPE_IMAGE_STR: &str = "image";
-const ID_TYPE_USER_STR: &str = "user";
-const ID_TYPE_LYRICS_STR: &str = "lyrics";
-const ID_TYPE_SCROBBLE_STR: &str = "scrobble";
+const ID_NAMESPACE_ARTIST_STR: &str = "artist";
+const ID_NAMESPACE_ALBUM_STR: &str = "album";
+const ID_NAMESPACE_TRACK_STR: &str = "track";
+const ID_NAMESPACE_PLAYLIST_STR: &str = "playlist";
+const ID_NAMESPACE_AUDIO_STR: &str = "audio";
+const ID_NAMESPACE_IMAGE_STR: &str = "image";
+const ID_NAMESPACE_USER_STR: &str = "user";
+const ID_NAMESPACE_LYRICS_STR: &str = "lyrics";
+const ID_NAMESPACE_SCROBBLE_STR: &str = "scrobble";
 
 #[derive(Debug)]
 pub struct InvalidIdError {
@@ -64,7 +64,7 @@ macro_rules! impl_id {
             }
 
             fn identifier(&self) -> u32 {
-                self.0 & !ID_TYPE_MASK
+                self.0 & !ID_NAMESPACE_MASK
             }
         }
 
@@ -78,18 +78,18 @@ macro_rules! impl_id {
             }
 
             fn identifier(&self) -> u32 {
-                self.0 & !ID_TYPE_MASK
+                self.0 & !ID_NAMESPACE_MASK
             }
         }
 
         #[allow(dead_code)]
         impl $t {
             pub(crate) fn from_db(id: i64) -> Self {
-                Self(id as u32 | $k << ID_TYPE_SHIFT)
+                Self(id as u32 | $k << ID_NAMESPACE_SHIFT)
             }
 
             pub(crate) fn to_db(self) -> i64 {
-                (self.0 & !ID_TYPE_MASK) as i64
+                (self.0 & !ID_NAMESPACE_MASK) as i64
             }
         }
 
@@ -103,7 +103,7 @@ macro_rules! impl_id {
             type Error = InvalidIdError;
 
             fn try_from(id: u32) -> Result<Self, Self::Error> {
-                if id & ID_TYPE_MASK == $k << ID_TYPE_SHIFT {
+                if id & ID_NAMESPACE_MASK == $k << ID_NAMESPACE_SHIFT {
                     Ok(Self(id))
                 } else {
                     Err(InvalidIdError::new(id, std::concat!("not an ", $n, " ID")))
@@ -166,15 +166,15 @@ macro_rules! impl_id {
     };
 }
 
-impl_id!(ArtistId, Artist, "artist", ID_TYPE_ARTIST);
-impl_id!(AlbumId, Album, "album", ID_TYPE_ALBUM);
-impl_id!(TrackId, Track, "track", ID_TYPE_TRACK);
-impl_id!(PlaylistId, Playlist, "playlist", ID_TYPE_PLAYLIST);
-impl_id!(AudioId, Audio, "audio", ID_TYPE_AUDIO);
-impl_id!(ImageId, Image, "image", ID_TYPE_IMAGE);
-impl_id!(UserId, User, "user", ID_TYPE_USER);
-impl_id!(LyricsId, Lyrics, "lyrics", ID_TYPE_LYRICS);
-impl_id!(ScrobbleId, Scrobble, "scrobble", ID_TYPE_SCROBBLE);
+impl_id!(ArtistId, Artist, "artist", ID_NAMESPACE_ARTIST);
+impl_id!(AlbumId, Album, "album", ID_NAMESPACE_ALBUM);
+impl_id!(TrackId, Track, "track", ID_NAMESPACE_TRACK);
+impl_id!(PlaylistId, Playlist, "playlist", ID_NAMESPACE_PLAYLIST);
+impl_id!(AudioId, Audio, "audio", ID_NAMESPACE_AUDIO);
+impl_id!(ImageId, Image, "image", ID_NAMESPACE_IMAGE);
+impl_id!(UserId, User, "user", ID_NAMESPACE_USER);
+impl_id!(LyricsId, Lyrics, "lyrics", ID_NAMESPACE_LYRICS);
+impl_id!(ScrobbleId, Scrobble, "scrobble", ID_NAMESPACE_SCROBBLE);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SonarId {
@@ -193,16 +193,16 @@ impl std::fmt::Display for SonarId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let id = u32::from(*self);
         f.write_str("sonar:")?;
-        match (id & ID_TYPE_MASK) >> ID_TYPE_SHIFT {
-            ID_TYPE_ARTIST => write!(f, "{}", ID_TYPE_ARTIST_STR)?,
-            ID_TYPE_ALBUM => write!(f, "{}", ID_TYPE_ALBUM_STR)?,
-            ID_TYPE_TRACK => write!(f, "{}", ID_TYPE_TRACK_STR)?,
-            ID_TYPE_PLAYLIST => write!(f, "{}", ID_TYPE_PLAYLIST_STR)?,
-            ID_TYPE_AUDIO => write!(f, "{}", ID_TYPE_AUDIO_STR)?,
-            ID_TYPE_IMAGE => write!(f, "{}", ID_TYPE_IMAGE_STR)?,
-            ID_TYPE_USER => write!(f, "{}", ID_TYPE_USER_STR)?,
-            ID_TYPE_LYRICS => write!(f, "{}", ID_TYPE_LYRICS_STR)?,
-            ID_TYPE_SCROBBLE => write!(f, "{}", ID_TYPE_SCROBBLE_STR)?,
+        match (id & ID_NAMESPACE_MASK) >> ID_NAMESPACE_SHIFT {
+            ID_NAMESPACE_ARTIST => write!(f, "{}", ID_NAMESPACE_ARTIST_STR)?,
+            ID_NAMESPACE_ALBUM => write!(f, "{}", ID_NAMESPACE_ALBUM_STR)?,
+            ID_NAMESPACE_TRACK => write!(f, "{}", ID_NAMESPACE_TRACK_STR)?,
+            ID_NAMESPACE_PLAYLIST => write!(f, "{}", ID_NAMESPACE_PLAYLIST_STR)?,
+            ID_NAMESPACE_AUDIO => write!(f, "{}", ID_NAMESPACE_AUDIO_STR)?,
+            ID_NAMESPACE_IMAGE => write!(f, "{}", ID_NAMESPACE_IMAGE_STR)?,
+            ID_NAMESPACE_USER => write!(f, "{}", ID_NAMESPACE_USER_STR)?,
+            ID_NAMESPACE_LYRICS => write!(f, "{}", ID_NAMESPACE_LYRICS_STR)?,
+            ID_NAMESPACE_SCROBBLE => write!(f, "{}", ID_NAMESPACE_SCROBBLE_STR)?,
             _ => unreachable!(),
         };
         write!(f, ":{:x}", id)
@@ -213,16 +213,16 @@ impl TryFrom<u32> for SonarId {
     type Error = InvalidIdError;
 
     fn try_from(id: u32) -> Result<Self, Self::Error> {
-        match (id & ID_TYPE_MASK) >> ID_TYPE_SHIFT {
-            ID_TYPE_ARTIST => Ok(Self::Artist(ArtistId::try_from(id)?)),
-            ID_TYPE_ALBUM => Ok(Self::Album(AlbumId::try_from(id)?)),
-            ID_TYPE_TRACK => Ok(Self::Track(TrackId::try_from(id)?)),
-            ID_TYPE_PLAYLIST => Ok(Self::Playlist(PlaylistId::try_from(id)?)),
-            ID_TYPE_AUDIO => Ok(Self::Audio(AudioId::try_from(id)?)),
-            ID_TYPE_IMAGE => Ok(Self::Image(ImageId::try_from(id)?)),
-            ID_TYPE_USER => Ok(Self::User(UserId::try_from(id)?)),
-            ID_TYPE_LYRICS => Ok(Self::Lyrics(LyricsId::try_from(id)?)),
-            ID_TYPE_SCROBBLE => Ok(Self::Scrobble(ScrobbleId::try_from(id)?)),
+        match (id & ID_NAMESPACE_MASK) >> ID_NAMESPACE_SHIFT {
+            ID_NAMESPACE_ARTIST => Ok(Self::Artist(ArtistId::try_from(id)?)),
+            ID_NAMESPACE_ALBUM => Ok(Self::Album(AlbumId::try_from(id)?)),
+            ID_NAMESPACE_TRACK => Ok(Self::Track(TrackId::try_from(id)?)),
+            ID_NAMESPACE_PLAYLIST => Ok(Self::Playlist(PlaylistId::try_from(id)?)),
+            ID_NAMESPACE_AUDIO => Ok(Self::Audio(AudioId::try_from(id)?)),
+            ID_NAMESPACE_IMAGE => Ok(Self::Image(ImageId::try_from(id)?)),
+            ID_NAMESPACE_USER => Ok(Self::User(UserId::try_from(id)?)),
+            ID_NAMESPACE_LYRICS => Ok(Self::Lyrics(LyricsId::try_from(id)?)),
+            ID_NAMESPACE_SCROBBLE => Ok(Self::Scrobble(ScrobbleId::try_from(id)?)),
             _ => Err(InvalidIdError::new(id, "unknown ID type")),
         }
     }
@@ -267,15 +267,15 @@ impl FromStr for SonarId {
             )
         })?;
         match kind {
-            ID_TYPE_ARTIST_STR => Ok(Self::Artist(ArtistId::try_from(id)?)),
-            ID_TYPE_ALBUM_STR => Ok(Self::Album(AlbumId::try_from(id)?)),
-            ID_TYPE_TRACK_STR => Ok(Self::Track(TrackId::try_from(id)?)),
-            ID_TYPE_PLAYLIST_STR => Ok(Self::Playlist(PlaylistId::try_from(id)?)),
-            ID_TYPE_AUDIO_STR => Ok(Self::Audio(AudioId::try_from(id)?)),
-            ID_TYPE_IMAGE_STR => Ok(Self::Image(ImageId::try_from(id)?)),
-            ID_TYPE_USER_STR => Ok(Self::User(UserId::try_from(id)?)),
-            ID_TYPE_LYRICS_STR => Ok(Self::Lyrics(LyricsId::try_from(id)?)),
-            ID_TYPE_SCROBBLE_STR => Ok(Self::Scrobble(ScrobbleId::try_from(id)?)),
+            ID_NAMESPACE_ARTIST_STR => Ok(Self::Artist(ArtistId::try_from(id)?)),
+            ID_NAMESPACE_ALBUM_STR => Ok(Self::Album(AlbumId::try_from(id)?)),
+            ID_NAMESPACE_TRACK_STR => Ok(Self::Track(TrackId::try_from(id)?)),
+            ID_NAMESPACE_PLAYLIST_STR => Ok(Self::Playlist(PlaylistId::try_from(id)?)),
+            ID_NAMESPACE_AUDIO_STR => Ok(Self::Audio(AudioId::try_from(id)?)),
+            ID_NAMESPACE_IMAGE_STR => Ok(Self::Image(ImageId::try_from(id)?)),
+            ID_NAMESPACE_USER_STR => Ok(Self::User(UserId::try_from(id)?)),
+            ID_NAMESPACE_LYRICS_STR => Ok(Self::Lyrics(LyricsId::try_from(id)?)),
+            ID_NAMESPACE_SCROBBLE_STR => Ok(Self::Scrobble(ScrobbleId::try_from(id)?)),
             _ => Err(InvalidIdError::new(id, "unknown ID type")),
         }
     }
@@ -327,7 +327,7 @@ impl SonarIdentifier for SonarId {
 
 impl SonarId {
     pub(crate) fn from_type_and_id(ty: u32, id: u32) -> Result<SonarId, InvalidIdError> {
-        let id = id | ty << ID_TYPE_SHIFT;
+        let id = id | ty << ID_NAMESPACE_SHIFT;
         TryFrom::try_from(id)
     }
 }
@@ -341,7 +341,7 @@ mod test {
         let id = ArtistId::try_from(0x01000001).unwrap();
         assert_eq!(id, ArtistId(0x01000001));
         assert_eq!(id.name(), "artist");
-        assert_eq!(id.namespace(), ID_TYPE_ARTIST);
+        assert_eq!(id.namespace(), ID_NAMESPACE_ARTIST);
         assert_eq!(id.identifier(), 1);
         assert_eq!(id.to_db(), 1);
         assert_eq!(ArtistId::from_db(1), id);
@@ -353,7 +353,7 @@ mod test {
         let id = AlbumId::try_from(0x02000001).unwrap();
         assert_eq!(id, AlbumId(0x02000001));
         assert_eq!(id.name(), "album");
-        assert_eq!(id.namespace(), ID_TYPE_ALBUM);
+        assert_eq!(id.namespace(), ID_NAMESPACE_ALBUM);
         assert_eq!(id.identifier(), 1);
         assert_eq!(id.to_db(), 1);
         assert_eq!(AlbumId::from_db(1), id);
@@ -365,7 +365,7 @@ mod test {
         let id = TrackId::try_from(0x03000001).unwrap();
         assert_eq!(id, TrackId(0x03000001));
         assert_eq!(id.name(), "track");
-        assert_eq!(id.namespace(), ID_TYPE_TRACK);
+        assert_eq!(id.namespace(), ID_NAMESPACE_TRACK);
         assert_eq!(id.identifier(), 1);
         assert_eq!(id.to_db(), 1);
         assert_eq!(TrackId::from_db(1), id);
@@ -377,7 +377,7 @@ mod test {
         let id = PlaylistId::try_from(0x04000001).unwrap();
         assert_eq!(id, PlaylistId(0x04000001));
         assert_eq!(id.name(), "playlist");
-        assert_eq!(id.namespace(), ID_TYPE_PLAYLIST);
+        assert_eq!(id.namespace(), ID_NAMESPACE_PLAYLIST);
         assert_eq!(id.identifier(), 1);
         assert_eq!(id.to_db(), 1);
         assert_eq!(PlaylistId::from_db(1), id);
@@ -389,7 +389,7 @@ mod test {
         let id = AudioId::try_from(0x05000001).unwrap();
         assert_eq!(id, AudioId(0x05000001));
         assert_eq!(id.name(), "audio");
-        assert_eq!(id.namespace(), ID_TYPE_AUDIO);
+        assert_eq!(id.namespace(), ID_NAMESPACE_AUDIO);
         assert_eq!(id.identifier(), 1);
         assert_eq!(id.to_db(), 1);
         assert_eq!(AudioId::from_db(1), id);
@@ -401,7 +401,7 @@ mod test {
         let id = ImageId::try_from(0x06000001).unwrap();
         assert_eq!(id, ImageId(0x06000001));
         assert_eq!(id.name(), "image");
-        assert_eq!(id.namespace(), ID_TYPE_IMAGE);
+        assert_eq!(id.namespace(), ID_NAMESPACE_IMAGE);
         assert_eq!(id.identifier(), 1);
         assert_eq!(id.to_db(), 1);
         assert_eq!(ImageId::from_db(1), id);
@@ -413,7 +413,7 @@ mod test {
         let id = UserId::try_from(0x07000001).unwrap();
         assert_eq!(id, UserId(0x07000001));
         assert_eq!(id.name(), "user");
-        assert_eq!(id.namespace(), ID_TYPE_USER);
+        assert_eq!(id.namespace(), ID_NAMESPACE_USER);
         assert_eq!(id.identifier(), 1);
         assert_eq!(id.to_db(), 1);
         assert_eq!(UserId::from_db(1), id);
@@ -425,7 +425,7 @@ mod test {
         let id = LyricsId::try_from(0x08000001).unwrap();
         assert_eq!(id, LyricsId(0x08000001));
         assert_eq!(id.name(), "lyrics");
-        assert_eq!(id.namespace(), ID_TYPE_LYRICS);
+        assert_eq!(id.namespace(), ID_NAMESPACE_LYRICS);
         assert_eq!(id.identifier(), 1);
         assert_eq!(id.to_db(), 1);
         assert_eq!(LyricsId::from_db(1), id);
@@ -437,7 +437,7 @@ mod test {
         let id = ScrobbleId::try_from(0x09000001).unwrap();
         assert_eq!(id, ScrobbleId(0x09000001));
         assert_eq!(id.name(), "scrobble");
-        assert_eq!(id.namespace(), ID_TYPE_SCROBBLE);
+        assert_eq!(id.namespace(), ID_NAMESPACE_SCROBBLE);
         assert_eq!(id.identifier(), 1);
         assert_eq!(id.to_db(), 1);
         assert_eq!(ScrobbleId::from_db(1), id);

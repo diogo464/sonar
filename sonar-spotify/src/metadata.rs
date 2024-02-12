@@ -5,6 +5,8 @@ use sonar::{bytes::Bytes, metadata_prelude::*, PropertyValue};
 use spotdl::SpotifyId;
 use tokio_stream::StreamExt;
 
+use crate::convert_genres;
+
 pub struct SpotifyMetadata {
     client: rspotify::ClientCredsSpotify,
     http_client: reqwest::Client,
@@ -75,6 +77,7 @@ impl MetadataProvider for SpotifyMetadata {
         let image = self.download_first_image(&artist.images).await?;
         Ok(ArtistMetadata {
             name: Some(artist.name),
+            genres: convert_genres(artist.genres),
             properties: Default::default(),
             cover: image,
         })
@@ -99,6 +102,7 @@ impl MetadataProvider for SpotifyMetadata {
         let image = self.download_first_image(&album.images).await?;
         Ok(AlbumMetadata {
             name: Some(album.name),
+            genres: convert_genres(album.genres),
             properties: Default::default(),
             cover: image,
         })

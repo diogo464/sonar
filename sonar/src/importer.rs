@@ -166,6 +166,7 @@ pub async fn import(
         let artist_create = ArtistCreate {
             name: artist_name.to_owned(),
             cover_art: Default::default(),
+            genres: Default::default(),
             properties: Default::default(),
         };
 
@@ -198,6 +199,7 @@ pub async fn import(
             name: album_name.to_owned(),
             artist: artist_id,
             cover_art: Default::default(),
+            genres: Default::default(),
             properties: Default::default(),
         };
 

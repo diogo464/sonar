@@ -13,6 +13,7 @@ async fn artist_create_one() {
     let create = sonar::ArtistCreate {
         name: "Artist".to_string(),
         cover_art: None,
+        genres: Default::default(),
         properties: sonar::test::create_simple_properties(),
     };
     let artist = sonar::artist_create(&ctx, create).await.unwrap();
@@ -50,11 +51,16 @@ async fn artist_update_one() {
     let create = sonar::ArtistCreate {
         name: "Artist".to_string(),
         cover_art: None,
+        genres: Default::default(),
         properties: sonar::test::create_simple_properties(),
     };
     let artist = sonar::artist_create(&ctx, create).await.unwrap();
     let update = sonar::ArtistUpdate {
         name: sonar::ValueUpdate::Set("Artist2".to_string()),
+        genres: vec![sonar::GenreUpdate {
+            action: sonar::GenreUpdateAction::Set,
+            genre: sonar::Genre::new_unchecked("genre1"),
+        }],
         properties: vec![sonar::PropertyUpdate::set(
             sonar::PropertyKey::new_uncheked("key3"),
             sonar::PropertyValue::new_uncheked("value3"),
@@ -64,6 +70,10 @@ async fn artist_update_one() {
     let artist = sonar::artist_update(&ctx, artist.id, update).await.unwrap();
     assert_eq!(artist.name, "Artist2");
     assert_eq!(artist.properties.len(), 3);
+    assert_eq!(artist.genres.len(), 1);
+    assert!(artist
+        .genres
+        .contains(&sonar::Genre::new_unchecked("genre1")));
 }
 
 #[tokio::test]

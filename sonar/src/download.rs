@@ -394,6 +394,7 @@ async fn find_or_create_artist(db: &Db, external_artist: &ExternalArtist) -> Res
     let create = ArtistCreate {
         name: external_artist.name.clone(),
         cover_art: None,
+        genres: external_artist.genres.clone(),
         properties: external_artist.properties.clone(),
     };
     let artist = artist::find_or_create_by_name_tx(db, create).await?;
@@ -410,6 +411,7 @@ async fn find_or_create_album(
         name: external_album.name.clone(),
         artist: artist_id,
         cover_art: None,
+        genres: external_album.genres.clone(),
         properties: external_album.properties.clone(),
     };
     let album = album::find_or_create_by_name_tx(db, create).await?;

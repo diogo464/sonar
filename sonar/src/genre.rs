@@ -1,6 +1,12 @@
-use std::{borrow::Cow, str::FromStr};
+use std::{borrow::Cow, collections::HashMap, str::FromStr};
 
-use crate::Result;
+use serde::{Deserialize, Serialize};
+use sqlx::Row;
+
+use crate::{
+    db::{self, DbC},
+    Result, SonarIdentifier,
+};
 
 #[derive(Debug)]
 pub struct InvalidGenreError {
@@ -33,6 +39,25 @@ pub struct Genre([u8; 24]);
 impl std::fmt::Debug for Genre {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Genre").field(&self.as_str()).finish()
+    }
+}
+
+impl Serialize for Genre {
+    fn serialize<S>(&self, serializer: S) -> std::prelude::v1::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Genre {
+    fn deserialize<D>(deserializer: D) -> std::prelude::v1::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Genre::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -73,6 +98,19 @@ impl Genre {
         Self::from_str(genre.as_ref())
     }
 
+    pub fn canonicalize(genre: impl AsRef<str>) -> Result<Genre, InvalidGenreError> {
+        let genre = genre.as_ref();
+        let genre = genre
+            .chars()
+            .map(|c| c.to_ascii_lowercase())
+            .map(|c| match c {
+                'a'..='z' | '0'..='9' | '-' | '_' => c,
+                _ => '-',
+            })
+            .collect::<String>();
+        Self::from_str(&genre)
+    }
+
     pub fn new_unchecked(genre: impl AsRef<str>) -> Self {
         Self::from_str(genre.as_ref()).expect("invalid genre")
     }
@@ -87,7 +125,7 @@ impl Genre {
     }
 }
 
-#[derive(Debug, Default, Clone, Hash)]
+#[derive(Debug, Default, Clone, Hash, Serialize, Deserialize)]
 pub struct Genres(Vec<Genre>);
 
 impl Genres {
@@ -98,9 +136,7 @@ impl Genres {
             .into_iter()
             .map(|genre| Genre::from_str(genre.as_ref()))
             .collect::<Result<Vec<_>, _>>()?;
-        genres.sort_unstable();
-        genres.dedup();
-        Ok(Self(genres))
+        Ok(Self::from(genres))
     }
 
     pub fn len(&self) -> usize {
@@ -129,6 +165,12 @@ impl Genres {
 
     pub fn iter(&self) -> impl Iterator<Item = &Genre> {
         self.0.iter()
+    }
+
+    pub fn merge(&mut self, other: &Self) {
+        for genre in other.iter() {
+            self.set(genre);
+        }
     }
 }
 
@@ -207,6 +249,14 @@ impl TryFrom<Vec<String>> for Genres {
     }
 }
 
+impl From<Vec<Genre>> for Genres {
+    fn from(mut genres: Vec<Genre>) -> Self {
+        genres.sort_unstable();
+        genres.dedup();
+        Self(genres)
+    }
+}
+
 impl From<Genres> for Vec<String> {
     fn from(genres: Genres) -> Self {
         genres.into_iter().map(|genre| genre.to_string()).collect()
@@ -245,6 +295,106 @@ impl GenreUpdate {
             action: GenreUpdateAction::Unset,
         }
     }
+}
+
+#[tracing::instrument(skip(db))]
+pub(crate) async fn get(db: &mut DbC, id: impl SonarIdentifier) -> Result<Genres> {
+    let genres = sqlx::query_scalar::<_, String>(
+        "SELECT genre FROM genre WHERE namespace = ? AND identifier = ?",
+    )
+    .bind(id.namespace())
+    .bind(id.identifier())
+    .fetch_all(db)
+    .await?;
+    Ok(Genres::new(genres).expect("invalid genres in database"))
+}
+
+#[tracing::instrument(skip(db, ids))]
+pub(crate) async fn get_bulk(
+    db: &mut DbC,
+    ids: impl IntoIterator<Item = impl SonarIdentifier>,
+) -> Result<Vec<Genres>> {
+    let ids = ids.into_iter().collect::<Vec<_>>();
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+        "SELECT identifier, genre FROM genre WHERE namespace = ? AND identifier IN ",
+    );
+    db::query_builder_push_id_tuple(&mut query, ids.iter().copied());
+    let rows = query.build().bind(ids[0].namespace()).fetch_all(db).await?;
+
+    let mut genres: HashMap<u32, Vec<String>> = Default::default();
+    for row in rows {
+        let id = row.get::<i64, _>(0) as u32;
+        let genre = row.get::<String, _>(1);
+        genres.entry(id).or_default().push(genre);
+    }
+
+    let mut out = Vec::with_capacity(ids.len());
+    for id in ids {
+        out.push(
+            Genres::new(genres.remove(&id.identifier()).unwrap_or_default())
+                .expect("invalid genres in database"),
+        );
+    }
+    Ok(out)
+}
+
+pub(crate) async fn set(db: &mut DbC, id: impl SonarIdentifier, genres: &Genres) -> Result<()> {
+    clear(db, id).await?;
+    for genre in genres.iter() {
+        sqlx::query("INSERT INTO genre (namespace, identifier, genre) VALUES (?, ?, ?)")
+            .bind(id.namespace())
+            .bind(id.identifier())
+            .bind(genre.as_str())
+            .execute(&mut *db)
+            .await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn update(
+    db: &mut DbC,
+    id: impl SonarIdentifier,
+    updates: &[GenreUpdate],
+) -> Result<()> {
+    let namespace = id.namespace();
+    let identifier = id.identifier();
+    for update in updates {
+        match update.action {
+            GenreUpdateAction::Set => {
+                sqlx::query(
+                    "INSERT OR IGNORE INTO genre (namespace, identifier, genre) VALUES (?, ?, ?)",
+                )
+                .bind(namespace)
+                .bind(identifier)
+                .bind(update.genre.as_str())
+                .execute(&mut *db)
+                .await?;
+            }
+            GenreUpdateAction::Unset => {
+                sqlx::query(
+                    "DELETE FROM genre WHERE namespace = ? AND identifier = ? AND genre = ?",
+                )
+                .bind(namespace)
+                .bind(identifier)
+                .bind(update.genre.as_str())
+                .execute(&mut *db)
+                .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) async fn clear(db: &mut DbC, id: impl SonarIdentifier) -> Result<()> {
+    sqlx::query("DELETE FROM genre WHERE namespace = ? AND identifier = ?")
+        .bind(id.namespace())
+        .bind(id.identifier())
+        .execute(&mut *db)
+        .await?;
+    Ok(())
 }
 
 #[cfg(test)]

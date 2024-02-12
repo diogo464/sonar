@@ -18,6 +18,7 @@ impl From<sonar::Artist> for Artist {
             album_count: value.album_count,
             listen_count: value.listen_count,
             coverart_id: value.cover_art.map(|id| id.to_string()),
+            genres: convert_genres_to_pb(value.genres),
             properties: convert_properties_to_pb(value.properties),
         }
     }
@@ -33,6 +34,7 @@ impl TryFrom<ArtistUpdateRequest> for (sonar::ArtistId, sonar::ArtistUpdate) {
             cover_art: sonar::ValueUpdate::from_option_unchanged(parse_imageid_opt(
                 value.coverart_id,
             )?),
+            genres: convert_genre_updates_from_pb(value.genres)?,
             properties: convert_property_updates_from_pb(value.properties)?,
         };
         Ok((artist_id, update))
@@ -49,6 +51,7 @@ impl From<sonar::Album> for Album {
             listen_count: value.listen_count,
             artist_id: value.artist.to_string(),
             coverart_id: value.cover_art.map(|id| id.to_string()),
+            genres: convert_genres_to_pb(value.genres),
             properties: convert_properties_to_pb(value.properties),
         }
     }
@@ -58,14 +61,12 @@ impl TryFrom<AlbumCreateRequest> for sonar::AlbumCreate {
     type Error = tonic::Status;
 
     fn try_from(value: AlbumCreateRequest) -> Result<Self, Self::Error> {
-        let artist = parse_artistid(value.artist_id)?;
-        let cover_art = parse_imageid_opt(value.coverart_id)?;
-        let properties = convert_properties_from_pb(value.properties)?;
         Ok(sonar::AlbumCreate {
             name: value.name,
-            artist,
-            cover_art,
-            properties,
+            artist: parse_artistid(value.artist_id)?,
+            cover_art: parse_imageid_opt(value.coverart_id)?,
+            genres: convert_genres_from_pb(value.genres)?,
+            properties: convert_properties_from_pb(value.properties)?,
         })
     }
 }
@@ -81,6 +82,7 @@ impl TryFrom<AlbumUpdateRequest> for (sonar::AlbumId, sonar::AlbumUpdate) {
             name: sonar::ValueUpdate::from_option_unchanged(value.name),
             artist: sonar::ValueUpdate::from_option_unchanged(artist_id),
             cover_art: sonar::ValueUpdate::from_option_unchanged(cover_art),
+            genres: convert_genre_updates_from_pb(value.genres)?,
             properties: convert_property_updates_from_pb(value.properties)?,
         };
         Ok((album_id, update))
@@ -373,6 +375,35 @@ pub fn convert_property_updates_from_pb(
         props.push(sonar::PropertyUpdate::from_option(key, value));
     }
     Ok(props)
+}
+
+pub fn convert_genres_to_pb(genres: sonar::Genres) -> Vec<String> {
+    genres.into()
+}
+
+pub fn convert_genres_from_pb(genres: Vec<String>) -> Result<sonar::Genres, tonic::Status> {
+    Ok(sonar::Genres::new(genres).map_err(|_| tonic::Status::invalid_argument("invalid genre"))?)
+}
+
+pub fn convert_genre_updates_from_pb(
+    updates: Vec<GenreUpdate>,
+) -> Result<Vec<sonar::GenreUpdate>, tonic::Status> {
+    let mut out = Vec::with_capacity(updates.len());
+    for update in updates {
+        let genre = sonar::Genre::new(update.genre)
+            .map_err(|err| tonic::Status::invalid_argument(format!("invalid genre: {}", err)))?;
+        let action = if update.action == genre_update::Action::Set as i32 {
+            sonar::GenreUpdateAction::Set
+        } else if update.action == genre_update::Action::Unset as i32 {
+            sonar::GenreUpdateAction::Unset
+        } else {
+            return Err(tonic::Status::invalid_argument(
+                "invalid genre update action",
+            ));
+        };
+        out.push(sonar::GenreUpdate { action, genre });
+    }
+    Ok(out)
 }
 
 pub fn convert_timestamp_to_pb(timestamp: sonar::Timestamp) -> prost_types::Timestamp {

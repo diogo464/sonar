@@ -9,7 +9,7 @@ use std::{
 use clap::Parser;
 use eyre::{Context, Result};
 use serde::Serialize;
-use sonar::Properties;
+use sonar::{Genres, Properties};
 use tokio_stream::StreamExt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -89,6 +89,7 @@ struct Artist {
     album_count: u32,
     listen_count: u32,
     coverart: Option<String>,
+    genres: Genres,
     properties: Properties,
 }
 
@@ -106,6 +107,7 @@ impl From<sonar_grpc::Artist> for Artist {
             album_count: value.album_count,
             listen_count: value.listen_count,
             coverart: value.coverart_id,
+            genres: genres_from_pb(value.genres),
             properties: properties_from_pb(value.properties),
         }
     }
@@ -120,6 +122,7 @@ struct Album {
     listen_count: u32,
     artist: String,
     coverart: Option<String>,
+    genres: Genres,
     properties: Properties,
 }
 
@@ -139,6 +142,7 @@ impl From<sonar_grpc::Album> for Album {
             listen_count: value.listen_count,
             artist: value.artist_id,
             coverart: value.coverart_id,
+            genres: genres_from_pb(value.genres),
             properties: properties_from_pb(value.properties),
         }
     }
@@ -1498,7 +1502,7 @@ enum DownloadCommand {
 #[derive(Debug, Parser)]
 struct DownloadListArgs {}
 
-async fn cmd_download_list(args: DownloadListArgs) -> Result<()> {
+async fn cmd_download_list(_args: DownloadListArgs) -> Result<()> {
     let mut client = create_client().await?;
     let (user_id, _) = auth_read().await?;
     let response = client
@@ -2130,6 +2134,10 @@ fn properties_from_pb(properties: Vec<sonar_grpc::Property>) -> sonar::Propertie
         props.insert(key, value);
     }
     props
+}
+
+fn genres_from_pb(genres: Vec<String>) -> Genres {
+    Genres::new(genres).expect("received invalid genres from server")
 }
 
 fn stdout_value<T: std::fmt::Display + Serialize>(value: T) -> Result<()> {

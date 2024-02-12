@@ -1,6 +1,6 @@
 use sonar::{
     bytestream::ByteStream, ExternalAlbum, ExternalArtist, ExternalMediaId, ExternalMediaType,
-    ExternalPlaylist, ExternalTrack, Result,
+    ExternalPlaylist, ExternalTrack, Genre, Genres, Properties, PropertyKey, PropertyValue, Result,
 };
 
 struct Service1;
@@ -8,6 +8,9 @@ struct Service1;
 const SERVICE1_ID_ARTIST: &'static str = "service1:artist:1";
 const SERVICE1_ID_ALBUM: &'static str = "service1:album:1";
 const SERVICE1_ID_TRACK: &'static str = "service1:track:1";
+const GENRE1: &'static str = "genre1";
+const PROP_KEY1: &'static str = "key1";
+const PROP_VAL1: &'static str = "val1";
 
 #[sonar::async_trait]
 impl sonar::ExternalService for Service1 {
@@ -32,12 +35,18 @@ impl sonar::ExternalService for Service1 {
                 "invalid artist id",
             ));
         }
+        let mut properties = Properties::default();
+        properties.insert(
+            PropertyKey::new_uncheked(PROP_KEY1),
+            PropertyValue::new_uncheked(PROP_VAL1),
+        );
 
         Ok(ExternalArtist {
             name: "artist1".to_owned(),
             albums: vec![ExternalMediaId::new(SERVICE1_ID_ALBUM)],
             cover: None,
-            properties: Default::default(),
+            genres: Genres::from(vec![Genre::new_unchecked(GENRE1)]),
+            properties,
         })
     }
     async fn fetch_album(&self, id: &ExternalMediaId) -> Result<ExternalAlbum> {
@@ -48,12 +57,19 @@ impl sonar::ExternalService for Service1 {
             ));
         }
 
+        let mut properties = Properties::default();
+        properties.insert(
+            PropertyKey::new_uncheked(PROP_KEY1),
+            PropertyValue::new_uncheked(PROP_VAL1),
+        );
+
         Ok(ExternalAlbum {
             name: "album1".to_owned(),
             artist: ExternalMediaId::new(SERVICE1_ID_ARTIST),
             tracks: vec![ExternalMediaId::new(SERVICE1_ID_TRACK)],
             cover: None,
-            properties: Default::default(),
+            genres: Genres::from(vec![Genre::new_unchecked(GENRE1)]),
+            properties,
         })
     }
     async fn fetch_track(&self, id: &ExternalMediaId) -> Result<ExternalTrack> {
@@ -103,10 +119,25 @@ async fn external_download_track() {
     let artists = sonar::artist_list(&ctx, Default::default()).await.unwrap();
     assert_eq!(artists.len(), 1);
     assert_eq!(artists[0].name, "artist1");
+    assert_eq!(artists[0].genres.len(), 1);
+    assert_eq!(artists[0].genres[0].as_str(), GENRE1);
+    assert_eq!(artists[0].properties.len(), 1);
+    assert_eq!(
+        artists[0].properties.get(PROP_KEY1).unwrap().as_str(),
+        PROP_VAL1
+    );
 
     let albums = sonar::album_list(&ctx, Default::default()).await.unwrap();
     assert_eq!(albums.len(), 1);
     assert_eq!(albums[0].name, "album1");
+    assert_eq!(albums[0].artist, artists[0].id);
+    assert_eq!(albums[0].genres.len(), 1);
+    assert_eq!(albums[0].genres[0].as_str(), GENRE1);
+    assert_eq!(albums[0].properties.len(), 1);
+    assert_eq!(
+        albums[0].properties.get(PROP_KEY1).unwrap().as_str(),
+        PROP_VAL1
+    );
 
     let tracks = sonar::track_list(&ctx, Default::default()).await.unwrap();
     assert_eq!(tracks.len(), 1);

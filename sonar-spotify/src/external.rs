@@ -6,7 +6,7 @@ use sonar::{
 };
 use spotdl::{LoginCredentials, Resource, ResourceId, SpotifyId};
 
-use crate::convert;
+use crate::{convert, convert_genres};
 
 pub struct SpotifyService {
     session: spotdl::session::Session,
@@ -82,6 +82,7 @@ impl sonar::ExternalService for SpotifyService {
                 .map(|id| ExternalMediaId::new(id.to_string()))
                 .collect(),
             cover: None,
+            genres: convert_genres(artist.genres),
             properties: properties_for_resource(resource_id.id),
         })
     }
@@ -124,6 +125,7 @@ impl sonar::ExternalService for SpotifyService {
                 .map(|id| ExternalMediaId::new(id.to_string()))
                 .collect(),
             cover,
+            genres: Default::default(),
             properties: properties_for_resource(resource_id.id),
         };
         tracing::debug!("external album: {:#?}", external);

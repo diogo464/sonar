@@ -353,6 +353,7 @@ pub async fn create_artist(ctx: &Context, name: &str) -> Artist {
         crate::ArtistCreate {
             name: name.to_string(),
             cover_art: None,
+            genres: Default::default(),
             properties: Default::default(),
         },
     )
@@ -367,6 +368,7 @@ pub async fn create_album(ctx: &Context, artist: ArtistId, name: &str) -> Album 
             artist,
             name: name.to_string(),
             cover_art: None,
+            genres: Default::default(),
             properties: Default::default(),
         },
     )

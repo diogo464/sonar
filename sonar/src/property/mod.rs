@@ -204,11 +204,11 @@ pub(crate) async fn get(db: &mut DbC, id: impl SonarIdentifier) -> Result<Proper
 #[tracing::instrument(skip(db, ids))]
 pub(crate) async fn get_bulk(
     db: &mut DbC,
-    ids: impl Iterator<Item = impl SonarIdentifier>,
+    ids: impl IntoIterator<Item = impl SonarIdentifier>,
 ) -> Result<Vec<Properties>> {
     use std::fmt::Write;
 
-    let ids = ids.collect::<Vec<_>>();
+    let ids = ids.into_iter().collect::<Vec<_>>();
     if ids.is_empty() {
         return Ok(Vec::new());
     }

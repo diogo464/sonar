@@ -4,8 +4,8 @@ use sqlx::Row;
 
 use crate::{
     db::{self, Db, DbC},
-    property, AlbumId, ArtistId, ImageId, ListParams, Properties, PropertyUpdate, Result,
-    Timestamp, ValueUpdate,
+    genre, property, AlbumId, ArtistId, GenreUpdate, Genres, ImageId, ListParams, Properties,
+    PropertyUpdate, Result, Timestamp, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -17,6 +17,7 @@ pub struct Album {
     pub track_count: u32,
     pub listen_count: u32,
     pub cover_art: Option<ImageId>,
+    pub genres: Genres,
     pub properties: Properties,
     pub created_at: Timestamp,
 }
@@ -26,6 +27,7 @@ pub struct AlbumCreate {
     pub name: String,
     pub artist: ArtistId,
     pub cover_art: Option<ImageId>,
+    pub genres: Genres,
     pub properties: Properties,
 }
 
@@ -34,6 +36,7 @@ pub struct AlbumUpdate {
     pub name: ValueUpdate<String>,
     pub artist: ValueUpdate<ArtistId>,
     pub cover_art: ValueUpdate<ImageId>,
+    pub genres: Vec<GenreUpdate>,
     pub properties: Vec<PropertyUpdate>,
 }
 
@@ -49,8 +52,8 @@ struct AlbumView {
     created_at: i64,
 }
 
-impl From<(AlbumView, Properties)> for Album {
-    fn from((value, properties): (AlbumView, Properties)) -> Self {
+impl From<(AlbumView, Genres, Properties)> for Album {
+    fn from((value, genres, properties): (AlbumView, Genres, Properties)) -> Self {
         Album {
             id: AlbumId::from_db(value.id),
             name: value.name,
@@ -58,6 +61,7 @@ impl From<(AlbumView, Properties)> for Album {
             artist: ArtistId::from_db(value.artist),
             listen_count: value.listen_count.unwrap_or_default() as u32,
             cover_art: value.cover_art.map(ImageId::from_db),
+            genres,
             properties,
             track_count: value.track_count.unwrap_or_default() as u32,
             created_at: Timestamp::from_seconds(value.created_at as u64),
@@ -68,13 +72,10 @@ impl From<(AlbumView, Properties)> for Album {
 #[tracing::instrument(skip(db))]
 pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Album>> {
     let views = db::list::<AlbumView>(db, "sqlx_album", params).await?;
+    let genres = genre::get_bulk(db, views.iter().map(|view| AlbumId::from_db(view.id))).await?;
     let properties =
         property::get_bulk(db, views.iter().map(|view| AlbumId::from_db(view.id))).await?;
-    Ok(views
-        .into_iter()
-        .zip(properties.into_iter())
-        .map(Album::from)
-        .collect())
+    Ok(db::merge_view_genres_properties(views, genres, properties))
 }
 
 #[tracing::instrument(skip(db))]
@@ -93,13 +94,10 @@ pub async fn list_by_artist(
     .bind(offset)
     .fetch_all(&mut *db)
     .await?;
+    let genres = genre::get_bulk(db, views.iter().map(|view| AlbumId::from_db(view.id))).await?;
     let properties =
         property::get_bulk(db, views.iter().map(|view| AlbumId::from_db(view.id))).await?;
-    Ok(views
-        .into_iter()
-        .zip(properties.into_iter())
-        .map(Album::from)
-        .collect())
+    Ok(db::merge_view_genres_properties(views, genres, properties))
 }
 
 #[tracing::instrument(skip(db))]
@@ -119,8 +117,9 @@ pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
         .bind(album_id)
         .fetch_one(&mut *db)
         .await?;
+    let genres = genre::get(db, AlbumId::from_db(view.id)).await?;
     let properties = property::get(db, AlbumId::from_db(view.id)).await?;
-    Ok(From::from((view, properties)))
+    Ok(From::from((view, genres, properties)))
 }
 
 #[tracing::instrument(skip(db))]
@@ -135,12 +134,9 @@ pub async fn get_bulk(db: &mut DbC, album_ids: &[AlbumId]) -> Result<Vec<Album>>
         .iter()
         .map(|album| AlbumId::from_db(album.id))
         .collect::<Vec<_>>();
-    let properties = property::get_bulk(db, album_ids.into_iter()).await?;
-    Ok(albums
-        .into_iter()
-        .zip(properties.into_iter())
-        .map(Album::from)
-        .collect())
+    let genres = genre::get_bulk(db, album_ids.iter().copied()).await?;
+    let properties = property::get_bulk(db, album_ids.iter().copied()).await?;
+    Ok(db::merge_view_genres_properties(albums, genres, properties))
 }
 
 #[tracing::instrument(skip(db))]
@@ -154,6 +150,7 @@ pub async fn create(db: &mut DbC, create: AlbumCreate) -> Result<Album> {
             .fetch_one(&mut *db)
             .await?;
     let album_id = AlbumId::from_db(query.get(0));
+    genre::set(db, album_id, &create.genres).await?;
     property::set(db, album_id, &create.properties).await?;
     get(db, album_id).await
 }
@@ -164,6 +161,7 @@ pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Res
     db::value_update_string_non_null(db, "album", "name", album_id, update.name).await?;
     db::value_update_id_non_null(db, "album", "artist", album_id, update.artist).await?;
     db::value_update_id_nullable(db, "album", "cover_art", album_id, update.cover_art).await?;
+    genre::update(db, album_id, &update.genres).await?;
     property::update(db, album_id, &update.properties).await?;
     get(db, album_id).await
 }
@@ -174,6 +172,7 @@ pub async fn delete(db: &mut DbC, album_id: AlbumId) -> Result<()> {
         .bind(album_id)
         .execute(&mut *db)
         .await?;
+    genre::clear(db, album_id).await?;
     property::clear(db, album_id).await?;
     Ok(())
 }

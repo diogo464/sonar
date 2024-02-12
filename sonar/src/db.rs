@@ -1,4 +1,6 @@
-use crate::{Error, ErrorKind, ListParams, Result, SonarIdentifier, ValueUpdate};
+use crate::{
+    Error, ErrorKind, Genres, ListParams, Properties, Result, SonarIdentifier, ValueUpdate,
+};
 
 pub type Db = sqlx::SqlitePool;
 pub type DbC = sqlx::SqliteConnection;
@@ -183,4 +185,35 @@ pub async fn value_update_id_nullable(
         ValueUpdate::Unchanged => {}
     }
     Ok(())
+}
+
+pub fn merge_view_properties<T, R>(views: Vec<T>, properties: Vec<Properties>) -> Vec<R>
+where
+    R: From<(T, Properties)>,
+{
+    views
+        .into_iter()
+        .zip(properties.into_iter())
+        .map(From::from)
+        .collect()
+}
+
+pub fn merge_view_genres_properties<T, R>(
+    views: Vec<T>,
+    genres: Vec<Genres>,
+    properties: Vec<Properties>,
+) -> Vec<R>
+where
+    R: From<(T, Genres, Properties)>,
+{
+    if views.len() != genres.len() || views.len() != properties.len() {
+        panic!("merge_view_genres_properties: input vectors must have the same length");
+    }
+
+    views
+        .into_iter()
+        .zip(genres.into_iter())
+        .zip(properties.into_iter())
+        .map(|((view, genres), properties)| From::from((view, genres, properties)))
+        .collect()
 }
