@@ -4,8 +4,8 @@ use sqlx::Row;
 
 use crate::{
     db::{self, Db, DbC},
-    genre, property, AlbumId, ArtistId, GenreUpdate, Genres, ImageId, ListParams, Properties,
-    PropertyUpdate, Result, Timestamp, ValueUpdate,
+    genre, property, AlbumId, ArtistId, Error, ErrorKind, GenreUpdate, Genres, ImageId, ListParams,
+    Properties, PropertyUpdate, Result, Timestamp, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -137,6 +137,20 @@ pub async fn get_bulk(db: &mut DbC, album_ids: &[AlbumId]) -> Result<Vec<Album>>
     let genres = genre::get_bulk(db, album_ids.iter().copied()).await?;
     let properties = property::get_bulk(db, album_ids.iter().copied()).await?;
     Ok(db::merge_view_genres_properties(albums, genres, properties))
+}
+
+#[tracing::instrument(skip(db))]
+pub async fn get_by_name(db: &mut DbC, name: &str) -> Result<Album> {
+    let ids = sqlx::query_scalar("SELECT id FROM album WHERE name = ?")
+        .bind(name)
+        .fetch_all(&mut *db)
+        .await?;
+    if ids.is_empty() {
+        return Err(Error::new(ErrorKind::NotFound, "album not found"));
+    } else if ids.len() > 1 {
+        return Err(Error::new(ErrorKind::Invalid, "ambiguous album name"));
+    }
+    get(db, AlbumId::from_db(ids[0])).await
 }
 
 #[tracing::instrument(skip(db))]

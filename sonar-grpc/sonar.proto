@@ -182,7 +182,7 @@ message ArtistListResponse {
 }
 
 message ArtistGetRequest {
-	string artist_id = 1;
+	string artist = 1;
 }
 
 message ArtistCreateRequest {
@@ -232,7 +232,7 @@ message AlbumListResponse {
 }
 
 message AlbumGetRequest {
-	string album_id = 1;
+	string album = 1;
 }
 
 message AlbumCreateRequest {
@@ -283,7 +283,7 @@ message TrackListResponse {
 }
 
 message TrackGetRequest {
-	string track_id = 1;
+	string track = 1;
 }
 
 message TrackCreateRequest {

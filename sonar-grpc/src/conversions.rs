@@ -24,11 +24,10 @@ impl From<sonar::Artist> for Artist {
     }
 }
 
-impl TryFrom<ArtistUpdateRequest> for (sonar::ArtistId, sonar::ArtistUpdate) {
+impl TryFrom<ArtistUpdateRequest> for (String, sonar::ArtistUpdate) {
     type Error = tonic::Status;
 
     fn try_from(value: ArtistUpdateRequest) -> Result<Self, Self::Error> {
-        let artist_id = parse_artistid(value.artist_id)?;
         let update = sonar::ArtistUpdate {
             name: sonar::ValueUpdate::from_option_unchanged(value.name),
             cover_art: sonar::ValueUpdate::from_option_unchanged(parse_imageid_opt(
@@ -37,7 +36,7 @@ impl TryFrom<ArtistUpdateRequest> for (sonar::ArtistId, sonar::ArtistUpdate) {
             genres: convert_genre_updates_from_pb(value.genres)?,
             properties: convert_property_updates_from_pb(value.properties)?,
         };
-        Ok((artist_id, update))
+        Ok((value.artist_id, update))
     }
 }
 
@@ -71,12 +70,11 @@ impl TryFrom<AlbumCreateRequest> for sonar::AlbumCreate {
     }
 }
 
-impl TryFrom<AlbumUpdateRequest> for (sonar::AlbumId, sonar::AlbumUpdate) {
+impl TryFrom<AlbumUpdateRequest> for (String, sonar::AlbumUpdate) {
     type Error = tonic::Status;
 
     fn try_from(value: AlbumUpdateRequest) -> Result<Self, Self::Error> {
         let artist_id = parse_artistid_opt(value.artist_id)?;
-        let album_id = parse_albumid(value.album_id)?;
         let cover_art = parse_imageid_opt(value.coverart_id)?;
         let update = sonar::AlbumUpdate {
             name: sonar::ValueUpdate::from_option_unchanged(value.name),
@@ -85,7 +83,7 @@ impl TryFrom<AlbumUpdateRequest> for (sonar::AlbumId, sonar::AlbumUpdate) {
             genres: convert_genre_updates_from_pb(value.genres)?,
             properties: convert_property_updates_from_pb(value.properties)?,
         };
-        Ok((album_id, update))
+        Ok((value.album_id, update))
     }
 }
 
@@ -121,11 +119,10 @@ impl TryFrom<TrackCreateRequest> for sonar::TrackCreate {
     }
 }
 
-impl TryFrom<TrackUpdateRequest> for (sonar::TrackId, sonar::TrackUpdate) {
+impl TryFrom<TrackUpdateRequest> for (String, sonar::TrackUpdate) {
     type Error = tonic::Status;
 
     fn try_from(value: TrackUpdateRequest) -> Result<Self, Self::Error> {
-        let track_id = parse_trackid(value.track_id)?;
         let album_id = parse_albumid_opt(value.album_id)?;
         let cover_art = parse_imageid_opt(value.coverart_id)?;
         let update = sonar::TrackUpdate {
@@ -135,7 +132,7 @@ impl TryFrom<TrackUpdateRequest> for (sonar::TrackId, sonar::TrackUpdate) {
             lyrics: Default::default(),
             properties: convert_property_updates_from_pb(value.properties)?,
         };
-        Ok((track_id, update))
+        Ok((value.track_id, update))
     }
 }
 

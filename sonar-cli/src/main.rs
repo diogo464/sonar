@@ -582,7 +582,7 @@ async fn cmd_artist_create(args: ArtistCreateArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct ArtistUpdateArgs {
-    id: sonar::ArtistId,
+    id: String,
 
     #[clap(long)]
     name: Option<String>,
@@ -610,7 +610,7 @@ async fn cmd_artist_update(args: ArtistUpdateArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct ArtistDeleteArgs {
-    id: sonar::ArtistId,
+    id: String,
 }
 
 async fn cmd_artist_delete(args: ArtistDeleteArgs) -> Result<()> {
@@ -654,7 +654,7 @@ async fn cmd_artist_search(args: ArtistSearchArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct ArtistAlbumsArgs {
-    artist_id: sonar::ArtistId,
+    artist_id: String,
 }
 
 async fn cmd_artist_albums(args: ArtistAlbumsArgs) -> Result<()> {
@@ -717,7 +717,7 @@ async fn cmd_album_list(args: AlbumListArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct AlbumCreateArgs {
-    artist_id: sonar::ArtistId,
+    artist_id: String,
 
     name: String,
 
@@ -747,7 +747,7 @@ async fn cmd_album_create(args: AlbumCreateArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct AlbumUpdateArgs {
-    id: sonar::AlbumId,
+    id: String,
 
     #[clap(long)]
     name: Option<String>,
@@ -775,7 +775,7 @@ async fn cmd_album_update(args: AlbumUpdateArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct AlbumDeleteArgs {
-    id: sonar::AlbumId,
+    id: String,
 }
 
 async fn cmd_album_delete(args: AlbumDeleteArgs) -> Result<()> {
@@ -819,7 +819,7 @@ async fn cmd_album_search(args: AlbumSearchArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct AlbumTracksArgs {
-    album_id: sonar::AlbumId,
+    album_id: String,
 }
 
 async fn cmd_album_tracks(args: AlbumTracksArgs) -> Result<()> {
@@ -883,7 +883,7 @@ async fn cmd_track_list(args: TrackListArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct TrackCreateArgs {
-    album_id: sonar::AlbumId,
+    album_id: String,
 
     name: String,
 
@@ -916,13 +916,13 @@ async fn cmd_track_create(args: TrackCreateArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct TrackUpdateArgs {
-    id: sonar::TrackId,
+    id: String,
 
     #[clap(long)]
     name: Option<String>,
 
     #[clap(long)]
-    album_id: Option<sonar::AlbumId>,
+    album_id: Option<String>,
 
     #[clap(long)]
     cover_art: Option<PathBuf>,

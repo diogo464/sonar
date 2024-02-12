@@ -174,6 +174,20 @@ pub async fn get_bulk(db: &mut DbC, track_ids: &[TrackId]) -> Result<Vec<Track>>
 }
 
 #[tracing::instrument(skip(db))]
+pub async fn get_by_name(db: &mut DbC, name: &str) -> Result<Track> {
+    let ids = sqlx::query_scalar("SELECT id FROM track WHERE name = ?")
+        .bind(name)
+        .fetch_all(&mut *db)
+        .await?;
+    if ids.is_empty() {
+        return Err(Error::new(ErrorKind::NotFound, "track not found"));
+    } else if ids.len() > 1 {
+        return Err(Error::new(ErrorKind::Invalid, "ambiguous track name"));
+    }
+    get(db, TrackId::from_db(ids[0])).await
+}
+
+#[tracing::instrument(skip(db))]
 pub async fn create(db: &mut DbC, create: TrackCreate) -> Result<Track> {
     let cover_art = create.cover_art.map(|id| id.to_db());
     let track_id = sqlx::query_scalar(

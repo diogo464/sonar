@@ -1,8 +1,8 @@
 use crate::{
     db::{self, Db, DbC},
     genre::{self, GenreUpdate},
-    property, ArtistId, Genres, ImageId, ListParams, Properties, PropertyUpdate, Result, Timestamp,
-    ValueUpdate,
+    property, ArtistId, Error, ErrorKind, Genres, ImageId, ListParams, Properties, PropertyUpdate,
+    Result, Timestamp, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -92,6 +92,20 @@ pub async fn get_bulk(db: &mut DbC, artist_ids: &[ArtistId]) -> Result<Vec<Artis
     let genres = genre::get_bulk(db, artist_ids.iter().copied()).await?;
     let properties = property::get_bulk(db, artist_ids.iter().copied()).await?;
     Ok(db::merge_view_genres_properties(views, genres, properties))
+}
+
+#[tracing::instrument(skip(db))]
+pub async fn get_by_name(db: &mut DbC, name: &str) -> Result<Artist> {
+    let ids = sqlx::query_scalar("SELECT id FROM artist WHERE name = ?")
+        .bind(name)
+        .fetch_all(&mut *db)
+        .await?;
+    if ids.is_empty() {
+        return Err(Error::new(ErrorKind::NotFound, "artist not found"));
+    } else if ids.len() > 1 {
+        return Err(Error::new(ErrorKind::Invalid, "ambiguous artist name"));
+    }
+    get(db, ArtistId::from_db(ids[0])).await
 }
 
 #[tracing::instrument(skip(db))]

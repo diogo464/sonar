@@ -22,6 +22,33 @@ impl Server {
     fn new(context: sonar::Context) -> Self {
         Self { context }
     }
+
+    async fn artist_lookup(&self, id_or_name: &str) -> Result<sonar::Artist, tonic::Status> {
+        match id_or_name.parse::<sonar::ArtistId>() {
+            Ok(artist_id) => sonar::artist_get(&self.context, artist_id).await.m(),
+            Err(_) => sonar::artist_get_by_name(&self.context, id_or_name)
+                .await
+                .m(),
+        }
+    }
+
+    async fn album_lookup(&self, id_or_name: &str) -> Result<sonar::Album, tonic::Status> {
+        match id_or_name.parse::<sonar::AlbumId>() {
+            Ok(album_id) => sonar::album_get(&self.context, album_id).await.m(),
+            Err(_) => sonar::album_get_by_name(&self.context, id_or_name)
+                .await
+                .m(),
+        }
+    }
+
+    async fn track_lookup(&self, id_or_name: &str) -> Result<sonar::Track, tonic::Status> {
+        match id_or_name.parse::<sonar::TrackId>() {
+            Ok(track_id) => sonar::track_get(&self.context, track_id).await.m(),
+            Err(_) => sonar::track_get_by_name(&self.context, id_or_name)
+                .await
+                .m(),
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -45,16 +72,12 @@ impl sonar_service_server::SonarService for Server {
         let req = request.into_inner();
         let username = req.username.parse::<sonar::Username>().m()?;
         let avatar = parse_imageid_opt(req.avatar_id)?;
-        let user = sonar::user_create(
-            &self.context,
-            sonar::UserCreate {
-                username,
-                password: req.password,
-                avatar,
-            },
-        )
-        .await
-        .m()?;
+        let create = sonar::UserCreate {
+            username,
+            password: req.password,
+            avatar,
+        };
+        let user = sonar::user_create(&self.context, create).await.m()?;
         Ok(tonic::Response::new(user.into()))
     }
     async fn user_update(
@@ -147,8 +170,7 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<ArtistGetRequest>,
     ) -> std::result::Result<tonic::Response<Artist>, tonic::Status> {
         let req = request.into_inner();
-        let artist_id = req.artist_id.parse::<sonar::ArtistId>().m()?;
-        let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
+        let artist = self.artist_lookup(&req.artist).await?;
         Ok(tonic::Response::new(artist.into()))
     }
     async fn artist_create(
@@ -156,21 +178,17 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<ArtistCreateRequest>,
     ) -> std::result::Result<tonic::Response<Artist>, tonic::Status> {
         let req = request.into_inner();
-        let artist = sonar::artist_create(
-            &self.context,
-            sonar::ArtistCreate {
-                name: req.name,
-                cover_art: req
-                    .coverart_id
-                    .map(|id| id.parse::<sonar::ImageId>())
-                    .transpose()
-                    .m()?,
-                genres: convert_genres_from_pb(req.genres)?,
-                properties: convert_properties_from_pb(req.properties)?,
-            },
-        )
-        .await
-        .m()?;
+        let create = sonar::ArtistCreate {
+            name: req.name,
+            cover_art: req
+                .coverart_id
+                .map(|id| id.parse::<sonar::ImageId>())
+                .transpose()
+                .m()?,
+            genres: convert_genres_from_pb(req.genres)?,
+            properties: convert_properties_from_pb(req.properties)?,
+        };
+        let artist = sonar::artist_create(&self.context, create).await.m()?;
         Ok(tonic::Response::new(artist.into()))
     }
     async fn artist_update(
@@ -179,7 +197,8 @@ impl sonar_service_server::SonarService for Server {
     ) -> std::result::Result<tonic::Response<Artist>, tonic::Status> {
         let req = request.into_inner();
         let (artist_id, update) = TryFrom::try_from(req)?;
-        let artist = sonar::artist_update(&self.context, artist_id, update)
+        let artist = self.artist_lookup(&artist_id).await?;
+        let artist = sonar::artist_update(&self.context, artist.id, update)
             .await
             .m()?;
         Ok(tonic::Response::new(artist.into()))
@@ -189,8 +208,8 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<ArtistDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         let req = request.into_inner();
-        let artist_id = req.artist_id.parse::<sonar::ArtistId>().m()?;
-        sonar::artist_delete(&self.context, artist_id).await.m()?;
+        let artist = self.artist_lookup(&req.artist_id).await?;
+        sonar::artist_delete(&self.context, artist.id).await.m()?;
         Ok(tonic::Response::new(()))
     }
     async fn album_list(
@@ -208,7 +227,8 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<AlbumListByArtistRequest>,
     ) -> std::result::Result<tonic::Response<AlbumListResponse>, tonic::Status> {
         let req = request.into_inner();
-        let artist_id = req.artist_id.parse::<sonar::ArtistId>().m()?;
+        let artist = self.artist_lookup(&req.artist_id).await?;
+        let artist_id = artist.id;
         let params = sonar::ListParams::from((req.offset, req.count));
         let albums = sonar::album_list_by_artist(&self.context, artist_id, params)
             .await
@@ -221,8 +241,7 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<AlbumGetRequest>,
     ) -> std::result::Result<tonic::Response<Album>, tonic::Status> {
         let req = request.into_inner();
-        let album_id = req.album_id.parse::<sonar::AlbumId>().m()?;
-        let album = sonar::album_get(&self.context, album_id).await.m()?;
+        let album = self.album_lookup(&req.album).await?;
         Ok(tonic::Response::new(album.into()))
     }
     async fn album_create(
@@ -240,7 +259,8 @@ impl sonar_service_server::SonarService for Server {
     ) -> std::result::Result<tonic::Response<Album>, tonic::Status> {
         let req = request.into_inner();
         let (album_id, update) = TryFrom::try_from(req)?;
-        let album = sonar::album_update(&self.context, album_id, update)
+        let album = self.album_lookup(&album_id).await?;
+        let album = sonar::album_update(&self.context, album.id, update)
             .await
             .m()?;
         Ok(tonic::Response::new(album.into()))
@@ -250,8 +270,8 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<AlbumDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         let req = request.into_inner();
-        let album_id = req.album_id.parse::<sonar::AlbumId>().m()?;
-        sonar::album_delete(&self.context, album_id).await.m()?;
+        let album = self.album_lookup(&req.album_id).await?;
+        sonar::album_delete(&self.context, album.id).await.m()?;
         Ok(tonic::Response::new(()))
     }
     async fn track_list(
@@ -269,9 +289,9 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<TrackListByAlbumRequest>,
     ) -> std::result::Result<tonic::Response<TrackListResponse>, tonic::Status> {
         let req = request.into_inner();
-        let album_id = req.album_id.parse::<sonar::AlbumId>().m()?;
+        let album = self.album_lookup(&req.album_id).await?;
         let params = sonar::ListParams::from((req.offset, req.count));
-        let tracks = sonar::track_list_by_album(&self.context, album_id, params)
+        let tracks = sonar::track_list_by_album(&self.context, album.id, params)
             .await
             .m()?;
         let tracks = tracks.into_iter().map(Into::into).collect();
@@ -282,8 +302,7 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<TrackGetRequest>,
     ) -> std::result::Result<tonic::Response<Track>, tonic::Status> {
         let req = request.into_inner();
-        let track_id = req.track_id.parse::<sonar::TrackId>().m()?;
-        let track = sonar::track_get(&self.context, track_id).await.m()?;
+        let track = self.track_lookup(&req.track).await?;
         Ok(tonic::Response::new(track.into()))
     }
     async fn track_create(
@@ -301,7 +320,8 @@ impl sonar_service_server::SonarService for Server {
     ) -> std::result::Result<tonic::Response<Track>, tonic::Status> {
         let req = request.into_inner();
         let (track_id, update) = TryFrom::try_from(req)?;
-        let track = sonar::track_update(&self.context, track_id, update)
+        let track = self.track_lookup(&track_id).await?;
+        let track = sonar::track_update(&self.context, track.id, update)
             .await
             .m()?;
         Ok(tonic::Response::new(track.into()))
@@ -311,8 +331,8 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<TrackDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         let req = request.into_inner();
-        let track_id = req.track_id.parse::<sonar::TrackId>().m()?;
-        sonar::track_delete(&self.context, track_id).await.m()?;
+        let track = self.track_lookup(&req.track_id).await?;
+        sonar::track_delete(&self.context, track.id).await.m()?;
         Ok(tonic::Response::new(()))
     }
     async fn track_lyrics(
@@ -320,8 +340,8 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<TrackLyricsRequest>,
     ) -> std::result::Result<tonic::Response<TrackLyricsResponse>, tonic::Status> {
         let req = request.into_inner();
-        let track_id = req.track_id.parse::<sonar::TrackId>().m()?;
-        let lyrics = sonar::track_get_lyrics(&self.context, track_id).await.m()?;
+        let track = self.track_lookup(&req.track_id).await?;
+        let lyrics = sonar::track_get_lyrics(&self.context, track.id).await.m()?;
         Ok(tonic::Response::new(TrackLyricsResponse {
             lyrics: Some(lyrics.into()),
         }))

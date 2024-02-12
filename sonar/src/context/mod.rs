@@ -411,6 +411,11 @@ pub async fn artist_get_bulk(context: &Context, artist_ids: &[ArtistId]) -> Resu
     artist::get_bulk(&mut conn, artist_ids).await
 }
 
+pub async fn artist_get_by_name(context: &Context, name: &str) -> Result<Artist> {
+    let mut conn = context.db.acquire().await?;
+    artist::get_by_name(&mut conn, name).await
+}
+
 #[tracing::instrument(skip(context))]
 pub async fn artist_create(context: &Context, create: ArtistCreate) -> Result<Artist> {
     let mut tx = context.db.begin().await?;
@@ -482,6 +487,12 @@ pub async fn album_get_bulk(context: &Context, album_ids: &[AlbumId]) -> Result<
 }
 
 #[tracing::instrument(skip(context))]
+pub async fn album_get_by_name(context: &Context, name: &str) -> Result<Album> {
+    let mut conn = context.db.acquire().await?;
+    album::get_by_name(&mut conn, name).await
+}
+
+#[tracing::instrument(skip(context))]
 pub async fn album_create(context: &Context, create: AlbumCreate) -> Result<Album> {
     let mut tx = context.db.begin().await?;
     let result = album::create(&mut tx, create).await?;
@@ -542,6 +553,12 @@ pub async fn track_get(context: &Context, track_id: TrackId) -> Result<Track> {
 pub async fn track_get_bulk(context: &Context, track_ids: &[TrackId]) -> Result<Vec<Track>> {
     let mut conn = context.db.acquire().await?;
     track::get_bulk(&mut conn, track_ids).await
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn track_get_by_name(context: &Context, name: &str) -> Result<Track> {
+    let mut conn = context.db.acquire().await?;
+    track::get_by_name(&mut conn, name).await
 }
 
 #[tracing::instrument(skip(context))]
