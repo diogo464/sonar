@@ -75,12 +75,14 @@ impl MetadataProvider for SpotifyMetadata {
         let artist_id = spotify_id_to_artist_id(spotify_id)?;
         let artist = self.client.artist(artist_id).await.map_err(Error::wrap)?;
         let image = self.download_first_image(&artist.images).await?;
-        Ok(ArtistMetadata {
+        let metadata = ArtistMetadata {
             name: Some(artist.name),
             genres: convert_genres(artist.genres),
             properties: Default::default(),
             cover: image,
-        })
+        };
+        tracing::debug!("artist metadata: {:#?}", metadata);
+        Ok(metadata)
     }
     async fn album_metadata(
         &self,
@@ -100,12 +102,14 @@ impl MetadataProvider for SpotifyMetadata {
             .await
             .map_err(Error::wrap)?;
         let image = self.download_first_image(&album.images).await?;
-        Ok(AlbumMetadata {
+        let metadata = AlbumMetadata {
             name: Some(album.name),
             genres: convert_genres(album.genres),
             properties: Default::default(),
             cover: image,
-        })
+        };
+        tracing::debug!("album metadata: {:#?}", metadata);
+        Ok(metadata)
     }
     async fn album_tracks_metadata(
         &self,
@@ -142,7 +146,9 @@ impl MetadataProvider for SpotifyMetadata {
             tracks.insert(t.id, simplified_track_to_track_metadata(track));
         }
 
-        Ok(AlbumTracksMetadata { tracks })
+        let metadata = AlbumTracksMetadata { tracks };
+        tracing::debug!("album tracks metadata: {:#?}", metadata);
+        Ok(metadata)
     }
     async fn track_metadata(
         &self,
@@ -161,7 +167,9 @@ impl MetadataProvider for SpotifyMetadata {
             .track(track_id, None)
             .await
             .map_err(Error::wrap)?;
-        Ok(full_track_to_track_metadata(track))
+        let metadata = full_track_to_track_metadata(track);
+        tracing::debug!("track metadata: {:#?}", metadata);
+        Ok(metadata)
     }
 }
 
