@@ -250,7 +250,8 @@ pub(crate) async fn get_bulk(
     let mut result = Vec::with_capacity(ids.len());
     for id in ids {
         let identifier = id.identifier();
-        result.push(properties.remove(&identifier).unwrap_or_default());
+        // NOTE: we don't use remove here because we allow duplicate ids
+        result.push(properties.get(&identifier).cloned().unwrap_or_default());
     }
 
     Ok(result)
@@ -438,7 +439,7 @@ pub(crate) async fn user_list_with_property(
     let mut ids = Vec::with_capacity(rows.len());
     for row in rows {
         ids.push(
-            SonarId::from_type_and_id(row.get::<i64, _>(0) as u32, row.get::<i64, _>(1) as u32)
+            SonarId::from_namespace_and_id(row.get::<i64, _>(0) as u32, row.get::<i64, _>(1) as u32)
                 .expect("invalid id in database"),
         );
     }

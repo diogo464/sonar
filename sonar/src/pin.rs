@@ -12,7 +12,7 @@ pub async fn list(db: &mut DbC, user_id: UserId) -> Result<Vec<SonarId>> {
     for row in rows {
         let namespace = row.get::<i64, _>(0) as u32;
         let identifier = row.get::<i64, _>(1) as u32;
-        let sonar_id = SonarId::from_type_and_id(namespace, identifier)
+        let sonar_id = SonarId::from_namespace_and_id(namespace, identifier)
             .expect("invalid identifier in database");
         sonar_ids.push(sonar_id);
     }
@@ -29,7 +29,7 @@ pub async fn list_all(db: &mut DbC) -> Result<Vec<SonarId>> {
     for row in rows {
         let namespace = row.get::<i64, _>(0) as u32;
         let identifier = row.get::<i64, _>(1) as u32;
-        let sonar_id = SonarId::from_type_and_id(namespace, identifier)
+        let sonar_id = SonarId::from_namespace_and_id(namespace, identifier)
             .expect("invalid identifier in database");
         sonar_ids.push(sonar_id);
     }

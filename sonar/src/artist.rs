@@ -1,5 +1,5 @@
 use crate::{
-    db::{self, Db, DbC},
+    db::{self, Db, DbC, SonarView},
     genre::{self, GenreUpdate},
     property, ArtistId, Error, ErrorKind, Genres, ImageId, ListParams, Properties, PropertyUpdate,
     Result, Timestamp, ValueUpdate,
@@ -33,7 +33,7 @@ pub struct ArtistUpdate {
     pub properties: Vec<PropertyUpdate>,
 }
 
-#[derive(sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 struct ArtistView {
     id: i64,
     name: String,
@@ -41,6 +41,12 @@ struct ArtistView {
     cover_art: Option<i64>,
     album_count: i64,
     created_at: i64,
+}
+
+impl SonarView for ArtistView {
+    fn sonar_id(&self) -> crate::SonarId {
+        ArtistId::from_db(self.id).into()
+    }
 }
 
 impl From<(ArtistView, Genres, Properties)> for Artist {
@@ -89,9 +95,12 @@ pub async fn get(db: &mut DbC, artist_id: ArtistId) -> Result<Artist> {
 #[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, artist_ids: &[ArtistId]) -> Result<Vec<Artist>> {
     let views = db::list_bulk::<ArtistView, _>(db, "sqlx_artist", artist_ids).await?;
+    let expanded = db::expand_views(views, artist_ids);
     let genres = genre::get_bulk(db, artist_ids.iter().copied()).await?;
     let properties = property::get_bulk(db, artist_ids.iter().copied()).await?;
-    Ok(db::merge_view_genres_properties(views, genres, properties))
+    Ok(db::merge_view_genres_properties(
+        expanded, genres, properties,
+    ))
 }
 
 #[tracing::instrument(skip(db))]

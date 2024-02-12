@@ -120,7 +120,7 @@ mod test {
         let key = random_key();
         let bytes = Bytes::from_static(b"hello world");
         storage.put(&key, bytes.clone()).await.unwrap();
-        let result = storage.read(&key, BlobRange::new(1, 3)).await.unwrap();
+        let result = storage.read(&key, ByteRange::new(1, 3)).await.unwrap();
         let result = bytestream::to_bytes(result).await.unwrap();
         assert_eq!(result, Bytes::from_static(b"ell"));
     }

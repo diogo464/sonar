@@ -1,9 +1,13 @@
 use crate::{
-    Error, ErrorKind, Genres, ListParams, Properties, Result, SonarIdentifier, ValueUpdate,
+    Error, ErrorKind, Genres, ListParams, Properties, Result, SonarId, SonarIdentifier, ValueUpdate,
 };
 
 pub type Db = sqlx::SqlitePool;
 pub type DbC = sqlx::SqliteConnection;
+
+pub trait SonarView: Clone + 'static {
+    fn sonar_id(&self) -> SonarId;
+}
 
 pub fn query_builder_push_id_tuple<I, ID, DB>(builder: &mut sqlx::QueryBuilder<'_, DB>, ids: I)
 where
@@ -187,6 +191,41 @@ pub async fn value_update_id_nullable(
     Ok(())
 }
 
+pub fn expand_views<V, I>(views: Vec<V>, ids: &[I]) -> Vec<V>
+where
+    V: SonarView,
+    I: SonarIdentifier,
+{
+    let views_by_id = views
+        .into_iter()
+        .map(|view| (view.sonar_id(), view))
+        .collect::<std::collections::HashMap<_, _>>();
+    let mut expanded_views = Vec::with_capacity(ids.len());
+    for id in ids {
+        let id = SonarId::from_namespace_and_id(id.namespace(), id.identifier()).unwrap();
+        if let Some(view) = views_by_id.get(&id) {
+            expanded_views.push(view.clone());
+        }
+    }
+    expanded_views
+}
+
+pub fn merge_view_properties<T, R>(views: Vec<T>, properties: Vec<Properties>) -> Vec<R>
+where
+    R: From<(T, Properties)>,
+{
+    if views.len() != properties.len() {
+        panic!("merge_view_properties: input vectors must have the same length. views: {}, properties: {}",
+               views.len(), properties.len());
+    }
+
+    views
+        .into_iter()
+        .zip(properties)
+        .map(|(view, properties)| From::from((view, properties)))
+        .collect()
+}
+
 pub fn merge_view_genres_properties<T, R>(
     views: Vec<T>,
     genres: Vec<Genres>,
@@ -196,7 +235,8 @@ where
     R: From<(T, Genres, Properties)>,
 {
     if views.len() != genres.len() || views.len() != properties.len() {
-        panic!("merge_view_genres_properties: input vectors must have the same length");
+        panic!("merge_view_genres_properties: input vectors must have the same length. views: {}, genres: {}, properties: {}",
+               views.len(), genres.len(), properties.len());
     }
 
     views

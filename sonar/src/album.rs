@@ -3,9 +3,9 @@ use std::time::Duration;
 use sqlx::Row;
 
 use crate::{
-    db::{self, Db, DbC},
+    db::{self, Db, DbC, SonarView},
     genre, property, AlbumId, ArtistId, Error, ErrorKind, GenreUpdate, Genres, ImageId, ListParams,
-    Properties, PropertyUpdate, Result, Timestamp, ValueUpdate,
+    Properties, PropertyUpdate, Result, SonarId, Timestamp, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -40,7 +40,7 @@ pub struct AlbumUpdate {
     pub properties: Vec<PropertyUpdate>,
 }
 
-#[derive(sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 struct AlbumView {
     id: i64,
     name: String,
@@ -50,6 +50,12 @@ struct AlbumView {
     cover_art: Option<i64>,
     track_count: Option<i64>,
     created_at: i64,
+}
+
+impl SonarView for AlbumView {
+    fn sonar_id(&self) -> SonarId {
+        AlbumId::from_db(self.id).into()
+    }
 }
 
 impl From<(AlbumView, Genres, Properties)> for Album {
@@ -124,19 +130,13 @@ pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
 
 #[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, album_ids: &[AlbumId]) -> Result<Vec<Album>> {
-    let mut query = sqlx::QueryBuilder::new("SELECT * FROM sqlx_album WHERE id IN");
-    db::query_builder_push_id_tuple(&mut query, album_ids.iter().copied());
-    let albums = query
-        .build_query_as::<AlbumView>()
-        .fetch_all(&mut *db)
-        .await?;
-    let album_ids = albums
-        .iter()
-        .map(|album| AlbumId::from_db(album.id))
-        .collect::<Vec<_>>();
+    let views = db::list_bulk::<AlbumView, _>(db, "sqlx_album", album_ids).await?;
+    let expanded = db::expand_views(views, album_ids);
     let genres = genre::get_bulk(db, album_ids.iter().copied()).await?;
     let properties = property::get_bulk(db, album_ids.iter().copied()).await?;
-    Ok(db::merge_view_genres_properties(albums, genres, properties))
+    Ok(db::merge_view_genres_properties(
+        expanded, genres, properties,
+    ))
 }
 
 #[tracing::instrument(skip(db))]

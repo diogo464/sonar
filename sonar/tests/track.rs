@@ -57,6 +57,39 @@ async fn track_list_two() {
 }
 
 #[tokio::test]
+async fn track_get_bulk() {
+    let ctx = sonar::test::create_context_memory().await;
+    let artist = sonar::test::create_artist(&ctx, "artist").await;
+    let album = sonar::test::create_album(&ctx, artist.id, "album").await;
+    let track1 = sonar::test::create_track(&ctx, album.id, "track1").await;
+    let track2 = sonar::test::create_track(&ctx, album.id, "track2").await;
+    let tracks = sonar::track_get_bulk(&ctx, &[track1.id, track2.id])
+        .await
+        .unwrap();
+    assert_eq!(tracks.len(), 2);
+    assert_eq!(tracks[0].id, track1.id);
+    assert_eq!(tracks[1].id, track2.id);
+}
+
+#[tokio::test]
+async fn track_get_bulk_repeated() {
+    let ctx = sonar::test::create_context_memory().await;
+    let artist = sonar::test::create_artist(&ctx, "artist").await;
+    let album = sonar::test::create_album(&ctx, artist.id, "album").await;
+    let track1 = sonar::test::create_track(&ctx, album.id, "track1").await;
+    let track2 = sonar::test::create_track(&ctx, album.id, "track2").await;
+    let track3 = sonar::test::create_track(&ctx, album.id, "track3").await;
+    let tracks = sonar::track_get_bulk(&ctx, &[track1.id, track2.id, track3.id, track2.id])
+        .await
+        .unwrap();
+    assert_eq!(tracks.len(), 4);
+    assert_eq!(tracks[0].id, track1.id);
+    assert_eq!(tracks[1].id, track2.id);
+    assert_eq!(tracks[2].id, track3.id);
+    assert_eq!(tracks[3].id, track2.id);
+}
+
+#[tokio::test]
 async fn track_delete_one() {
     let ctx = sonar::test::create_context_memory().await;
     let artist = sonar::test::create_artist(&ctx, "artist").await;

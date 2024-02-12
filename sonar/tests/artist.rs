@@ -46,6 +46,35 @@ async fn artist_list_two() {
 }
 
 #[tokio::test]
+async fn artist_get_bulk() {
+    let ctx = sonar::test::create_context_memory().await;
+    let artist1 = sonar::test::create_artist(&ctx, "artist1").await;
+    let artist2 = sonar::test::create_artist(&ctx, "artist2").await;
+    let artists = sonar::artist_get_bulk(&ctx, &[artist1.id, artist2.id])
+        .await
+        .unwrap();
+    assert_eq!(artists.len(), 2);
+    assert_eq!(artists[0].id, artist1.id);
+    assert_eq!(artists[1].id, artist2.id);
+}
+
+#[tokio::test]
+async fn artist_get_bulk_repeated() {
+    let ctx = sonar::test::create_context_memory().await;
+    let artist1 = sonar::test::create_artist(&ctx, "artist1").await;
+    let artist2 = sonar::test::create_artist(&ctx, "artist2").await;
+    let artist3 = sonar::test::create_artist(&ctx, "artist3").await;
+    let artists = sonar::artist_get_bulk(&ctx, &[artist1.id, artist2.id, artist3.id, artist2.id])
+        .await
+        .unwrap();
+    assert_eq!(artists.len(), 4);
+    assert_eq!(artists[0].id, artist1.id);
+    assert_eq!(artists[1].id, artist2.id);
+    assert_eq!(artists[2].id, artist3.id);
+    assert_eq!(artists[3].id, artist2.id);
+}
+
+#[tokio::test]
 async fn artist_update_one() {
     let ctx = sonar::test::create_context_memory().await;
     let create = sonar::ArtistCreate {

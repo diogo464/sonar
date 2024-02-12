@@ -326,7 +326,7 @@ impl SonarIdentifier for SonarId {
 }
 
 impl SonarId {
-    pub(crate) fn from_type_and_id(ty: u32, id: u32) -> Result<SonarId, InvalidIdError> {
+    pub(crate) fn from_namespace_and_id(ty: u32, id: u32) -> Result<SonarId, InvalidIdError> {
         let id = id | ty << ID_NAMESPACE_SHIFT;
         TryFrom::try_from(id)
     }

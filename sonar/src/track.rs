@@ -5,9 +5,9 @@ use sqlx::Row;
 use crate::{
     audio::{self, AudioDownload},
     blob::BlobStorage,
-    db::{self, Db, DbC},
+    db::{self, Db, DbC, SonarView},
     property, AlbumId, ArtistId, AudioId, ByteRange, Error, ErrorKind, ImageId, ListParams,
-    Properties, PropertyUpdate, Result, Timestamp, TrackId, ValueUpdate,
+    Properties, PropertyUpdate, Result, SonarId, Timestamp, TrackId, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -78,7 +78,7 @@ pub struct Lyrics {
     pub lines: Vec<LyricsLine>,
 }
 
-#[derive(sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 struct TrackView {
     id: i64,
     name: String,
@@ -89,6 +89,12 @@ struct TrackView {
     listen_count: Option<i64>,
     cover_art: Option<i64>,
     created_at: i64,
+}
+
+impl SonarView for TrackView {
+    fn sonar_id(&self) -> SonarId {
+        TrackId::from_db(self.id).into()
+    }
 }
 
 impl From<(TrackView, Properties)> for Track {
@@ -165,12 +171,9 @@ pub async fn get(db: &mut DbC, track_id: TrackId) -> Result<Track> {
 #[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, track_ids: &[TrackId]) -> Result<Vec<Track>> {
     let views = db::list_bulk::<TrackView, _>(db, "sqlx_track", track_ids).await?;
+    let expanded = db::expand_views(views, track_ids);
     let properties = property::get_bulk(db, track_ids.iter().copied()).await?;
-    Ok(views
-        .into_iter()
-        .zip(properties.into_iter())
-        .map(Track::from)
-        .collect())
+    Ok(db::merge_view_properties(expanded, properties))
 }
 
 #[tracing::instrument(skip(db))]

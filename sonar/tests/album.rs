@@ -121,6 +121,37 @@ async fn album_list_limit() {
 }
 
 #[tokio::test]
+async fn album_get_bulk() {
+    let ctx = sonar::test::create_context_memory().await;
+    let artist = sonar::test::create_artist(&ctx, "artist").await;
+    let album1 = sonar::test::create_album(&ctx, artist.id, "album1").await;
+    let album2 = sonar::test::create_album(&ctx, artist.id, "album2").await;
+    let albums = sonar::album_get_bulk(&ctx, &[album1.id, album2.id])
+        .await
+        .unwrap();
+    assert_eq!(albums.len(), 2);
+    assert_eq!(albums[0].id, album1.id);
+    assert_eq!(albums[1].id, album2.id);
+}
+
+#[tokio::test]
+async fn album_get_bulk_repeated() {
+    let ctx = sonar::test::create_context_memory().await;
+    let artist = sonar::test::create_artist(&ctx, "artist").await;
+    let album1 = sonar::test::create_album(&ctx, artist.id, "album1").await;
+    let album2 = sonar::test::create_album(&ctx, artist.id, "album2").await;
+    let album3 = sonar::test::create_album(&ctx, artist.id, "album3").await;
+    let albums = sonar::album_get_bulk(&ctx, &[album1.id, album2.id, album3.id, album2.id])
+        .await
+        .unwrap();
+    assert_eq!(albums.len(), 4);
+    assert_eq!(albums[0].id, album1.id);
+    assert_eq!(albums[1].id, album2.id);
+    assert_eq!(albums[2].id, album3.id);
+    assert_eq!(albums[3].id, album2.id);
+}
+
+#[tokio::test]
 async fn album_delete_one() {
     let ctx = sonar::test::create_context_memory().await;
     let artist = sonar::test::create_artist(&ctx, "artist").await;
