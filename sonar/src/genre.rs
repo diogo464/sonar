@@ -167,6 +167,13 @@ impl Genres {
         self.0.iter()
     }
 
+    pub fn into_genre_updates(self) -> Vec<GenreUpdate> {
+        self.0
+            .into_iter()
+            .map(|genre| GenreUpdate::set(genre))
+            .collect()
+    }
+
     pub fn merge(&mut self, other: &Self) {
         for genre in other.iter() {
             self.set(genre);

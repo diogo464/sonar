@@ -1004,7 +1004,7 @@ pub async fn metadata_fetch_artist(context: &Context, artist_id: ArtistId) -> Re
     let image_id = metadata_create_image_opt(context, metadata.cover).await;
     let update = ArtistUpdate {
         name: ValueUpdate::from_option_unchanged(metadata.name),
-        genres: Default::default(), // TODO: fix
+        genres: metadata.genres.into_genre_updates(),
         properties: metadata.properties.into_property_updates(),
         cover_art: ValueUpdate::from_option_unchanged(image_id),
     };
@@ -1018,7 +1018,7 @@ pub async fn metadata_fetch_album(context: &Context, album_id: AlbumId) -> Resul
     let image_id = metadata_create_image_opt(context, metadata.cover).await;
     let update = AlbumUpdate {
         name: ValueUpdate::from_option_unchanged(metadata.name),
-        genres: Default::default(), // TODO: fix
+        genres: metadata.genres.into_genre_updates(),
         properties: metadata.properties.into_property_updates(),
         cover_art: ValueUpdate::from_option_unchanged(image_id),
         ..Default::default()
