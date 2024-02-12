@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{
     db::{self, Db, DbC},
     property, Error, ListParams, PlaylistId, Properties, PropertyUpdate, Result, Timestamp,
@@ -18,6 +20,7 @@ pub struct Playlist {
     pub name: String,
     pub owner: UserId,
     pub track_count: u32,
+    pub duration: Duration,
     pub properties: Properties,
     pub created_at: Timestamp,
 }
@@ -70,6 +73,7 @@ impl From<(PlaylistView, Properties)> for Playlist {
             name: value.name,
             owner: UserId::from_db(value.owner),
             track_count: value.track_count as u32,
+            duration: Duration::from_millis(value.duration_ms as u64),
             properties,
             created_at: Timestamp::from_seconds(value.created_at as u64),
         }

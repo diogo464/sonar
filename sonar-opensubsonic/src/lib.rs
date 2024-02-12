@@ -641,7 +641,7 @@ fn playlist_from_playlist(playlist: sonar::Playlist) -> Playlist {
         owner: Some(playlist.owner.to_string()),
         public: None,
         song_count: playlist.track_count,
-        duration: Default::default(),
+        duration: Seconds::from(playlist.duration),
         created: Default::default(),
         changed: Default::default(),
         cover_art: None,
