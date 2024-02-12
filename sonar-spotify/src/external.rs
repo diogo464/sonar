@@ -79,6 +79,7 @@ impl sonar::ExternalService for SpotifyService {
             albums: artist
                 .albums
                 .into_iter()
+                .chain(artist.singles)
                 .map(|id| ExternalMediaId::new(id.to_string()))
                 .collect(),
             cover: None,
