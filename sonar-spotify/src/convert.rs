@@ -6,30 +6,7 @@ use tokio::{
     process::Command,
 };
 
-/// convert an audio file to the standard format used by the audio player
-pub async fn convert(input: &Path, output: &Path) -> Result<()> {
-    tracing::info!("converting {:?} to {:?}", input, output);
-    Command::new("ffmpeg")
-        .arg("-i")
-        .arg(input)
-        .arg("-map_metadata")
-        .arg("-1")
-        .arg("-ar")
-        .arg("48000")
-        .arg("-ab")
-        .arg("320k")
-        .arg("-ac")
-        .arg("2")
-        .arg("-f")
-        .arg("mp3")
-        .arg("-vn")
-        .arg("-y")
-        .arg(output)
-        .output()
-        .await?;
-    Ok(())
-}
-
+#[allow(dead_code)]
 pub enum ConvertSamplesSource<'a> {
     Buffer(&'a [i16]),
     Path(&'a Path),
@@ -76,10 +53,7 @@ pub async fn convert_samples_i16(source: ConvertSamplesSource<'_>, output: &Path
             drop(stdin);
             child
         }
-        ConvertSamplesSource::Path(_) => {
-            let child = cmd.spawn()?;
-            child
-        }
+        ConvertSamplesSource::Path(_) => cmd.spawn()?,
     };
 
     child.wait_with_output().await?;

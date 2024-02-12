@@ -12,7 +12,7 @@ mod property_update;
 pub use property_update::*;
 use sqlx::Row;
 
-use crate::{db::DbC, Error, Result, SonarId, SonarIdentifier, UserId};
+use crate::{db::DbC, Result, SonarId, SonarIdentifier, UserId};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Properties(HashMap<Cow<'static, str>, Cow<'static, str>>);
@@ -32,6 +32,10 @@ impl Properties {
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     pub fn contains_key(&self, key: impl AsRef<str>) -> bool {

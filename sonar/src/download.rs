@@ -428,8 +428,10 @@ async fn find_or_create_album(
         )
         .await
         {
-            let mut update = AlbumUpdate::default();
-            update.cover_art = ValueUpdate::Set(image_id);
+            let update = AlbumUpdate {
+                cover_art: ValueUpdate::Set(image_id),
+                ..Default::default()
+            };
             album::update(&mut tx, album.id, update).await?;
             tx.commit().await?;
         }

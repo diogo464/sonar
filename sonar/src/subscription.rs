@@ -148,13 +148,13 @@ impl SubscriptionController {
                 let user_id = UserId::from_db(row.get(0));
                 let external_id = ExternalMediaId::from(row.get::<String, _>(1));
                 let key = SubscriptionKey::new(user_id, external_id);
-                if !subscriptions.contains_key(&key) {
+                subscriptions.entry(key).or_insert_with(|| {
                     let state = SubscriptionState {
                         last_download: Instant::now(),
                         description: Default::default(),
                     };
-                    subscriptions.insert(key, state);
-                }
+                    state
+                });
             }
 
             let sync_interval = std::time::Duration::from_secs(24 * 60 * 60);

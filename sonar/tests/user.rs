@@ -91,9 +91,10 @@ async fn login() {
     let ctx = sonar::test::create_context_memory().await;
     let user = sonar::test::create_user_with_password(&ctx, "User", "admin1234").await;
 
-    let (user_id, token) = sonar::user_login(&ctx, &sonar::Username::new("User").unwrap(), "admin1234")
-        .await
-        .unwrap();
+    let (user_id, token) =
+        sonar::user_login(&ctx, &sonar::Username::new("User").unwrap(), "admin1234")
+            .await
+            .unwrap();
     assert_eq!(user.id, user_id);
 
     let user_id = sonar::user_validate_token(&ctx, &token).await.unwrap();

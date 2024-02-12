@@ -3,9 +3,12 @@ use std::{collections::HashMap, io::Result, sync::Mutex};
 use bytes::{Bytes, BytesMut};
 use tokio_stream::StreamExt;
 
-use crate::bytestream::{self, ByteStream};
+use crate::{
+    bytestream::{self, ByteStream},
+    ByteRange,
+};
 
-use super::{BlobRange, BlobStorage};
+use super::BlobStorage;
 
 #[derive(Default)]
 pub struct MemoryBlobStorage {
@@ -20,11 +23,11 @@ impl std::fmt::Debug for MemoryBlobStorage {
 
 #[async_trait::async_trait]
 impl BlobStorage for MemoryBlobStorage {
-    async fn get(&self, key: &str, range: BlobRange) -> Result<Bytes> {
+    async fn get(&self, key: &str, range: ByteRange) -> Result<Bytes> {
         let blobs = self.blobs.lock().unwrap();
         match blobs.get(key) {
             Some(bytes) => {
-                let start = range.start.unwrap_or(0);
+                let start = range.offset.unwrap_or(0);
                 let length = range
                     .length
                     .unwrap_or(bytes.len() as u64)
@@ -37,7 +40,7 @@ impl BlobStorage for MemoryBlobStorage {
             )),
         }
     }
-    async fn read(&self, key: &str, range: BlobRange) -> Result<ByteStream> {
+    async fn read(&self, key: &str, range: ByteRange) -> Result<ByteStream> {
         let data = self.get(key, range).await?;
         Ok(bytestream::from_bytes(data))
     }

@@ -8,7 +8,7 @@ use tower_http::cors::Any;
 const PROPERTY_USER_STARRED: PropertyKey =
     PropertyKey::new_const("user.opensubsonic.sonar.io/starred");
 const DEFAULT_MUSIC_FOLDER_ID: u32 = 1;
-const DEFAULT_MUSIC_FOLDER_NAME: &'static str = "sonar";
+const DEFAULT_MUSIC_FOLDER_NAME: &str = "sonar";
 
 #[derive(Debug)]
 struct Server {
@@ -36,9 +36,9 @@ impl Server {
             }
         }
 
-        let username = request.username.parse::<sonar::Username>().m()?;
+        let _username = request.username.parse::<sonar::Username>().m()?;
         let username = "admin".parse::<sonar::Username>().m()?;
-        let password = match &request.authentication {
+        let _password = match &request.authentication {
             Authentication::Password(password) => password,
             _ => {
                 return Err(opensubsonic::response::Error::with_message(
@@ -191,7 +191,7 @@ impl OpenSubsonicServer for Server {
             song,
         })
     }
-    async fn get_indexes(&self, request: Request<GetIndexes>) -> Result<ArtistsID3> {
+    async fn get_indexes(&self, _request: Request<GetIndexes>) -> Result<ArtistsID3> {
         // TODO: refactor with get_artists
         let artists = sonar::artist_list(&self.context, Default::default())
             .await
@@ -293,7 +293,7 @@ impl OpenSubsonicServer for Server {
             song,
         })
     }
-    async fn get_album_info2(&self, request: Request<GetAlbumInfo2>) -> Result<AlbumInfo> {
+    async fn get_album_info2(&self, _request: Request<GetAlbumInfo2>) -> Result<AlbumInfo> {
         Ok(AlbumInfo::default())
     }
     #[tracing::instrument]

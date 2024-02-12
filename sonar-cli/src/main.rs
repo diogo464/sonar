@@ -208,7 +208,7 @@ impl From<sonar_grpc::Lyrics> for Lyrics {
                 .lines
                 .into_iter()
                 .map(|line| LyricsLine {
-                    offset: line.offset as u32,
+                    offset: line.offset,
                     text: line.text,
                 })
                 .collect(),
@@ -575,7 +575,7 @@ async fn cmd_artist_create(args: ArtistCreateArgs) -> Result<()> {
         })
         .await?;
     let artist = Artist::from(response.into_inner());
-    stdout_value(&artist)?;
+    stdout_value(artist)?;
 
     Ok(())
 }
@@ -741,7 +741,7 @@ async fn cmd_album_create(args: AlbumCreateArgs) -> Result<()> {
         })
         .await?;
     let album = Album::from(response.into_inner());
-    stdout_value(&album)?;
+    stdout_value(album)?;
     Ok(())
 }
 
@@ -910,7 +910,7 @@ async fn cmd_track_create(args: TrackCreateArgs) -> Result<()> {
         })
         .await?;
     let track = Track::from(response.into_inner());
-    stdout_value(&track)?;
+    stdout_value(track)?;
     Ok(())
 }
 
@@ -1003,7 +1003,7 @@ async fn cmd_track_lyrics(args: TrackLyricsArgs) -> Result<()> {
         })
         .await?;
     let lyrics = Lyrics::from(response.into_inner().lyrics.unwrap());
-    stdout_value(&lyrics)?;
+    stdout_value(lyrics)?;
     Ok(())
 }
 
@@ -1015,7 +1015,7 @@ struct TrackDownloadArgs {
     output: Option<PathBuf>,
 }
 
-async fn cmd_track_download(args: TrackDownloadArgs) -> Result<()> {
+async fn cmd_track_download(_args: TrackDownloadArgs) -> Result<()> {
     todo!()
 }
 
@@ -1078,7 +1078,7 @@ async fn cmd_playlist_create(args: PlaylistCreateArgs) -> Result<()> {
         })
         .await?;
     let playlist = Playlist::from(response.into_inner());
-    stdout_value(&playlist)?;
+    stdout_value(playlist)?;
     Ok(())
 }
 
@@ -1099,7 +1099,7 @@ async fn cmd_playlist_duplicate(args: PlaylistDuplicateArgs) -> Result<()> {
         })
         .await?;
     let playlist = Playlist::from(response.into_inner());
-    stdout_value(&playlist)?;
+    stdout_value(playlist)?;
     Ok(())
 }
 
@@ -1258,7 +1258,7 @@ async fn cmd_scrobble_create(args: ScrobbleCreateArgs) -> Result<()> {
         })
         .await?;
     let scrobble = Scrobble::from(response.into_inner());
-    stdout_value(&scrobble)?;
+    stdout_value(scrobble)?;
     Ok(())
 }
 
@@ -1412,7 +1412,7 @@ async fn cmd_search(args: SearchArgs) -> Result<()> {
     }
 
     let results = SearchResults(results);
-    stdout_value(&results)?;
+    stdout_value(results)?;
 
     Ok(())
 }
@@ -1734,7 +1734,7 @@ async fn cmd_admin_playlist_create(args: AdminPlaylistCreateArgs) -> Result<()> 
             ..Default::default()
         })
         .await?;
-    stdout_value(&Playlist::from(response.into_inner()))?;
+    stdout_value(Playlist::from(response.into_inner()))?;
     Ok(())
 }
 
@@ -1755,7 +1755,7 @@ async fn cmd_admin_playlist_update(args: AdminPlaylistUpdateArgs) -> Result<()> 
             ..Default::default()
         })
         .await?;
-    stdout_value(&Playlist::from(response.into_inner()))?;
+    stdout_value(Playlist::from(response.into_inner()))?;
     Ok(())
 }
 

@@ -147,7 +147,7 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<ImageDownloadRequest>,
     ) -> std::result::Result<tonic::Response<SonarImageDownloadStream>, tonic::Status> {
         let req = request.into_inner();
-        let image_id = req.image_id.parse::<sonar::ImageId>().m()?;
+        let image_id = parse_imageid(req.image_id)?;
         let image_download = sonar::image_download(&self.context, image_id).await.m()?;
         Ok(tonic::Response::new(SonarImageDownloadStream::new(
             image_id.to_string(),
@@ -180,11 +180,7 @@ impl sonar_service_server::SonarService for Server {
         let req = request.into_inner();
         let create = sonar::ArtistCreate {
             name: req.name,
-            cover_art: req
-                .coverart_id
-                .map(|id| id.parse::<sonar::ImageId>())
-                .transpose()
-                .m()?,
+            cover_art: parse_imageid_opt(req.coverart_id)?,
             genres: convert_genres_from_pb(req.genres)?,
             properties: convert_properties_from_pb(req.properties)?,
         };
@@ -716,7 +712,7 @@ impl sonar_service_server::SonarService for Server {
                     .m()?;
             }
             _ if req.kind == MetadataFetchKind::Track as i32 => {
-                let track_id = req.item_id.parse::<sonar::TrackId>().m()?;
+                let track_id = parse_trackid(req.item_id)?;
                 sonar::metadata_fetch_track(&self.context, track_id)
                     .await
                     .m()?;
@@ -828,12 +824,9 @@ impl tokio_stream::Stream for SonarImageDownloadStream {
                     content,
                 })))
             }
-            std::task::Poll::Ready(Some(Err(err))) => {
-                return std::task::Poll::Ready(Some(Err(tonic::Status::new(
-                    tonic::Code::Internal,
-                    err.to_string(),
-                ))))
-            }
+            std::task::Poll::Ready(Some(Err(err))) => std::task::Poll::Ready(Some(Err(
+                tonic::Status::new(tonic::Code::Internal, err.to_string()),
+            ))),
             std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
             std::task::Poll::Pending => std::task::Poll::Pending,
         }

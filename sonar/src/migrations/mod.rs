@@ -84,7 +84,7 @@ where
     tracing::debug!("running pre-migration code\n{}", pre);
     sqlx::query(pre).execute(&mut *tx).await?;
     tracing::debug!("running migration code");
-    f(&mut *tx).await?;
+    f(&mut tx).await?;
     tracing::debug!("running post-migration code\n{}", post);
     sqlx::query(post).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO migration (name, content) VALUES (?, ?)")

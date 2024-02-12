@@ -15,16 +15,16 @@ const MARKER_PLUGINS: &str = "{{PLUGINS}}";
 const PLUGIN_COVERART: &str = "fetchart";
 
 const TAG_TITLE: &str = "title";
-const TAG_ARTIST: &str = "artist";
-const TAG_ALBUM: &str = "album";
+// const TAG_ARTIST: &str = "artist";
+// const TAG_ALBUM: &str = "album";
 // track number in format "<track>/<total>"
 const TAG_TRACK_NUMBER: &str = "track";
 // disc number in format "<disc>/<total>"
 const TAG_DISC_NUMBER: &str = "disc";
-const TAG_GENRE: &str = "genre";
+// const TAG_GENRE: &str = "genre";
 // release date in format "YYYY-MM-DD"
-const TAG_RELEASE_DATE: &str = "date";
-const TAG_PUBLISHER: &str = "publisher";
+// const TAG_RELEASE_DATE: &str = "date";
+// const TAG_PUBLISHER: &str = "publisher";
 /*
     "MusicBrainz Work Id": "fe2eab1d-646f-4836-8651-6d8ce0f8205d",
     "MusicBrainz Album Id": "37e4a79b-723f-4501-94aa-775c609b7fdf",
@@ -33,12 +33,12 @@ const TAG_PUBLISHER: &str = "publisher";
     "MusicBrainz Release Group Id": "fe4373ed-5e89-46b3-b4c0-31433ce217df",
     "MusicBrainz Release Track Id": "cc59647c-3435-3c96-a62a-56334aa27ebd"
 */
-const TAG_MUSICBRAINZ_WORK_ID: &str = "MusicBrainz Work Id";
-const TAG_MUSICBRAINZ_ALBUM_ID: &str = "MusicBrainz Album Id";
-const TAG_MUSICBRAINZ_ARTIST_ID: &str = "MusicBrainz Artist Id";
-const TAG_MUSICBRAINZ_ALBUM_ARTIST_ID: &str = "MusicBrainz Album Artist Id";
-const TAG_MUSICBRAINZ_RELEASE_GROUP_ID: &str = "MusicBrainz Release Group Id";
-const TAG_MUSICBRAINZ_RELEASE_TRACK_ID: &str = "MusicBrainz Release Track Id";
+// const TAG_MUSICBRAINZ_WORK_ID: &str = "MusicBrainz Work Id";
+// const TAG_MUSICBRAINZ_ALBUM_ID: &str = "MusicBrainz Album Id";
+// const TAG_MUSICBRAINZ_ARTIST_ID: &str = "MusicBrainz Artist Id";
+// const TAG_MUSICBRAINZ_ALBUM_ARTIST_ID: &str = "MusicBrainz Album Artist Id";
+// const TAG_MUSICBRAINZ_RELEASE_GROUP_ID: &str = "MusicBrainz Release Group Id";
+// const TAG_MUSICBRAINZ_RELEASE_TRACK_ID: &str = "MusicBrainz Release Track Id";
 
 #[derive(Debug, Default)]
 pub struct BeetsMetadataProvider;
@@ -62,11 +62,10 @@ struct PreparedDirectory {
 impl MetadataProvider for BeetsMetadataProvider {
     fn supports(&self, kind: MetadataRequestKind) -> bool {
         tracing::debug!("checking if provider supports kind: {:?}", kind);
-        match kind {
-            MetadataRequestKind::Album => true,
-            MetadataRequestKind::AlbumTracks => true,
-            _ => false,
-        }
+        std::matches!(
+            kind,
+            MetadataRequestKind::Album | MetadataRequestKind::AlbumTracks
+        )
     }
     #[tracing::instrument(skip(self, context, request), fields(album = request.album.id.to_string()))]
     async fn album_metadata(
@@ -161,9 +160,11 @@ impl MetadataProvider for BeetsMetadataProvider {
             let name = tags.get(TAG_TITLE).map(|s| s.to_string());
             let track_number = tags
                 .get(TAG_TRACK_NUMBER)
+                .map(|s| s.as_str())
                 .and_then(parse_track_or_disc_number);
             let disc_number = tags
                 .get(TAG_DISC_NUMBER)
+                .map(|s| s.as_str())
                 .and_then(parse_track_or_disc_number);
 
             let mut properties = Properties::new();
@@ -292,7 +293,7 @@ async fn prepare_directory(
     })
 }
 
-fn parse_track_or_disc_number(s: &String) -> Option<u32> {
+fn parse_track_or_disc_number(s: &str) -> Option<u32> {
     let mut parts = s.split('/');
     let track_number = parts.next()?.parse::<u32>().ok()?;
     parts.next()?;

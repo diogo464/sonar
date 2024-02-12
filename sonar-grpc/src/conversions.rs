@@ -286,7 +286,7 @@ impl TryFrom<SearchRequest> for (sonar::UserId, sonar::SearchQuery) {
         };
         let query = sonar::SearchQuery {
             query: value.query,
-            limit: value.limit.map(|x| x as u32),
+            limit: value.limit,
             flags,
         };
         Ok((user_id, query))
@@ -379,7 +379,7 @@ pub fn convert_genres_to_pb(genres: sonar::Genres) -> Vec<String> {
 }
 
 pub fn convert_genres_from_pb(genres: Vec<String>) -> Result<sonar::Genres, tonic::Status> {
-    Ok(sonar::Genres::new(genres).map_err(|_| tonic::Status::invalid_argument("invalid genre"))?)
+    sonar::Genres::new(genres).map_err(|_| tonic::Status::invalid_argument("invalid genre"))
 }
 
 pub fn convert_genre_updates_from_pb(
@@ -444,10 +444,6 @@ pub fn parse_imageid_opt(id: Option<String>) -> Result<Option<sonar::ImageId>, t
 
 pub fn parse_trackid(id: String) -> Result<sonar::TrackId, tonic::Status> {
     id.parse::<sonar::TrackId>().m()
-}
-
-pub fn parse_trackid_opt(id: Option<String>) -> Result<Option<sonar::TrackId>, tonic::Status> {
-    id.map(|id| id.parse::<sonar::TrackId>().m()).transpose()
 }
 
 pub fn parse_sonarid(id: String) -> Result<sonar::SonarId, tonic::Status> {

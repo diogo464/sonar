@@ -12,9 +12,10 @@ use tokio::{
 use crate::{
     async_trait,
     bytestream::{self, ByteStream},
+    ByteRange,
 };
 
-use super::{BlobRange, BlobStorage};
+use super::BlobStorage;
 
 #[derive(Debug)]
 pub struct FilesystemBlobStorage {
@@ -29,10 +30,11 @@ impl FilesystemBlobStorage {
 
 #[async_trait]
 impl BlobStorage for FilesystemBlobStorage {
-    async fn read(&self, key: &str, range: BlobRange) -> Result<ByteStream> {
+    async fn read(&self, key: &str, range: ByteRange) -> Result<ByteStream> {
         let path = self.root.join(key);
         let mut file = File::open(path).await?;
-        file.seek(SeekFrom::Start(range.start.unwrap_or(0))).await?;
+        file.seek(SeekFrom::Start(range.offset.unwrap_or(0)))
+            .await?;
         let reader = tokio::io::BufReader::new(file).take(range.length.unwrap_or(u64::MAX));
         Ok(Box::new(tokio_util::io::ReaderStream::new(reader)))
     }

@@ -1,5 +1,6 @@
 use crate::{
-    async_trait, Album, AlbumId, Artist, ArtistId, Playlist, PlaylistId, Result, Track, TrackId, UserId,
+    async_trait, Album, AlbumId, Artist, ArtistId, Playlist, PlaylistId, Result, Track, TrackId,
+    UserId,
 };
 
 mod builtin;

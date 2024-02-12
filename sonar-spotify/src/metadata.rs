@@ -33,7 +33,7 @@ impl SpotifyMetadata {
         images: &[rspotify::model::Image],
     ) -> Result<Option<Bytes>> {
         Ok(match images.first() {
-            Some(ref image) => {
+            Some(image) => {
                 tracing::debug!("downloading image: {}", image.url);
                 Some(
                     self.http_client
@@ -132,7 +132,7 @@ impl MetadataProvider for SpotifyMetadata {
                 track
                     .properties
                     .get(sonar::prop::EXTERNAL_SPOTIFY_ID)
-                    .map(|sid| sid.as_str() == &id)
+                    .map(|sid| sid.as_str() == id)
                     .unwrap_or(false)
             });
             let t = match t {

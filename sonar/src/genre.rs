@@ -132,7 +132,7 @@ impl Genres {
     pub fn new(
         genres: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Result<Self, InvalidGenreError> {
-        let mut genres = genres
+        let genres = genres
             .into_iter()
             .map(|genre| Genre::from_str(genre.as_ref()))
             .collect::<Result<Vec<_>, _>>()?;

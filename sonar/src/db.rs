@@ -187,17 +187,6 @@ pub async fn value_update_id_nullable(
     Ok(())
 }
 
-pub fn merge_view_properties<T, R>(views: Vec<T>, properties: Vec<Properties>) -> Vec<R>
-where
-    R: From<(T, Properties)>,
-{
-    views
-        .into_iter()
-        .zip(properties.into_iter())
-        .map(From::from)
-        .collect()
-}
-
 pub fn merge_view_genres_properties<T, R>(
     views: Vec<T>,
     genres: Vec<Genres>,
@@ -212,8 +201,8 @@ where
 
     views
         .into_iter()
-        .zip(genres.into_iter())
-        .zip(properties.into_iter())
+        .zip(genres)
+        .zip(properties)
         .map(|((view, genres), properties)| From::from((view, genres, properties)))
         .collect()
 }

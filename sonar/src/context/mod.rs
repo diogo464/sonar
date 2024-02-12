@@ -281,9 +281,9 @@ pub async fn user_lookup(context: &Context, username: &Username) -> Result<Optio
 #[tracing::instrument(skip(context))]
 pub async fn user_delete(context: &Context, user_id: UserId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = user::delete(&mut tx, user_id).await?;
+    user::delete(&mut tx, user_id).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -355,9 +355,9 @@ pub async fn user_property_update(
     updates: &[PropertyUpdate],
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = property::user_update(&mut tx, user_id, id, updates).await?;
+    property::user_update(&mut tx, user_id, id, updates).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 /// List all item identifiers that have a user property with the given key.
@@ -382,9 +382,9 @@ pub async fn image_create(context: &Context, create: ImageCreate) -> Result<Imag
 #[tracing::instrument(skip(context))]
 pub async fn image_delete(context: &Context, image_id: ImageId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = image::delete(&mut tx, image_id).await?;
+    image::delete(&mut tx, image_id).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -441,10 +441,10 @@ pub async fn artist_update(
 #[tracing::instrument(skip(context))]
 pub async fn artist_delete(context: &Context, id: ArtistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = artist::delete(&mut tx, id).await?;
+    artist::delete(&mut tx, id).await?;
     tx.commit().await?;
     on_artist_crud(context, id).await;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -513,10 +513,10 @@ pub async fn album_update(context: &Context, id: AlbumId, update: AlbumUpdate) -
 #[tracing::instrument(skip(context))]
 pub async fn album_delete(context: &Context, id: AlbumId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = album::delete(&mut tx, id).await?;
+    album::delete(&mut tx, id).await?;
     tx.commit().await?;
     on_album_crud(context, id).await;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -629,25 +629,25 @@ pub async fn audio_create(context: &Context, create: AudioCreate) -> Result<Audi
 #[tracing::instrument(skip(context))]
 pub async fn audio_delete(context: &Context, audio_id: AudioId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = audio::delete(&mut tx, audio_id).await?;
+    audio::delete(&mut tx, audio_id).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
 pub async fn audio_link(context: &Context, audio_id: AudioId, track_id: TrackId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = audio::link(&mut tx, audio_id, track_id).await?;
+    audio::link(&mut tx, audio_id, track_id).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
 pub async fn audio_unlink(context: &Context, audio_id: AudioId, track_id: TrackId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = audio::unlink(&mut tx, audio_id, track_id).await?;
+    audio::unlink(&mut tx, audio_id, track_id).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -657,9 +657,9 @@ pub async fn audio_set_preferred(
     track_id: TrackId,
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = audio::set_preferred(&mut tx, audio_id, track_id).await?;
+    audio::set_preferred(&mut tx, audio_id, track_id).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -732,10 +732,10 @@ pub async fn playlist_update(
 #[tracing::instrument(skip(context))]
 pub async fn playlist_delete(context: &Context, id: PlaylistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = playlist::delete(&mut tx, id).await?;
+    playlist::delete(&mut tx, id).await?;
     tx.commit().await?;
     on_playlist_crud(context, id).await;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -751,9 +751,9 @@ pub async fn playlist_list_tracks(
 #[tracing::instrument(skip(context))]
 pub async fn playlist_clear_tracks(context: &Context, id: PlaylistId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = playlist::clear_tracks(&mut tx, id).await?;
+    playlist::clear_tracks(&mut tx, id).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -775,9 +775,9 @@ pub async fn playlist_remove_tracks(
     tracks: &[TrackId],
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = playlist::remove_tracks(&mut tx, id, tracks).await?;
+    playlist::remove_tracks(&mut tx, id, tracks).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -825,9 +825,9 @@ pub async fn scrobble_update(
 #[tracing::instrument(skip(context))]
 pub async fn scrobble_delete(context: &Context, id: ScrobbleId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = scrobble::delete(&mut tx, id).await?;
+    scrobble::delete(&mut tx, id).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -856,9 +856,9 @@ pub(crate) async fn scrobble_register_submission(
     scrobbler: &str,
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = scrobble::register_submission(&mut tx, scrobble_id, scrobbler).await?;
+    scrobble::register_submission(&mut tx, scrobble_id, scrobbler).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -919,18 +919,20 @@ pub async fn download_list(context: &Context, user_id: UserId) -> Result<Vec<Dow
 
 #[tracing::instrument(skip(context))]
 pub async fn download_request(context: &Context, request: DownloadCreate) -> Result<()> {
-    Ok(context
+    context
         .downloads
         .request(request.user_id, request.external_id)
-        .await)
+        .await;
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
 pub async fn download_delete(context: &Context, delete: DownloadDelete) -> Result<()> {
-    Ok(context
+    context
         .downloads
         .delete(delete.user_id, delete.external_id)
-        .await)
+        .await;
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -1000,10 +1002,12 @@ async fn metadata_create_image_opt(context: &Context, image: Option<Bytes>) -> O
 pub async fn metadata_fetch_artist(context: &Context, artist_id: ArtistId) -> Result<()> {
     let metadata = metadata_view_artist(context, artist_id).await?;
     let image_id = metadata_create_image_opt(context, metadata.cover).await;
-    let mut update = ArtistUpdate::default();
-    update.name = ValueUpdate::from_option_unchanged(metadata.name);
-    update.properties = metadata.properties.into_property_updates();
-    update.cover_art = ValueUpdate::from_option_unchanged(image_id);
+    let update = ArtistUpdate {
+        name: ValueUpdate::from_option_unchanged(metadata.name),
+        genres: Default::default(), // TODO: fix
+        properties: metadata.properties.into_property_updates(),
+        cover_art: ValueUpdate::from_option_unchanged(image_id),
+    };
     artist_update(context, artist_id, update).await?;
     Ok(())
 }
@@ -1012,10 +1016,13 @@ pub async fn metadata_fetch_artist(context: &Context, artist_id: ArtistId) -> Re
 pub async fn metadata_fetch_album(context: &Context, album_id: AlbumId) -> Result<()> {
     let metadata = metadata_view_album(context, album_id).await?;
     let image_id = metadata_create_image_opt(context, metadata.cover).await;
-    let mut update = AlbumUpdate::default();
-    update.name = ValueUpdate::from_option_unchanged(metadata.name);
-    update.properties = metadata.properties.into_property_updates();
-    update.cover_art = ValueUpdate::from_option_unchanged(image_id);
+    let update = AlbumUpdate {
+        name: ValueUpdate::from_option_unchanged(metadata.name),
+        genres: Default::default(), // TODO: fix
+        properties: metadata.properties.into_property_updates(),
+        cover_art: ValueUpdate::from_option_unchanged(image_id),
+        ..Default::default()
+    };
     album_update(context, album_id, update).await?;
     Ok(())
 }
@@ -1024,10 +1031,12 @@ pub async fn metadata_fetch_album(context: &Context, album_id: AlbumId) -> Resul
 pub async fn metadata_fetch_album_tracks(context: &Context, album_id: AlbumId) -> Result<()> {
     let metadata = metadata_view_album_tracks(context, album_id).await?;
     for (track_id, track_metadata) in metadata.tracks {
-        let mut update = TrackUpdate::default();
-        // NOTE: we don't add a cover here because we just assume the album has a cover.
-        update.name = ValueUpdate::from_option_unchanged(track_metadata.name);
-        update.properties = track_metadata.properties.into_property_updates();
+        let update = TrackUpdate {
+            // NOTE: we don't add a cover here because we just assume the album has a cover.
+            name: ValueUpdate::from_option_unchanged(track_metadata.name),
+            properties: track_metadata.properties.into_property_updates(),
+            ..Default::default()
+        };
         track_update(context, track_id, update).await?;
     }
     Ok(())
@@ -1037,10 +1046,12 @@ pub async fn metadata_fetch_album_tracks(context: &Context, album_id: AlbumId) -
 pub async fn metadata_fetch_track(context: &Context, track_id: TrackId) -> Result<()> {
     let metadata = metadata_view_track(context, track_id).await?;
     let image_id = metadata_create_image_opt(context, metadata.cover).await;
-    let mut update = TrackUpdate::default();
-    update.name = ValueUpdate::from_option_unchanged(metadata.name);
-    update.properties = metadata.properties.into_property_updates();
-    update.cover_art = ValueUpdate::from_option_unchanged(image_id);
+    let update = TrackUpdate {
+        name: ValueUpdate::from_option_unchanged(metadata.name),
+        properties: metadata.properties.into_property_updates(),
+        cover_art: ValueUpdate::from_option_unchanged(image_id),
+        ..Default::default()
+    };
     track_update(context, track_id, update).await?;
     Ok(())
 }
@@ -1082,7 +1093,7 @@ pub async fn metadata_view_artist(
 
     Ok(metadatas
         .into_iter()
-        .fold(Default::default(), |a, b| merge_metadata_artist(a, b)))
+        .fold(Default::default(), merge_metadata_artist))
 }
 
 fn merge_metadata_album(a: AlbumMetadata, b: AlbumMetadata) -> AlbumMetadata {
@@ -1118,7 +1129,7 @@ pub async fn metadata_view_album(context: &Context, album_id: AlbumId) -> Result
     }
     Ok(metadatas
         .into_iter()
-        .fold(Default::default(), |a, b| merge_metadata_album(a, b)))
+        .fold(Default::default(), merge_metadata_album))
 }
 
 fn merge_metadata_album_tracks(

@@ -5,12 +5,12 @@ use sonar::{
 
 struct Service1;
 
-const SERVICE1_ID_ARTIST: &'static str = "service1:artist:1";
-const SERVICE1_ID_ALBUM: &'static str = "service1:album:1";
-const SERVICE1_ID_TRACK: &'static str = "service1:track:1";
-const GENRE1: &'static str = "genre1";
-const PROP_KEY1: &'static str = "key1";
-const PROP_VAL1: &'static str = "val1";
+const SERVICE1_ID_ARTIST: &str = "service1:artist:1";
+const SERVICE1_ID_ALBUM: &str = "service1:album:1";
+const SERVICE1_ID_TRACK: &str = "service1:track:1";
+const GENRE1: &str = "genre1";
+const PROP_KEY1: &str = "key1";
+const PROP_VAL1: &str = "val1";
 
 #[sonar::async_trait]
 impl sonar::ExternalService for Service1 {
@@ -88,10 +88,10 @@ impl sonar::ExternalService for Service1 {
             properties: Default::default(),
         })
     }
-    async fn fetch_playlist(&self, id: &ExternalMediaId) -> Result<ExternalPlaylist> {
+    async fn fetch_playlist(&self, _id: &ExternalMediaId) -> Result<ExternalPlaylist> {
         todo!()
     }
-    async fn download_track(&self, id: &ExternalMediaId) -> Result<ByteStream> {
+    async fn download_track(&self, _id: &ExternalMediaId) -> Result<ByteStream> {
         todo!()
     }
 }

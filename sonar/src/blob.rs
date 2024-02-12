@@ -11,48 +11,13 @@ pub use filesystem::FilesystemBlobStorage;
 
 use crate::bytestream::ByteStream;
 
-// TODO: remove this in favor of ByteRange
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BlobRange {
-    pub start: Option<u64>,
-    pub length: Option<u64>,
-}
-
-impl From<ByteRange> for BlobRange {
-    fn from(value: ByteRange) -> Self {
-        Self {
-            start: value.offset,
-            length: value.length,
-        }
-    }
-}
-
-impl BlobRange {
-    pub fn new(start: u64, length: u64) -> Self {
-        Self {
-            start: Some(start),
-            length: Some(length),
-        }
-    }
-
-    pub fn with_start(mut self, start: u64) -> Self {
-        self.start = Some(start);
-        self
-    }
-
-    pub fn with_length(mut self, length: u64) -> Self {
-        self.length = Some(length);
-        self
-    }
-}
-
 #[async_trait]
 pub trait BlobStorage: std::fmt::Debug + Send + Sync + 'static {
-    async fn get(&self, key: &str, range: BlobRange) -> Result<Bytes> {
+    async fn get(&self, key: &str, range: ByteRange) -> Result<Bytes> {
         let stream = self.read(key, range).await?;
         bytestream::to_bytes(stream).await
     }
-    async fn read(&self, key: &str, range: BlobRange) -> Result<ByteStream>;
+    async fn read(&self, key: &str, range: ByteRange) -> Result<ByteStream>;
     async fn put(&self, key: &str, bytes: Bytes) -> Result<()>;
     async fn write(&self, key: &str, reader: ByteStream) -> Result<()>;
     async fn delete(&self, key: &str) -> Result<()>;
@@ -63,7 +28,7 @@ pub fn random_key() -> String {
 }
 
 pub fn random_key_with_prefix(prefix: &str) -> String {
-    format!("{}/{}", prefix, ulid::Ulid::new())
+    format!("{}/{}", prefix, random_key())
 }
 
 #[cfg(test)]

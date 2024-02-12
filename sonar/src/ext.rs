@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    Album, AlbumId, Artist, ArtistId, Context, PlaylistId, Properties, Result, SonarId,
-    SonarIdentifier, Track, TrackId, UserId,
+    Album, AlbumId, Artist, ArtistId, Context, PlaylistId, Properties, Result, SonarId, Track,
+    TrackId, UserId,
 };
 
 #[derive(Debug, Clone)]

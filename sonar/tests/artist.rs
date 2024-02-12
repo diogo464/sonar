@@ -113,5 +113,5 @@ async fn artist_update_cover_art() {
     update.cover_art = sonar::ValueUpdate::Set(image);
     sonar::artist_update(&ctx, artist.id, update).await.unwrap();
     let artist = sonar::artist_get(&ctx, artist.id).await.unwrap();
-    assert_eq!(artist.cover_art.is_some(), true);
+    assert!(artist.cover_art.is_some());
 }
