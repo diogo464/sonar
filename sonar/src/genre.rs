@@ -421,4 +421,10 @@ mod test {
         let genres = Genres::new(vec!["heavy-metal", "electronic"]).unwrap();
         assert_eq!(genres.to_string(), "electronic,heavy-metal");
     }
+
+    #[test]
+    fn genre_canonicalize() {
+        let genre = Genre::canonicalize("Heavy Metal").unwrap();
+        assert_eq!(genre.as_str(), "heavy-metal");
+    }
 }
