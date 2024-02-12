@@ -192,7 +192,7 @@ pub async fn new(config: Config) -> Result<Context> {
         .pragma("cache_size", format!("{}", -64 * 1024))
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
     let db = sqlx::sqlite::SqlitePoolOptions::new()
-        .max_connections(16)
+        .max_connections(1)
         .connect_with(opts)
         .await
         .map_err(|e| Error::with_source(ErrorKind::Internal, "failed to connect to database", e))?;
