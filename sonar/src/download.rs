@@ -478,10 +478,13 @@ async fn download_track(
     external_id: &ExternalMediaId,
     track_id: TrackId,
 ) -> Result<()> {
-    let mut conn = db.acquire().await?;
-    if !audio::list_by_track(&mut conn, track_id).await?.is_empty() {
-        tracing::info!("audio already exists for track: {}", track_id);
-        return Ok(());
+    {
+        // don't hold the connection while  downloading the track
+        let mut conn = db.acquire().await?;
+        if !audio::list_by_track(&mut conn, track_id).await?.is_empty() {
+            tracing::info!("audio already exists for track: {}", track_id);
+            return Ok(());
+        }
     }
 
     let stream = service.download_track(external_id).await?;
