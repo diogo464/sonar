@@ -39,6 +39,7 @@ pub(crate) mod image;
 pub(crate) mod importer;
 pub(crate) mod ks;
 pub(crate) mod metadata;
+pub(crate) mod migrations;
 pub(crate) mod pin;
 pub(crate) mod playlist;
 pub(crate) mod property;

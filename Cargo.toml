@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "migrator","sonar", "sonar-beets", "sonar-cli", "sonar-experimental", "sonar-extractor-lofty", "sonar-grpc", "sonar-listenbrainz", "sonar-opensubsonic", "sonar-spotify"]
+members = [ "sonar", "sonar-beets", "sonar-cli", "sonar-experimental", "sonar-extractor-lofty", "sonar-grpc", "sonar-listenbrainz", "sonar-opensubsonic", "sonar-spotify"]
 
 [profile.release]
 strip = true

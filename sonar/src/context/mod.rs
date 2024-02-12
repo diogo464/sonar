@@ -21,7 +21,7 @@ use crate::{
         AlbumMetadata, AlbumMetadataRequest, AlbumTracksMetadata, AlbumTracksMetadataRequest,
         MetadataProvider, MetadataRequestKind, SonarMetadataProvider,
     },
-    pin, playlist, property, scrobble,
+    migrations, pin, playlist, property, scrobble,
     scrobbler::{self, SonarScrobbler},
     search::{BuiltInSearchEngine, SearchEngine, SearchResults},
     subscription::SubscriptionController,
@@ -196,9 +196,7 @@ pub async fn new(config: Config) -> Result<Context> {
         .connect_with(opts)
         .await
         .map_err(|e| Error::with_source(ErrorKind::Internal, "failed to connect to database", e))?;
-    sqlx::migrate!("./migrations").run(&db).await.map_err(|e| {
-        Error::with_source(ErrorKind::Internal, "failed to run database migrations", e)
-    })?;
+    migrations::run(&db).await?;
 
     let storage = match config.storage_backend {
         StorageBackend::Memory => {
