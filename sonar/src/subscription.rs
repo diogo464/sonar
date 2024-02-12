@@ -4,6 +4,8 @@ use std::{
     time::Instant,
 };
 
+use sqlx::Row;
+
 use crate::{
     db::Db, download::DownloadController, external::SonarExternalService, ExternalMediaId, Result,
     UserId,
@@ -83,15 +85,16 @@ impl SubscriptionController {
     }
 
     pub async fn list(&self, user_id: UserId) -> Result<Vec<Subscription>> {
-        let rows = sqlx::query!("SELECT * FROM subscription WHERE user = ?", user_id)
+        let rows = sqlx::query("SELECT user, external_id FROM subscription WHERE user = ?")
+            .bind(user_id)
             .fetch_all(&self.0.db)
             .await?;
 
         let mut subscriptions = Vec::with_capacity(rows.len());
         let states = self.0.subscriptions.lock().unwrap();
         for row in rows {
-            let external_id = ExternalMediaId::from(row.external_id);
-            let user_id = UserId::from_db(row.user);
+            let external_id = ExternalMediaId::from(row.get::<String, _>(1));
+            let user_id = UserId::from_db(row.get(0));
             let key = SubscriptionKey {
                 user: user_id,
                 external_id,
@@ -108,26 +111,20 @@ impl SubscriptionController {
     }
 
     pub async fn create(&self, create: SubscriptionCreate) -> Result<()> {
-        let external_id = create.external_id.as_str();
-        sqlx::query!(
-            "INSERT OR IGNORE INTO subscription (user, external_id) VALUES (?, ?)",
-            create.user,
-            external_id
-        )
-        .execute(&self.0.db)
-        .await?;
+        sqlx::query("INSERT OR IGNORE INTO subscription (user, external_id) VALUES (?, ?)")
+            .bind(create.user)
+            .bind(create.external_id.as_str())
+            .execute(&self.0.db)
+            .await?;
         Ok(())
     }
 
     pub async fn delete(&self, delete: SubscriptionDelete) -> Result<()> {
-        let external_id = delete.external_id.as_str();
-        sqlx::query!(
-            "DELETE FROM subscription WHERE user = ? AND external_id = ?",
-            delete.user,
-            external_id
-        )
-        .execute(&self.0.db)
-        .await?;
+        sqlx::query("DELETE FROM subscription WHERE user = ? AND external_id = ?")
+            .bind(delete.user)
+            .bind(delete.external_id.as_str())
+            .execute(&self.0.db)
+            .await?;
         Ok(())
     }
 
@@ -141,15 +138,15 @@ impl SubscriptionController {
     }
     async fn try_update(&self) -> Result<(), Box<dyn std::error::Error>> {
         let state = &self.0;
-        let rows = sqlx::query!("SELECT * FROM subscription")
+        let rows = sqlx::query("SELECT user, external_id FROM subscription")
             .fetch_all(&state.db)
             .await?;
 
         let download_queue = {
             let mut subscriptions = state.subscriptions.lock().unwrap();
             for row in rows {
-                let user_id = UserId::from_db(row.user);
-                let external_id = ExternalMediaId::from(row.external_id);
+                let user_id = UserId::from_db(row.get(0));
+                let external_id = ExternalMediaId::from(row.get::<String, _>(1));
                 let key = SubscriptionKey::new(user_id, external_id);
                 if !subscriptions.contains_key(&key) {
                     let state = SubscriptionState {

@@ -323,7 +323,7 @@ pub fn create_config_memory() -> crate::Config {
 
 pub async fn create_context_memory() -> Context {
     let config = create_config_memory();
-    crate::new(config).await.unwrap()
+    create_context(config).await
 }
 
 pub async fn create_context(config: crate::Config) -> Context {

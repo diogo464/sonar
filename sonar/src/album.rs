@@ -1,9 +1,11 @@
 use std::time::Duration;
 
+use sqlx::Row;
+
 use crate::{
-    db::{Db, DbC},
-    property, AlbumId, ArtistId, Error, ErrorKind, ImageId, ListParams, Properties, PropertyUpdate,
-    Result, Timestamp, ValueUpdate,
+    db::{self, Db, DbC},
+    property, AlbumId, ArtistId, ImageId, ListParams, Properties, PropertyUpdate, Result,
+    Timestamp, ValueUpdate,
 };
 
 #[derive(Debug, Clone)]
@@ -65,15 +67,7 @@ impl From<(AlbumView, Properties)> for Album {
 
 #[tracing::instrument(skip(db))]
 pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Album>> {
-    let (offset, limit) = params.to_db_offset_limit();
-    let views = sqlx::query_as!(
-        AlbumView,
-        "SELECT * FROM sqlx_album ORDER BY id ASC LIMIT ? OFFSET ?",
-        limit,
-        offset
-    )
-    .fetch_all(&mut *db)
-    .await?;
+    let views = db::list::<AlbumView>(db, "sqlx_album", params).await?;
     let properties =
         property::get_bulk(db, views.iter().map(|view| AlbumId::from_db(view.id))).await?;
     Ok(views
@@ -90,14 +84,13 @@ pub async fn list_by_artist(
     params: ListParams,
 ) -> Result<Vec<Album>> {
     let (offset, limit) = params.to_db_offset_limit();
-    let artist_id = artist_id.to_db();
-    let views = sqlx::query_as!(
-        AlbumView,
+    let views = sqlx::QueryBuilder::new(
         "SELECT * FROM sqlx_album WHERE artist = ? ORDER BY id ASC LIMIT ? OFFSET ?",
-        artist_id,
-        limit,
-        offset
     )
+    .build_query_as::<AlbumView>()
+    .bind(artist_id.to_db())
+    .bind(limit)
+    .bind(offset)
     .fetch_all(&mut *db)
     .await?;
     let properties =
@@ -111,34 +104,29 @@ pub async fn list_by_artist(
 
 #[tracing::instrument(skip(db))]
 pub async fn list_artist_id_pairs(db: &mut DbC) -> Result<Vec<(AlbumId, ArtistId)>> {
-    let rows = sqlx::query!("SELECT id, artist FROM album")
+    let rows = sqlx::query("SELECT id, artist FROM album")
         .fetch_all(&mut *db)
         .await?;
     Ok(rows
         .into_iter()
-        .map(|row| (AlbumId::from_db(row.id), ArtistId::from_db(row.artist)))
+        .map(|row| (AlbumId::from_db(row.get(0)), ArtistId::from_db(row.get(1))))
         .collect())
 }
 
 #[tracing::instrument(skip(db))]
 pub async fn get(db: &mut DbC, album_id: AlbumId) -> Result<Album> {
-    let album_view = sqlx::query_as!(AlbumView, "SELECT * FROM sqlx_album WHERE id = ?", album_id)
+    let view = sqlx::query_as::<_, AlbumView>("SELECT * FROM sqlx_album WHERE id = ?")
+        .bind(album_id)
         .fetch_one(&mut *db)
         .await?;
-    let properties = property::get(db, AlbumId::from_db(album_view.id)).await?;
-    Ok(From::from((album_view, properties)))
+    let properties = property::get(db, AlbumId::from_db(view.id)).await?;
+    Ok(From::from((view, properties)))
 }
 
 #[tracing::instrument(skip(db))]
 pub async fn get_bulk(db: &mut DbC, album_ids: &[AlbumId]) -> Result<Vec<Album>> {
-    let mut query = sqlx::QueryBuilder::new("SELECT * FROM sqlx_album WHERE id IN (");
-    for (i, album_id) in album_ids.iter().enumerate() {
-        if i > 0 {
-            query.push(", ");
-        }
-        query.push(album_id.to_db());
-    }
-    query.push(")");
+    let mut query = sqlx::QueryBuilder::new("SELECT * FROM sqlx_album WHERE id IN");
+    db::query_builder_push_id_tuple(&mut query, album_ids.iter().copied());
     let albums = query
         .build_query_as::<AlbumView>()
         .fetch_all(&mut *db)
@@ -157,87 +145,33 @@ pub async fn get_bulk(db: &mut DbC, album_ids: &[AlbumId]) -> Result<Vec<Album>>
 
 #[tracing::instrument(skip(db))]
 pub async fn create(db: &mut DbC, create: AlbumCreate) -> Result<Album> {
-    let name = create.name;
     let cover_art = create.cover_art.map(|id| id.to_db());
-
-    let album_id = sqlx::query!(
-        "INSERT INTO album (artist, name, cover_art) VALUES (?, ?, ?) RETURNING id",
-        create.artist,
-        name,
-        cover_art,
-    )
-    .fetch_one(&mut *db)
-    .await?
-    .id;
-    let album_id = AlbumId::from_db(album_id);
+    let query =
+        sqlx::query("INSERT INTO album (artist, name, cover_art) VALUES (?, ?, ?) RETURNING id")
+            .bind(create.artist)
+            .bind(&create.name)
+            .bind(cover_art)
+            .fetch_one(&mut *db)
+            .await?;
+    let album_id = AlbumId::from_db(query.get(0));
     property::set(db, album_id, &create.properties).await?;
-
     get(db, album_id).await
 }
 
 #[tracing::instrument(skip(db))]
 pub async fn update(db: &mut DbC, album_id: AlbumId, update: AlbumUpdate) -> Result<Album> {
     tracing::info!("updating album {} with {:#?}", album_id, update);
-    if let Some(new_name) = match update.name {
-        ValueUpdate::Set(name) => Some(name),
-        ValueUpdate::Unset => Some("".to_owned()),
-        ValueUpdate::Unchanged => None,
-    } {
-        sqlx::query!("UPDATE album SET name = ? WHERE id = ?", new_name, album_id)
-            .execute(&mut *db)
-            .await?;
-    }
-
-    if let Some(new_artist) = match update.artist {
-        ValueUpdate::Set(artist) => Some(artist.to_db()),
-        ValueUpdate::Unset => {
-            return Err(Error::new(
-                ErrorKind::Invalid,
-                "cannot unset artist on album update",
-            ))
-        }
-        ValueUpdate::Unchanged => None,
-    } {
-        sqlx::query!(
-            "UPDATE album SET artist = ? WHERE id = ?",
-            new_artist,
-            album_id
-        )
-        .execute(&mut *db)
-        .await?;
-    }
-
-    match update.cover_art {
-        ValueUpdate::Set(image_id) => {
-            let image_id = image_id.to_db();
-            sqlx::query("UPDATE album SET cover_art = ? WHERE id = ?")
-                .bind(image_id)
-                .bind(album_id.to_db())
-                .execute(&mut *db)
-                .await?;
-            sqlx::query!(
-                "UPDATE album SET cover_art = ? WHERE id = ?",
-                image_id,
-                album_id
-            )
-            .execute(&mut *db)
-            .await?;
-        }
-        ValueUpdate::Unset => {
-            sqlx::query!("UPDATE album SET cover_art = NULL WHERE id = ?", album_id)
-                .execute(&mut *db)
-                .await?;
-        }
-        ValueUpdate::Unchanged => {}
-    }
+    db::value_update_string_non_null(db, "album", "name", album_id, update.name).await?;
+    db::value_update_id_non_null(db, "album", "artist", album_id, update.artist).await?;
+    db::value_update_id_nullable(db, "album", "cover_art", album_id, update.cover_art).await?;
     property::update(db, album_id, &update.properties).await?;
-
     get(db, album_id).await
 }
 
 #[tracing::instrument(skip(db))]
 pub async fn delete(db: &mut DbC, album_id: AlbumId) -> Result<()> {
-    sqlx::query!("DELETE FROM album WHERE id = ?", album_id)
+    sqlx::query("DELETE FROM album WHERE id = ?")
+        .bind(album_id)
         .execute(&mut *db)
         .await?;
     property::clear(db, album_id).await?;
@@ -246,11 +180,11 @@ pub async fn delete(db: &mut DbC, album_id: AlbumId) -> Result<()> {
 
 #[tracing::instrument(skip(db))]
 pub async fn find_or_create_by_name(db: &mut DbC, create_: AlbumCreate) -> Result<Album> {
-    let name = &create_.name;
-    let album_id = sqlx::query!("SELECT id FROM album WHERE name = ?", name)
+    let album_id = sqlx::query("SELECT id FROM album WHERE name = ?")
+        .bind(&create_.name)
         .fetch_optional(&mut *db)
         .await?
-        .map(|row| AlbumId::from_db(row.id));
+        .map(|row| AlbumId::from_db(row.get(0)));
 
     if let Some(album_id) = album_id {
         return get(db, album_id).await;

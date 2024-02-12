@@ -168,15 +168,13 @@ pub(crate) async fn set(
     for (key, value) in properties {
         let key = key.as_str();
         let value = value.as_str();
-        sqlx::query!(
-            "INSERT INTO property (namespace, identifier, key, value) VALUES (?, ?, ?, ?)",
-            namespace,
-            identifier,
-            key,
-            value
-        )
-        .execute(&mut *db)
-        .await?;
+        sqlx::query("INSERT INTO property (namespace, identifier, key, value) VALUES (?, ?, ?, ?)")
+            .bind(namespace)
+            .bind(identifier)
+            .bind(key)
+            .bind(value)
+            .execute(&mut *db)
+            .await?;
     }
 
     Ok(())
@@ -186,16 +184,19 @@ pub(crate) async fn set(
 pub(crate) async fn get(db: &mut DbC, id: impl SonarIdentifier) -> Result<Properties> {
     let namespace = id.namespace();
     let identifier = id.identifier();
-    let rows = sqlx::query!(
+    let rows = sqlx::query(
         "SELECT key, value FROM property WHERE namespace = ? AND identifier = ? AND user IS NULL",
-        namespace,
-        identifier
     )
+    .bind(namespace)
+    .bind(identifier)
     .fetch_all(&mut *db)
     .await?;
     let mut properties = Properties::with_capacity(rows.len());
     for row in rows {
-        properties.insert(PropertyKey(row.key.into()), PropertyValue(row.value.into()));
+        properties.insert(
+            PropertyKey(row.get::<String, _>(0).into()),
+            PropertyValue(row.get::<String, _>(1).into()),
+        );
     }
     Ok(properties)
 }
@@ -264,23 +265,22 @@ pub(crate) async fn update(
             PropertyUpdateAction::Set(value) => {
                 let key = update.key.as_str();
                 let value = value.as_str();
-                sqlx::query!(
-                    "INSERT OR REPLACE INTO property (namespace, identifier, key, value) VALUES (?, ?, ?, ?)",
-                    namespace,
-                    identifier,
-                    key,
-                    value
-                )
+                sqlx::query(
+                    "INSERT OR REPLACE INTO property (namespace, identifier, key, value) VALUES (?, ?, ?, ?)")
+                    .bind(namespace)
+                    .bind(identifier)
+                    .bind(key)
+                    .bind(value)
                 .execute(&mut *db)
                 .await?;
             }
             PropertyUpdateAction::Remove => {
                 let key = update.key.as_str();
-                sqlx::query!(
-                    "DELETE FROM property WHERE namespace = ? AND identifier = ? AND key = ? AND user IS NULL",
-                    namespace,
-                    identifier,
-                    key
+                sqlx::query(
+                    "DELETE FROM property WHERE namespace = ? AND identifier = ? AND key = ? AND user IS NULL")
+                    .bind(namespace)
+                    .bind(identifier)
+                    .bind(key
                 )
                 .execute(&mut *db)
                 .await?;
@@ -294,13 +294,11 @@ pub(crate) async fn update(
 pub(crate) async fn clear(db: &mut DbC, id: impl SonarIdentifier) -> Result<()> {
     let namespace = id.namespace();
     let identifier = id.identifier();
-    sqlx::query!(
-        "DELETE FROM property WHERE namespace = ? AND identifier = ? AND user IS NULL",
-        namespace,
-        identifier
-    )
-    .execute(&mut *db)
-    .await?;
+    sqlx::query("DELETE FROM property WHERE namespace = ? AND identifier = ? AND user IS NULL")
+        .bind(namespace)
+        .bind(identifier)
+        .execute(&mut *db)
+        .await?;
     Ok(())
 }
 
@@ -317,14 +315,14 @@ pub(crate) async fn user_set(
     for (key, value) in properties {
         let key = key.as_str();
         let value = value.as_str();
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO property (namespace, identifier, key, value, user) VALUES (?, ?, ?, ?, ?)",
-            namespace,
-            identifier,
-            key,
-            value,
-            user
         )
+        .bind(namespace)
+        .bind(identifier)
+        .bind(key)
+        .bind(value)
+        .bind(user)
         .execute(&mut *db)
         .await?;
     }
@@ -339,17 +337,20 @@ pub(crate) async fn user_get(
 ) -> Result<Properties> {
     let namespace = id.namespace();
     let identifier = id.identifier();
-    let rows = sqlx::query!(
+    let rows = sqlx::query(
         "SELECT key, value FROM property WHERE namespace = ? AND identifier = ? AND user = ?",
-        namespace,
-        identifier,
-        user
     )
+    .bind(namespace)
+    .bind(identifier)
+    .bind(user)
     .fetch_all(&mut *db)
     .await?;
     let mut properties = Properties::with_capacity(rows.len());
     for row in rows {
-        properties.insert(PropertyKey(row.key.into()), PropertyValue(row.value.into()));
+        properties.insert(
+            PropertyKey(row.get::<String, _>(0).into()),
+            PropertyValue(row.get::<String, _>(1).into()),
+        );
     }
     Ok(properties)
 }
@@ -369,14 +370,12 @@ pub(crate) async fn user_get_bulk(
 pub(crate) async fn user_clear(db: &mut DbC, user: UserId, id: impl SonarIdentifier) -> Result<()> {
     let namespace = id.namespace();
     let identifier = id.identifier();
-    sqlx::query!(
-        "DELETE FROM property WHERE namespace = ? AND identifier = ? AND user = ?",
-        namespace,
-        identifier,
-        user
-    )
-    .execute(&mut *db)
-    .await?;
+    sqlx::query("DELETE FROM property WHERE namespace = ? AND identifier = ? AND user = ?")
+        .bind(namespace)
+        .bind(identifier)
+        .bind(user)
+        .execute(&mut *db)
+        .await?;
     Ok(())
 }
 
@@ -393,25 +392,25 @@ pub(crate) async fn user_update(
             PropertyUpdateAction::Set(value) => {
                 let key = update.key.as_str();
                 let value = value.as_str();
-                sqlx::query!(
-                    "INSERT OR REPLACE INTO property (namespace, identifier, key, value, user) VALUES (?, ?, ?, ?, ?)",
-                    namespace,
-                    identifier,
-                    key,
-                    value,
-                    user
+                sqlx::query(
+                    "INSERT OR REPLACE INTO property (namespace, identifier, key, value, user) VALUES (?, ?, ?, ?, ?)")
+                    .bind(namespace)
+                    .bind(identifier)
+                    .bind(key)
+                    .bind(value)
+                    .bind(user
                 )
                 .execute(&mut *db)
                 .await?;
             }
             PropertyUpdateAction::Remove => {
                 let key = update.key.as_str();
-                sqlx::query!(
-                    "DELETE FROM property WHERE namespace = ? AND identifier = ? AND key = ? AND user = ?",
-                    namespace,
-                    identifier,
-                    key,
-                    user
+                sqlx::query(
+                    "DELETE FROM property WHERE namespace = ? AND identifier = ? AND key = ? AND user = ?")
+                    .bind(namespace)
+                    .bind(identifier)
+                    .bind(key)
+                    .bind(user
                 )
                 .execute(&mut *db)
                 .await?;
@@ -427,17 +426,15 @@ pub(crate) async fn user_list_with_property(
     key: &PropertyKey,
 ) -> Result<Vec<SonarId>> {
     let key = key.as_str();
-    let rows = sqlx::query!(
-        "SELECT namespace, identifier FROM property WHERE key = ? AND user = ?",
-        key,
-        user
-    )
-    .fetch_all(&mut *db)
-    .await?;
+    let rows = sqlx::query("SELECT namespace, identifier FROM property WHERE key = ? AND user = ?")
+        .bind(key)
+        .bind(user)
+        .fetch_all(&mut *db)
+        .await?;
     let mut ids = Vec::with_capacity(rows.len());
     for row in rows {
         ids.push(
-            SonarId::from_type_and_id(row.namespace as u32, row.identifier as u32)
+            SonarId::from_type_and_id(row.get::<i64, _>(0) as u32, row.get::<i64, _>(1) as u32)
                 .expect("invalid id in database"),
         );
     }

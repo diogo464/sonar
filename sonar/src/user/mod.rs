@@ -1,6 +1,10 @@
-use crate::{db::DbC, Error, ErrorKind, ImageId, ListParams, Result, UserId, ValueUpdate};
+use crate::{
+    db::{self, DbC},
+    Error, ErrorKind, ImageId, ListParams, Result, UserId, ValueUpdate,
+};
 
 mod username;
+use sqlx::Row;
 pub use username::*;
 
 mod token;
@@ -36,34 +40,20 @@ struct UserView {
     avatar: Option<i64>,
 }
 
-impl UserView {
-    fn into_user(self) -> User {
+impl From<UserView> for User {
+    fn from(value: UserView) -> User {
         User {
-            id: UserId::from_db(self.id),
-            username: Username::new_uncheked(self.username),
-            avatar: self.avatar.map(ImageId::from_db),
+            id: UserId::from_db(value.id),
+            username: Username::new_uncheked(value.username),
+            avatar: value.avatar.map(ImageId::from_db),
         }
     }
 }
 
 #[tracing::instrument(skip(db))]
 pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<User>> {
-    let (offset, limit) = params.to_db_offset_limit();
-    let views = sqlx::query_as!(
-        UserView,
-        "SELECT id, username, avatar FROM user ORDER BY id ASC LIMIT ? OFFSET ?",
-        limit,
-        offset
-    )
-    .fetch_all(db)
-    .await?;
-
-    let mut users = Vec::with_capacity(views.len());
-    for view in views {
-        users.push(view.into_user());
-    }
-
-    Ok(users)
+    let views = db::list::<UserView>(db, "user", params).await?;
+    Ok(views.into_iter().map(User::from).collect())
 }
 
 #[tracing::instrument(skip(db))]
@@ -72,47 +62,43 @@ pub async fn create(db: &mut DbC, create: UserCreate) -> Result<User> {
     let username = create.username.as_str();
     let password_hash = generate_initial_salt_and_hash(&create.password)?;
     let avatar_id = create.avatar.map(|id| id.to_db());
-    let user_id = sqlx::query!(
+    let user_id = sqlx::query_scalar(
         r#"
 INSERT INTO user (username, password_hash, avatar)
 VALUES (?, ?, ?) RETURNING id
 "#,
-        username,
-        password_hash,
-        avatar_id
     )
+    .bind(username)
+    .bind(password_hash)
+    .bind(avatar_id)
     .fetch_one(&mut *db)
-    .await?
-    .id;
+    .await?;
     get(db, UserId::from_db(user_id)).await
 }
 
 #[tracing::instrument(skip(db))]
 pub async fn get(db: &mut DbC, user_id: UserId) -> Result<User> {
-    let user_id = user_id.to_db();
-    let user_view = sqlx::query_as!(
-        UserView,
-        "SELECT id, username, avatar FROM user WHERE id = ?",
-        user_id
-    )
-    .fetch_one(db)
-    .await?;
-    Ok(user_view.into_user())
+    let user_view =
+        sqlx::query_as::<_, UserView>("SELECT id, username, avatar FROM user WHERE id = ?")
+            .bind(user_id)
+            .fetch_one(db)
+            .await?;
+    Ok(User::from(user_view))
 }
 
 #[tracing::instrument(skip(db))]
 pub async fn lookup(db: &mut DbC, username: &Username) -> Result<Option<UserId>> {
-    let username = username.as_str();
-    let row = sqlx::query!("SELECT id FROM user WHERE username = ?", username)
+    let id = sqlx::query_scalar("SELECT id FROM user WHERE username = ?")
+        .bind(username.as_str())
         .fetch_optional(db)
         .await?;
-    Ok(row.map(|row| UserId::from_db(row.id)))
+    Ok(id.map(UserId::from_db))
 }
 
 #[tracing::instrument(skip(db))]
 pub async fn delete(db: &mut DbC, user_id: UserId) -> Result<()> {
-    let user_id = user_id.to_db();
-    sqlx::query!("DELETE FROM user WHERE id = ?", user_id)
+    sqlx::query("DELETE FROM user WHERE id = ?")
+        .bind(user_id)
         .execute(db)
         .await?;
     Ok(())
@@ -120,17 +106,16 @@ pub async fn delete(db: &mut DbC, user_id: UserId) -> Result<()> {
 
 #[tracing::instrument(skip(db))]
 pub async fn authenticate(db: &mut DbC, username: &Username, password: &str) -> Result<UserId> {
-    let username = username.as_str();
-    let row = sqlx::query!(
-        "SELECT id, password_hash FROM user WHERE username = ?",
-        username
-    )
-    .fetch_optional(db)
-    .await?;
+    let row = sqlx::query("SELECT id, password_hash FROM user WHERE username = ?")
+        .bind(username.as_str())
+        .fetch_optional(db)
+        .await?;
     match row {
         Some(row) => {
-            verify_password(&row.password_hash, password)?;
-            Ok(UserId::from_db(row.id))
+            let id = row.get::<i64, _>(0);
+            let password_hash = row.get::<String, _>(1);
+            verify_password(&password_hash, password)?;
+            Ok(UserId::from_db(id))
         }
         None => Err(Error::new(
             ErrorKind::Unauthorized,

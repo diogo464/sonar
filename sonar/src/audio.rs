@@ -1,11 +1,12 @@
 use std::time::Duration;
 
 use lofty::AudioFile;
+use sqlx::Row;
 
 use crate::{
     blob::{self, BlobStorage},
     bytestream::{self, ByteStream},
-    db::DbC,
+    db::{self, DbC},
     ks, AudioId, ByteRange, Error, ErrorKind, Result, TrackId,
 };
 
@@ -59,28 +60,28 @@ struct AudioView {
     blob_size: i64,
 }
 
+impl From<AudioView> for Audio {
+    fn from(value: AudioView) -> Self {
+        Self {
+            id: AudioId::from_db(value.id),
+            bitrate: value.bitrate as u32,
+            duration: Duration::from_millis(value.duration_ms as u64),
+            num_channels: value.num_channels as u32,
+            sample_freq: value.sample_freq as u32,
+            size: value.blob_size as u32,
+            mime_type: value.mime_type,
+        }
+    }
+}
+
 pub async fn list_by_track(db: &mut DbC, track_id: TrackId) -> Result<Vec<Audio>> {
-    let rows = sqlx::query_as!(
-        AudioView,
-        "SELECT a.* FROM sqlx_audio a INNER JOIN track_audio ta ON a.id = ta.audio WHERE ta.track = ?",
-        track_id
+    let rows = sqlx::query_as::<_, AudioView>(
+        "SELECT a.* FROM sqlx_audio a INNER JOIN track_audio ta ON a.id = ta.audio WHERE ta.track = ?"
     )
+    .bind(track_id)
     .fetch_all(&mut *db)
     .await?;
-
-    let mut result = Vec::with_capacity(rows.len());
-    for row in rows {
-        result.push(Audio {
-            id: AudioId::from_db(row.id),
-            bitrate: row.bitrate as u32,
-            duration: Duration::from_millis(row.duration_ms as u64),
-            num_channels: row.num_channels as u32,
-            sample_freq: row.sample_freq as u32,
-            size: row.blob_size as u32,
-            mime_type: row.mime_type,
-        });
-    }
-    Ok(result)
+    Ok(rows.into_iter().map(Audio::from).collect())
 }
 
 pub async fn create(db: &mut DbC, storage: &dyn BlobStorage, create: AudioCreate) -> Result<Audio> {
@@ -127,50 +128,38 @@ pub async fn create(db: &mut DbC, storage: &dyn BlobStorage, create: AudioCreate
     let stream = bytestream::from_file(&temp_file_path).await?;
     storage.write(&blob_key, stream).await?;
 
-    let blob_id = sqlx::query_scalar!(
+    let blob_id = sqlx::query_scalar::<_, i64>(
         "INSERT INTO blob (key, size, sha256) VALUES (?, ?, ?) RETURNING id",
-        blob_key,
-        filesize,
-        blob_sha256
     )
+    .bind(blob_key)
+    .bind(filesize)
+    .bind(blob_sha256)
     .fetch_one(&mut *db)
     .await?;
 
-    let audio_id = sqlx::query!(
-        "INSERT INTO audio (bitrate, duration_ms, num_channels, sample_freq, mime_type, blob, filename) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
-        bitrate,
-        duration_ms,
-        num_channels,
-        sample_freq,
-        mime_type,
-        blob_id,
-        filename,
-    )
+    let audio_id = sqlx::query_scalar(
+        "INSERT INTO audio (bitrate, duration_ms, num_channels, sample_freq, mime_type, blob, filename) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id")
+    .bind(bitrate)
+    .bind(duration_ms)
+    .bind(num_channels)
+    .bind(sample_freq)
+    .bind(mime_type)
+    .bind(blob_id)
+    .bind(filename)
     .fetch_one(&mut *db)
     .await?;
 
-    get(db, AudioId::from_db(audio_id.id)).await
+    get(db, AudioId::from_db(audio_id)).await
 }
 
 pub async fn get(db: &mut DbC, audio_id: AudioId) -> Result<Audio> {
-    let row = sqlx::query_as!(AudioView, "SELECT * FROM sqlx_audio WHERE id = ?", audio_id)
-        .fetch_one(&mut *db)
-        .await?;
-
-    Ok(Audio {
-        id: AudioId::from_db(row.id),
-        bitrate: row.bitrate as u32,
-        duration: Duration::from_millis(row.duration_ms as u64),
-        num_channels: row.num_channels as u32,
-        sample_freq: row.sample_freq as u32,
-        size: row.blob_size as u32,
-        mime_type: row.mime_type,
-    })
+    let view = db::get_by_id::<AudioView, _>(db, "sqlx_audio", audio_id).await?;
+    Ok(Audio::from(view))
 }
 
 pub async fn delete(db: &mut DbC, audio_id: AudioId) -> Result<()> {
-    let audio_id = audio_id.to_db();
-    sqlx::query!("DELETE FROM audio WHERE id = ?", audio_id)
+    sqlx::query("DELETE FROM audio WHERE id = ?")
+        .bind(audio_id)
         .execute(&mut *db)
         .await?;
     Ok(())
@@ -182,55 +171,46 @@ pub async fn download(
     audio_id: AudioId,
     range: ByteRange,
 ) -> Result<AudioDownload> {
-    let row = sqlx::query!(
-        "SELECT mime_type, blob_key FROM sqlx_audio WHERE id = ?",
-        audio_id
-    )
-    .fetch_one(&mut *db)
-    .await?;
-    let stream = storage.read(&row.blob_key, From::from(range)).await?;
+    let row = sqlx::query("SELECT mime_type, blob_key FROM sqlx_audio WHERE id = ?")
+        .bind(audio_id)
+        .fetch_one(&mut *db)
+        .await?;
+    let blob_key = row.get::<String, _>(1);
+    let stream = storage.read(&blob_key, From::from(range)).await?;
     Ok(AudioDownload {
-        mime_type: row.mime_type,
+        mime_type: row.get(0),
         stream,
     })
 }
 
 pub async fn link(db: &mut DbC, audio_id: AudioId, track_id: TrackId) -> Result<()> {
-    sqlx::query!(
-        "INSERT OR IGNORE INTO track_audio (track, audio) VALUES (?, ?)",
-        track_id,
-        audio_id
-    )
-    .execute(&mut *db)
-    .await?;
+    sqlx::query("INSERT OR IGNORE INTO track_audio (track, audio) VALUES (?, ?)")
+        .bind(track_id)
+        .bind(audio_id)
+        .execute(&mut *db)
+        .await?;
     Ok(())
 }
 
 pub async fn unlink(db: &mut DbC, audio_id: AudioId, track_id: TrackId) -> Result<()> {
-    sqlx::query!(
-        "DELETE FROM track_audio WHERE track = ? AND audio = ?",
-        track_id,
-        audio_id
-    )
-    .execute(&mut *db)
-    .await?;
+    sqlx::query("DELETE FROM track_audio WHERE track = ? AND audio = ?")
+        .bind(track_id)
+        .bind(audio_id)
+        .execute(&mut *db)
+        .await?;
     Ok(())
 }
 
 pub async fn set_preferred(db: &mut DbC, audio_id: AudioId, track_id: TrackId) -> Result<()> {
     link(db, audio_id, track_id).await?;
-    sqlx::query!(
-        "UPDATE track_audio SET preferred = NULL WHERE track = ?",
-        track_id
-    )
-    .execute(&mut *db)
-    .await?;
-    sqlx::query!(
-        "UPDATE track_audio SET preferred = TRUE WHERE track = ? AND audio = ?",
-        track_id,
-        audio_id
-    )
-    .execute(&mut *db)
-    .await?;
+    sqlx::query("UPDATE track_audio SET preferred = NULL WHERE track = ?")
+        .bind(track_id)
+        .execute(&mut *db)
+        .await?;
+    sqlx::query("UPDATE track_audio SET preferred = TRUE WHERE track = ? AND audio = ?")
+        .bind(track_id)
+        .bind(audio_id)
+        .execute(&mut *db)
+        .await?;
     Ok(())
 }

@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 use crate::{
-    db::DbC, property, ListParams, Properties, PropertyUpdate, Result, ScrobbleId, Timestamp,
-    TrackId, UserId,
+    db::{self, DbC},
+    property, ListParams, Properties, PropertyUpdate, Result, ScrobbleId, Timestamp, TrackId,
+    UserId,
 };
 
 #[derive(Debug, Clone)]
@@ -60,15 +61,7 @@ impl From<(ScrobbleView, Properties)> for Scrobble {
 
 #[tracing::instrument(skip(db))]
 pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Scrobble>> {
-    let (offset, limit) = params.to_db_offset_limit();
-    let views = sqlx::query_as!(
-        ScrobbleView,
-        "SELECT * FROM scrobble ORDER BY id ASC LIMIT ? OFFSET ?",
-        limit,
-        offset
-    )
-    .fetch_all(&mut *db)
-    .await?;
+    let views = db::list::<ScrobbleView>(db, "scrobble", params).await?;
     let properties =
         property::get_bulk(db, views.iter().map(|view| ScrobbleId::from_db(view.id))).await?;
     Ok(views
@@ -80,15 +73,9 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Scrobble>> {
 
 #[tracing::instrument(skip(db))]
 pub async fn get(db: &mut DbC, scrobble_id: ScrobbleId) -> Result<Scrobble> {
-    let scrobble_view = sqlx::query_as!(
-        ScrobbleView,
-        "SELECT * FROM scrobble WHERE id = ?",
-        scrobble_id
-    )
-    .fetch_one(&mut *db)
-    .await?;
+    let view = db::get_by_id(db, "scrobble", scrobble_id).await?;
     let properties = property::get(db, scrobble_id).await?;
-    Ok(Scrobble::from((scrobble_view, properties)))
+    Ok(Scrobble::from((view, properties)))
 }
 
 #[tracing::instrument(skip(db))]
@@ -106,17 +93,15 @@ pub async fn create(db: &mut DbC, create: ScrobbleCreate) -> Result<Scrobble> {
     let user_id = create.user.to_db();
     let listen_at = create.listen_at.seconds() as i64;
     let listen_secs = create.listen_duration.as_secs() as i64;
-    let scrobble_id = sqlx::query!(
-        "INSERT INTO scrobble (user, track, listen_at, listen_secs, listen_device) VALUES (?, ?, ?, ?, ?) RETURNING id",
-        user_id,
-        track_id,
-        listen_at,
-        listen_secs,
-        create.listen_device,
-    )
+    let scrobble_id = sqlx::query_scalar(
+        "INSERT INTO scrobble (user, track, listen_at, listen_secs, listen_device) VALUES (?, ?, ?, ?, ?) RETURNING id")
+        .bind(user_id)
+        .bind(track_id)
+        .bind(listen_at)
+        .bind(listen_secs)
+        .bind(create.listen_device)
     .fetch_one(&mut *db)
-    .await?
-    .id;
+    .await?;
 
     get(db, ScrobbleId::from_db(scrobble_id)).await
 }
@@ -134,7 +119,8 @@ pub async fn update(
 #[tracing::instrument(skip(db))]
 pub async fn delete(db: &mut DbC, scrobble_id: ScrobbleId) -> Result<()> {
     let scrobble_id = scrobble_id.to_db();
-    sqlx::query!("DELETE FROM scrobble WHERE id = ?", scrobble_id)
+    sqlx::query("DELETE FROM scrobble WHERE id = ?")
+        .bind(scrobble_id)
         .execute(&mut *db)
         .await?;
     Ok(())
@@ -142,7 +128,7 @@ pub async fn delete(db: &mut DbC, scrobble_id: ScrobbleId) -> Result<()> {
 
 #[tracing::instrument(skip(db))]
 pub async fn list_unsubmitted(db: &mut DbC, scrobbler: &str) -> Result<Vec<Scrobble>> {
-    let rows = sqlx::query!(
+    let ids = sqlx::query_scalar(
         "
 SELECT sc.id
 FROM scrobble sc
@@ -150,16 +136,12 @@ LEFT JOIN scrobble_submission ss ON sc.id = ss.scrobble AND ss.scrobbler = ?
 WHERE ss.scrobble IS NULL
 LIMIT 100
 ",
-        scrobbler,
     )
+    .bind(scrobbler)
     .fetch_all(&mut *db)
     .await?;
 
-    let ids = rows
-        .iter()
-        .map(|row| ScrobbleId::from_db(row.id))
-        .collect::<Vec<_>>();
-
+    let ids = ids.into_iter().map(ScrobbleId::from_db).collect::<Vec<_>>();
     get_bulk(db, &ids).await
 }
 
@@ -169,7 +151,7 @@ pub async fn list_unsubmitted_for_user(
     user_id: UserId,
     scrobbler: &str,
 ) -> Result<Vec<Scrobble>> {
-    let rows = sqlx::query!(
+    let ids = sqlx::query_scalar(
         "
 SELECT sc.id
 FROM scrobble sc
@@ -177,17 +159,13 @@ LEFT JOIN scrobble_submission ss ON sc.id = ss.scrobble AND ss.scrobbler = ?
 WHERE ss.scrobble IS NULL AND sc.user = ?
 LIMIT 100
 ",
-        scrobbler,
-        user_id,
     )
+    .bind(scrobbler)
+    .bind(user_id)
     .fetch_all(&mut *db)
     .await?;
 
-    let ids = rows
-        .iter()
-        .map(|row| ScrobbleId::from_db(row.id))
-        .collect::<Vec<_>>();
-
+    let ids = ids.into_iter().map(ScrobbleId::from_db).collect::<Vec<_>>();
     get_bulk(db, &ids).await
 }
 
@@ -198,12 +176,10 @@ pub async fn register_submission(
     scrobbler: &str,
 ) -> Result<()> {
     let scrobble_id = scrobble_id.to_db();
-    sqlx::query!(
-        "INSERT INTO scrobble_submission (scrobble, scrobbler) VALUES (?, ?)",
-        scrobble_id,
-        scrobbler,
-    )
-    .execute(&mut *db)
-    .await?;
+    sqlx::query("INSERT INTO scrobble_submission (scrobble, scrobbler) VALUES (?, ?)")
+        .bind(scrobble_id)
+        .bind(scrobbler)
+        .execute(&mut *db)
+        .await?;
     Ok(())
 }

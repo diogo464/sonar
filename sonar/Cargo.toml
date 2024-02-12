@@ -30,5 +30,4 @@ sha2 = "0.10.8"
 hex = "0.4.3"
 
 [dev-dependencies]
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 sonar = { path = "." , features = ["test-utilities"] }
