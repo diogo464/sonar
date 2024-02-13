@@ -54,6 +54,7 @@ impl Server {
 #[tonic::async_trait]
 impl sonar_service_server::SonarService for Server {
     type ImageDownloadStream = SonarImageDownloadStream;
+    type TrackDownloadStream = SonarTrackDownloadStream;
 
     async fn user_list(
         &self,
@@ -341,6 +342,19 @@ impl sonar_service_server::SonarService for Server {
         Ok(tonic::Response::new(TrackLyricsResponse {
             lyrics: Some(lyrics.into()),
         }))
+    }
+    async fn track_download(
+        &self,
+        request: tonic::Request<TrackDownloadRequest>,
+    ) -> std::result::Result<tonic::Response<Self::TrackDownloadStream>, tonic::Status> {
+        let req = request.into_inner();
+        let track = self.track_lookup(&req.track_id).await?;
+        let download = sonar::track_download(&self.context, track.id, Default::default())
+            .await
+            .m()?;
+        Ok(tonic::Response::new(SonarTrackDownloadStream::new(
+            download,
+        )))
     }
     async fn playlist_list(
         &self,
@@ -837,6 +851,40 @@ impl tokio_stream::Stream for SonarImageDownloadStream {
                     image_id,
                     mime_type,
                     content,
+                })))
+            }
+            std::task::Poll::Ready(Some(Err(err))) => std::task::Poll::Ready(Some(Err(
+                tonic::Status::new(tonic::Code::Internal, err.to_string()),
+            ))),
+            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
+            std::task::Poll::Pending => std::task::Poll::Pending,
+        }
+    }
+}
+
+struct SonarTrackDownloadStream {
+    download: sonar::AudioDownload,
+}
+
+impl SonarTrackDownloadStream {
+    fn new(download: sonar::AudioDownload) -> Self {
+        Self { download }
+    }
+}
+
+impl tokio_stream::Stream for SonarTrackDownloadStream {
+    type Item = Result<TrackDownloadResponse, tonic::Status>;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        let stream = std::pin::Pin::new(&mut this.download.stream);
+        match stream.poll_next(cx) {
+            std::task::Poll::Ready(Some(Ok(data))) => {
+                std::task::Poll::Ready(Some(Ok(TrackDownloadResponse {
+                    chunk: data.to_vec(),
                 })))
             }
             std::task::Poll::Ready(Some(Err(err))) => std::task::Poll::Ready(Some(Err(

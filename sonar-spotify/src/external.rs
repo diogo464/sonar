@@ -182,12 +182,22 @@ impl sonar::ExternalService for SpotifyService {
             None => None,
         };
 
+        let mut properties = properties_for_resource(resource_id.id);
+        properties.insert(
+            sonar::prop::DISC_NUMBER,
+            sonar::PropertyValue::new(track.disc_number.to_string()).unwrap(),
+        );
+        properties.insert(
+            sonar::prop::TRACK_NUMBER,
+            sonar::PropertyValue::new(track.track_number.to_string()).unwrap(),
+        );
+
         let external = ExternalTrack {
             name: track.name,
             artist: ExternalMediaId::new(track.artists[0].to_string()),
             album: ExternalMediaId::new(track.album.to_string()),
             lyrics,
-            properties: properties_for_resource(resource_id.id),
+            properties,
         };
         tracing::debug!("external track: {:#?}", external);
         Ok(external)

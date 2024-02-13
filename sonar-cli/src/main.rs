@@ -1,5 +1,6 @@
 #![feature(let_chains)]
 use std::{
+    collections::{HashMap, HashSet},
     net::SocketAddr,
     path::{Path, PathBuf},
     pin::Pin,
@@ -8,8 +9,10 @@ use std::{
 
 use clap::Parser;
 use eyre::{Context, Result};
+use lofty::{Accessor, TaggedFileExt};
 use serde::Serialize;
 use sonar::{Genres, Properties};
+use tokio::io::AsyncWriteExt;
 use tokio_stream::StreamExt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -1289,10 +1292,321 @@ async fn cmd_scrobble_delete(args: ScrobbleDeleteArgs) -> Result<()> {
 }
 
 #[derive(Debug, Parser)]
-struct SyncArgs {}
+struct SyncArgs {
+    /// output directory for downloaded files
+    #[clap(long, default_value = ".")]
+    output: PathBuf,
 
-async fn cmd_sync(_args: SyncArgs) -> Result<()> {
-    todo!()
+    /// list of sonar ids to sync
+    ids: Vec<sonar::SonarId>,
+}
+
+async fn cmd_sync(args: SyncArgs) -> Result<()> {
+    let client = create_client().await?;
+    let (track_tx, mut track_rx) = tokio::sync::mpsc::channel::<sonar_grpc::Track>(100);
+    let (album_tx, mut album_rx) = tokio::sync::mpsc::channel::<sonar_grpc::Album>(100);
+    let (artist_tx, mut artist_rx) = tokio::sync::mpsc::channel::<sonar_grpc::Artist>(100);
+
+    tracing::info!("fetching track information...");
+    for id in args.ids {
+        let mut client = client.clone();
+        let track_tx = track_tx.clone();
+        tokio::spawn(async move {
+            match id {
+                sonar::SonarId::Artist(artist) => {
+                    let response = client
+                        .album_list_by_artist(sonar_grpc::AlbumListByArtistRequest {
+                            artist_id: artist.to_string(),
+                            ..Default::default()
+                        })
+                        .await
+                        .unwrap();
+                    for album in response.into_inner().albums {
+                        let response = client
+                            .track_list_by_album(sonar_grpc::TrackListByAlbumRequest {
+                                album_id: album.id,
+                                ..Default::default()
+                            })
+                            .await
+                            .unwrap();
+                        for track in response.into_inner().tracks {
+                            let _ = track_tx.send(track).await;
+                        }
+                    }
+                }
+                sonar::SonarId::Album(album) => {
+                    let response = client
+                        .track_list_by_album(sonar_grpc::TrackListByAlbumRequest {
+                            album_id: album.to_string(),
+                            ..Default::default()
+                        })
+                        .await
+                        .unwrap();
+                    for track in response.into_inner().tracks {
+                        let _ = track_tx.send(track).await;
+                    }
+                }
+                sonar::SonarId::Track(track) => {
+                    let response = client
+                        .track_get(sonar_grpc::TrackGetRequest {
+                            track: track.to_string(),
+                        })
+                        .await
+                        .unwrap();
+                    let _ = track_tx.send(response.into_inner()).await;
+                }
+                sonar::SonarId::Playlist(playlist) => {
+                    let response = client
+                        .playlist_track_list(sonar_grpc::PlaylistTrackListRequest {
+                            playlist_id: playlist.to_string(),
+                        })
+                        .await
+                        .unwrap();
+                    for track in response.into_inner().tracks {
+                        let _ = track_tx.send(track).await;
+                    }
+                }
+                _ => tracing::warn!("unsupported sonar id: {}", id),
+            }
+        });
+    }
+    drop(track_tx);
+
+    let mut tracks: Vec<sonar_grpc::Track> = Default::default();
+    let mut albums: HashMap<String, sonar_grpc::Album> = Default::default();
+    let mut artists: HashMap<String, sonar_grpc::Artist> = Default::default();
+
+    let mut pending_ids: HashSet<String> = Default::default();
+    while let Some(track) = track_rx.recv().await {
+        // fetch track artist
+        if pending_ids.insert(track.artist_id.clone()) {
+            let mut client = client.clone();
+            let artist_id = track.artist_id.clone();
+            let artist_tx = artist_tx.clone();
+            tokio::spawn(async move {
+                let response = client
+                    .artist_get(sonar_grpc::ArtistGetRequest { artist: artist_id })
+                    .await
+                    .unwrap();
+                let _ = artist_tx.send(response.into_inner()).await;
+            });
+        }
+
+        // fetch track album
+        if pending_ids.insert(track.album_id.clone()) {
+            let mut client = client.clone();
+            let album_id = track.album_id.clone();
+            let album_tx = album_tx.clone();
+            tokio::spawn(async move {
+                let response = client
+                    .album_get(sonar_grpc::AlbumGetRequest { album: album_id })
+                    .await
+                    .unwrap();
+                let _ = album_tx.send(response.into_inner()).await;
+            });
+        }
+
+        tracks.push(track);
+    }
+    drop(album_tx);
+    drop(artist_tx);
+
+    // collect artists and albums
+    while let Some(album) = album_rx.recv().await {
+        albums.insert(album.id.clone(), album);
+    }
+    while let Some(artist) = artist_rx.recv().await {
+        artists.insert(artist.id.clone(), artist);
+    }
+
+    tracing::info!(
+        "fetched {} artists, {} albums, and {} tracks",
+        artists.len(),
+        albums.len(),
+        tracks.len()
+    );
+    tracing::info!("downloading tracks...");
+
+    // create directories and start track downloads
+    let mut handles = Vec::new();
+    for track in tracks {
+        let artist = &artists[&track.artist_id];
+        let album = &albums[&track.album_id];
+
+        let disc_number = track
+            .properties
+            .iter()
+            .find(|p| p.key == sonar::prop::DISC_NUMBER.as_str())
+            .map(|p| p.value.parse::<u32>().ok())
+            .flatten()
+            .unwrap_or_else(|| 0);
+        let track_number = track
+            .properties
+            .iter()
+            .find(|p| p.key == sonar::prop::TRACK_NUMBER.as_str())
+            .map(|p| p.value.parse::<u32>().ok())
+            .flatten()
+            .unwrap_or_else(|| 0);
+
+        let parent_dir = args.output.join(&artist.name).join(&album.name);
+        let track_path = parent_dir
+            .join(format!("{:02} - {}", track_number, track.name))
+            .with_extension("mp3");
+        let cover_path_png = parent_dir.join("cover.png");
+        let cover_path_jpg = parent_dir.join("cover.jpg");
+
+        tokio::fs::create_dir_all(&parent_dir)
+            .await
+            .with_context(|| format!("creating directory {}", parent_dir.display()))?;
+
+        if !track_path.exists() {
+            tracing::info!("downloading track: {}", track_path.display());
+            let mut client = client.clone();
+            let artist = artist.clone();
+            let album = album.clone();
+            let track = track.clone();
+            let track_id = track.id.clone();
+            let handle = tokio::spawn(async move {
+                let download_path = track_path.with_extension("part");
+                let response = client
+                    .track_download(sonar_grpc::TrackDownloadRequest {
+                        track_id: track_id.clone(),
+                    })
+                    .await
+                    .with_context(|| format!("downloading track {}", track_id))?;
+
+                {
+                    let mut stream = response.into_inner();
+                    let file = tokio::fs::File::create(&download_path)
+                        .await
+                        .with_context(|| format!("creating file {}", download_path.display()))?;
+                    let mut writer = tokio::io::BufWriter::new(file);
+                    while let Some(part) = stream.next().await {
+                        let chunk = part?.chunk;
+                        writer.write_all(&chunk).await?;
+                    }
+                }
+
+                tokio::task::spawn_blocking({
+                    let artist_name = artist.name.clone();
+                    let album_name = album.name.clone();
+                    let track_name = track.name.clone();
+                    let genre = artist
+                        .genres
+                        .iter()
+                        .map(|g| g.as_str())
+                        .chain(album.genres.iter().map(|g| g.as_str()))
+                        .collect::<Vec<_>>()
+                        .join(";");
+                    let download_path = download_path.clone();
+                    move || {
+                        let file = std::fs::File::open(&download_path)
+                            .with_context(|| format!("opening file {}", download_path.display()))?;
+                        let reader = std::io::BufReader::new(file);
+                        let probe = lofty::Probe::new(reader).set_file_type(lofty::FileType::Mpeg);
+                        let mut tagged = probe
+                            .read()
+                            .with_context(|| format!("reading file {}", download_path.display()))?;
+                        let tag_type = tagged.primary_tag_type();
+                        tagged.insert_tag(lofty::Tag::new(tag_type));
+
+                        let tag = tagged.primary_tag_mut().unwrap();
+                        tag.set_artist(artist_name);
+                        tag.set_album(album_name);
+                        tag.set_title(track_name);
+                        tag.set_disk(disc_number);
+                        tag.set_track(track_number);
+                        tag.set_genre(genre);
+
+                        Ok::<_, eyre::Error>(())
+                    }
+                })
+                .await??;
+
+                tokio::fs::rename(&download_path, &track_path)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "renaming {} to {}",
+                            download_path.display(),
+                            track_path.display()
+                        )
+                    })?;
+
+                tracing::info!("track downloaded: {}", track_path.display());
+                Ok::<_, eyre::Error>(())
+            });
+            handles.push(handle);
+        } else {
+            tracing::info!("track already exists: {}", track_path.display());
+        }
+
+        if !cover_path_jpg.exists()
+            && !cover_path_png.exists()
+            && (album.coverart_id.is_some() || artist.coverart_id.is_some())
+        {
+            tracing::info!("downloading cover: {}", parent_dir.display());
+            let mut client = client.clone();
+            let album_dir = parent_dir.clone();
+            let image_id = album
+                .coverart_id
+                .as_ref()
+                .or(artist.coverart_id.as_ref())
+                .cloned()
+                .unwrap();
+
+            let handle = tokio::spawn(async move {
+                let response = client
+                    .image_download(sonar_grpc::ImageDownloadRequest {
+                        image_id: image_id.to_string(),
+                    })
+                    .await
+                    .with_context(|| format!("downloading image {}", image_id))?;
+                let mut stream = response.into_inner();
+
+                let mut chunks = Vec::new();
+                let mut mime_type = None;
+                while let Some(part) = stream.next().await {
+                    let part = part?;
+                    if mime_type.is_none() {
+                        mime_type = Some(part.mime_type);
+                    }
+                    chunks.push(part.content);
+                }
+
+                let filetype = match mime_type.as_deref() {
+                    Some("image/png") => "png",
+                    Some("image/jpeg") => "jpg",
+                    _ => {
+                        tracing::warn!("unsupported mime type: {:?}", mime_type);
+                        return Ok::<_, eyre::Error>(());
+                    }
+                };
+
+                let cover_path = album_dir.join("cover").with_extension(filetype);
+                tokio::fs::write(&cover_path, chunks.concat())
+                    .await
+                    .with_context(|| format!("writing file {}", cover_path.display()))?;
+
+                tracing::info!("cover downloaded: {}", cover_path.display());
+                Ok::<_, eyre::Error>(())
+            });
+            handles.push(handle);
+        } else {
+            tracing::info!("cover already exists: {}", parent_dir.display());
+        }
+    }
+
+    let mut errors = 0;
+    for handle in handles {
+        if let Err(err) = handle.await? {
+            errors += 1;
+            tracing::error!("error: {}", err);
+        }
+    }
+
+    tracing::info!("sync complete: {} errors", errors);
+    Ok(())
 }
 
 #[derive(Debug, Parser)]
