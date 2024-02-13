@@ -68,6 +68,7 @@ pub enum LyricsKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricsLine {
     pub offset: Duration,
+    pub duration: Duration,
     pub text: String,
 }
 
@@ -306,7 +307,7 @@ pub async fn get_lyrics(db: &mut DbC, track_id: TrackId) -> Result<Lyrics> {
     };
 
     let line_rows = sqlx::query(
-        "SELECT offset, text FROM track_lyrics_line WHERE track = ? ORDER BY offset ASC",
+        "SELECT offset, duration, text FROM track_lyrics_line WHERE track = ? ORDER BY offset ASC",
     )
     .bind(track_id)
     .fetch_all(&mut *db)
@@ -315,8 +316,9 @@ pub async fn get_lyrics(db: &mut DbC, track_id: TrackId) -> Result<Lyrics> {
 
     for row in line_rows {
         lines.push(LyricsLine {
-            offset: Duration::from_secs(row.get::<i64, _>(0) as u64),
-            text: row.get(1),
+            offset: Duration::from_millis(row.get::<i64, _>(0) as u64),
+            duration: Duration::from_millis(row.get::<i64, _>(1) as u64),
+            text: row.get(2),
         });
     }
 
@@ -343,13 +345,15 @@ async fn set_lyrics(db: &mut DbC, track_id: TrackId, lyrics: TrackLyrics) -> Res
         .await?;
 
     for line in lyrics.lines {
-        let offset = line.offset.as_secs() as i64;
-        sqlx::query("INSERT INTO track_lyrics_line (track, offset, text) VALUES (?, ?, ?)")
-            .bind(track_id)
-            .bind(offset)
-            .bind(line.text)
-            .execute(&mut *db)
-            .await?;
+        sqlx::query(
+            "INSERT INTO track_lyrics_line (track, offset, duration, text) VALUES (?, ?, ?, ?)",
+        )
+        .bind(track_id)
+        .bind(line.offset.as_millis() as i64)
+        .bind(line.duration.as_millis() as i64)
+        .bind(line.text)
+        .execute(&mut *db)
+        .await?;
     }
 
     Ok(())

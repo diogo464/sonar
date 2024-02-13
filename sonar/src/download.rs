@@ -448,7 +448,7 @@ async fn find_or_create_track(
         name: external_track.name.clone(),
         album: album_id,
         cover_art: None,
-        lyrics: None,
+        lyrics: external_track.lyrics.clone(),
         audio: None,
         properties: external_track.properties.clone(),
     };

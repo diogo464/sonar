@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use sonar::{
     bytestream::ByteStream, ExternalAlbum, ExternalArtist, ExternalImage, ExternalMediaId,
@@ -150,11 +150,43 @@ impl sonar::ExternalService for SpotifyService {
             .map_err(sonar::Error::wrap)?;
         tracing::debug!("track: {:#?}", track);
 
+        let lyrics = match track.lyrics {
+            Some(lyrics) => Some(match lyrics.kind {
+                spotdl::metadata::LyricsKind::Unsynchronized(u) => sonar::TrackLyrics {
+                    kind: sonar::LyricsKind::Unsynced,
+                    lines: u
+                        .into_iter()
+                        .map(|line| sonar::LyricsLine {
+                            offset: Default::default(),
+                            duration: Default::default(),
+                            text: line,
+                        })
+                        .collect(),
+                },
+                spotdl::metadata::LyricsKind::Synchronized(s) => sonar::TrackLyrics {
+                    kind: sonar::LyricsKind::Synced,
+                    lines: s
+                        .into_iter()
+                        .map(|line| sonar::LyricsLine {
+                            offset: line.start_time,
+                            duration: if line.end_time >= line.start_time {
+                                line.end_time - line.start_time
+                            } else {
+                                Duration::default()
+                            },
+                            text: line.text,
+                        })
+                        .collect(),
+                },
+            }),
+            None => None,
+        };
+
         let external = ExternalTrack {
             name: track.name,
             artist: ExternalMediaId::new(track.artists[0].to_string()),
             album: ExternalMediaId::new(track.album.to_string()),
-            lyrics: None, // TODO: fetch lyrics
+            lyrics,
             properties: properties_for_resource(resource_id.id),
         };
         tracing::debug!("external track: {:#?}", external);

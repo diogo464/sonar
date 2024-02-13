@@ -1001,15 +1001,13 @@ async fn cmd_track_search(args: TrackSearchArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct TrackLyricsArgs {
-    id: sonar::TrackId,
+    id: String,
 }
 
 async fn cmd_track_lyrics(args: TrackLyricsArgs) -> Result<()> {
     let mut client = create_client().await?;
     let response = client
-        .track_lyrics(sonar_grpc::TrackLyricsRequest {
-            track_id: args.id.to_string(),
-        })
+        .track_lyrics(sonar_grpc::TrackLyricsRequest { track_id: args.id })
         .await?;
     let lyrics = Lyrics::from(response.into_inner().lyrics.unwrap());
     stdout_value(lyrics)?;

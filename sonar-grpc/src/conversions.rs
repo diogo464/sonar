@@ -144,7 +144,8 @@ impl From<sonar::Lyrics> for Lyrics {
                 .lines
                 .into_iter()
                 .map(|l| LyricsLine {
-                    offset: l.offset.as_secs() as u32,
+                    offset: l.offset.as_millis() as u32,
+                    duration: l.duration.as_millis() as u32,
                     text: l.text,
                 })
                 .collect(),

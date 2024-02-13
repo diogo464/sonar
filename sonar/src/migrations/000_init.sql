@@ -114,7 +114,8 @@ CREATE INDEX track_album ON track(album);
 
 CREATE TABLE track_lyrics_line (
 	track		INTEGER NOT NULL REFERENCES track(id),
-	offset		INTEGER NOT NULL,
+	offset		INTEGER NOT NULL, -- milliseconds since start
+	duration	INTEGER NOT NULL, -- milliseconds
 	text		TEXT NOT NULL
 );
 CREATE INDEX track_lyrics_line_track ON track_lyrics_line(track);
