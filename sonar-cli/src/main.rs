@@ -53,6 +53,7 @@ enum Command {
     Search(SearchArgs),
     Subscription(SubscriptionArgs),
     Download(DownloadArgs),
+    Metadata(MetadataArgs),
     Admin(AdminArgs),
     Import(ImportArgs),
     Server(ServerArgs),
@@ -451,6 +452,10 @@ async fn async_main() -> Result<()> {
             DownloadCommand::Start(cargs) => cmd_download_start(cargs).await?,
             DownloadCommand::Stop(cargs) => cmd_download_stop(cargs).await?,
         },
+        Command::Metadata(cargs) => match cargs.command {
+            MetadataCommand::Providers => cmd_metadata_providers().await?,
+            MetadataCommand::Fetch(cargs) => cmd_metadata_fetch(cargs).await?,
+        },
         Command::Admin(cargs) => match cargs.command {
             AdminCommand::User(cargs) => match cargs.command {
                 AdminUserCommand::List(cargs) => cmd_admin_user_list(cargs).await?,
@@ -464,7 +469,6 @@ async fn async_main() -> Result<()> {
                 AdminPlaylistCommand::Update(cargs) => cmd_admin_playlist_update(cargs).await?,
                 AdminPlaylistCommand::Delete(cargs) => cmd_admin_playlist_delete(cargs).await?,
             },
-            AdminCommand::MetadataFetch(cargs) => cmd_admin_metadata_fetch(cargs).await?,
             AdminCommand::MetadataPreview(cargs) => cmd_admin_metadata_preview(cargs).await?,
         },
         Command::Import(cargs) => cmd_import(cargs).await?,
@@ -1563,6 +1567,101 @@ async fn cmd_download_stop(args: DownloadStopArgs) -> Result<()> {
 }
 
 #[derive(Debug, Parser)]
+struct MetadataArgs {
+    #[clap(subcommand)]
+    command: MetadataCommand,
+}
+
+#[derive(Debug, Parser)]
+enum MetadataCommand {
+    Providers,
+    Fetch(MetadataFetchArgs),
+}
+
+async fn cmd_metadata_providers() -> Result<()> {
+    let mut client = create_client().await?;
+    let response = client
+        .metadata_providers(sonar_grpc::MetadataProvidersRequest::default())
+        .await?;
+    let providers = response.into_inner().providers;
+    stdout_values(&providers)?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct MetadataFetchArgs {
+    id: sonar::SonarId,
+
+    /// comma separated list of providers to fetch metadata from.
+    /// if not provided, fetch from all providers.
+    #[clap(long)]
+    providers: Option<String>,
+
+    /// comma separated list of fields to fetch.
+    /// if not provided, fetch all fields.
+    /// possible fields are: name, genres, properties, cover.
+    #[clap(long)]
+    fields: Option<String>,
+}
+
+async fn cmd_metadata_fetch(args: MetadataFetchArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let providers = args
+        .providers
+        .map(|x| x.split(',').map(|x| x.to_string()).collect())
+        .unwrap_or_default();
+    let fields = args
+        .fields
+        .map(|x| x.split(',').map(|x| x.to_string()).collect())
+        .unwrap_or_default();
+    match args.id {
+        sonar::SonarId::Artist(_) => {
+            client
+                .metadata_fetch(sonar_grpc::MetadataFetchRequest {
+                    kind: sonar_grpc::MetadataFetchKind::Artist as i32,
+                    item_id: args.id.to_string(),
+                    fields,
+                    providers,
+                })
+                .await?;
+        }
+        sonar::SonarId::Album(_) => {
+            client
+                .metadata_fetch(sonar_grpc::MetadataFetchRequest {
+                    kind: sonar_grpc::MetadataFetchKind::Albumtracks as i32,
+                    item_id: args.id.to_string(),
+                    fields: fields.clone(),
+                    providers: providers.clone(),
+                })
+                .await?;
+
+            client
+                .metadata_fetch(sonar_grpc::MetadataFetchRequest {
+                    kind: sonar_grpc::MetadataFetchKind::Album as i32,
+                    item_id: args.id.to_string(),
+                    fields,
+                    providers,
+                })
+                .await?;
+        }
+        sonar::SonarId::Track(_) => {
+            client
+                .metadata_fetch(sonar_grpc::MetadataFetchRequest {
+                    kind: sonar_grpc::MetadataFetchKind::Album as i32,
+                    item_id: args.id.to_string(),
+                    fields,
+                    providers,
+                })
+                .await?;
+        }
+        _ => {
+            eyre::bail!("unsupported id type");
+        }
+    };
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
 struct AdminArgs {
     #[clap(subcommand)]
     command: AdminCommand,
@@ -1572,7 +1671,6 @@ struct AdminArgs {
 enum AdminCommand {
     User(AdminUserArgs),
     Playlist(AdminPlaylistArgs),
-    MetadataFetch(AdminMetadataFetchArgs),
     MetadataPreview(AdminMetadataPreviewArgs),
 }
 
@@ -1778,52 +1876,6 @@ async fn cmd_admin_playlist_delete(args: AdminPlaylistDeleteArgs) -> Result<()> 
             playlist_id: args.id.to_string(),
         })
         .await?;
-    Ok(())
-}
-
-#[derive(Debug, Parser)]
-struct AdminMetadataFetchArgs {
-    id: sonar::SonarId,
-}
-
-async fn cmd_admin_metadata_fetch(args: AdminMetadataFetchArgs) -> Result<()> {
-    let mut client = create_client().await?;
-    match args.id {
-        sonar::SonarId::Artist(_) => {
-            client
-                .metadata_fetch(sonar_grpc::MetadataFetchRequest {
-                    kind: sonar_grpc::MetadataFetchKind::Artist as i32,
-                    item_id: args.id.to_string(),
-                })
-                .await?;
-        }
-        sonar::SonarId::Album(_) => {
-            client
-                .metadata_fetch(sonar_grpc::MetadataFetchRequest {
-                    kind: sonar_grpc::MetadataFetchKind::Albumtracks as i32,
-                    item_id: args.id.to_string(),
-                })
-                .await?;
-
-            client
-                .metadata_fetch(sonar_grpc::MetadataFetchRequest {
-                    kind: sonar_grpc::MetadataFetchKind::Album as i32,
-                    item_id: args.id.to_string(),
-                })
-                .await?;
-        }
-        sonar::SonarId::Track(_) => {
-            client
-                .metadata_fetch(sonar_grpc::MetadataFetchRequest {
-                    kind: sonar_grpc::MetadataFetchKind::Album as i32,
-                    item_id: args.id.to_string(),
-                })
-                .await?;
-        }
-        _ => {
-            eyre::bail!("unsupported id type");
-        }
-    };
     Ok(())
 }
 

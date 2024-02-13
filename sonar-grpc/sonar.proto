@@ -70,6 +70,7 @@ service SonarService {
 	rpc Import(stream ImportRequest) returns (Track);
 	rpc Search(SearchRequest) returns (SearchResponse);
 
+	rpc MetadataProviders(MetadataProvidersRequest) returns (MetadataProvidersResponse);
 	rpc MetadataFetch(MetadataFetchRequest) returns (google.protobuf.Empty);
 
 	rpc MetadataAlbumTracks(MetadataAlbumTracksRequest) returns (MetadataAlbumTracksResponse);
@@ -528,6 +529,12 @@ message SearchResponse {
 	repeated SearchResult results = 1;
 }
 
+message MetadataProvidersRequest {}
+
+message MetadataProvidersResponse {
+	repeated string providers = 1;
+}
+
 enum MetadataFetchKind {
 	METADATA_FETCH_KIND_ARTIST = 0;
 	METADATA_FETCH_KIND_ALBUM = 1;
@@ -538,6 +545,8 @@ enum MetadataFetchKind {
 message MetadataFetchRequest {
 	MetadataFetchKind kind = 1;
 	string item_id = 2;
+	repeated string providers = 3;
+	repeated string fields = 4;
 }
 
 message TrackMetadata {

@@ -687,33 +687,47 @@ impl sonar_service_server::SonarService for Server {
             results: results.results.into_iter().map(Into::into).collect(),
         }))
     }
+    async fn metadata_providers(
+        &self,
+        _request: tonic::Request<MetadataProvidersRequest>,
+    ) -> std::result::Result<tonic::Response<MetadataProvidersResponse>, tonic::Status> {
+        let providers = sonar::metadata_providers(&self.context);
+        Ok(tonic::Response::new(MetadataProvidersResponse {
+            providers,
+        }))
+    }
     async fn metadata_fetch(
         &self,
         request: tonic::Request<MetadataFetchRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         let req = request.into_inner();
+        let mask = metadata_mask_from_fields(req.fields)?;
+        let params = sonar::MetadataFetchParams {
+            mask,
+            providers: req.providers,
+        };
         match req.kind {
             _ if req.kind == MetadataFetchKind::Artist as i32 => {
                 let artist_id = req.item_id.parse::<sonar::ArtistId>().m()?;
-                sonar::metadata_fetch_artist(&self.context, artist_id)
+                sonar::metadata_fetch_artist(&self.context, artist_id, params)
                     .await
                     .m()?;
             }
             _ if req.kind == MetadataFetchKind::Album as i32 => {
                 let album_id = req.item_id.parse::<sonar::AlbumId>().m()?;
-                sonar::metadata_fetch_album(&self.context, album_id)
+                sonar::metadata_fetch_album(&self.context, album_id, params)
                     .await
                     .m()?;
             }
             _ if req.kind == MetadataFetchKind::Albumtracks as i32 => {
                 let album_id = req.item_id.parse::<sonar::AlbumId>().m()?;
-                sonar::metadata_fetch_album_tracks(&self.context, album_id)
+                sonar::metadata_fetch_album_tracks(&self.context, album_id, params)
                     .await
                     .m()?;
             }
             _ if req.kind == MetadataFetchKind::Track as i32 => {
                 let track_id = parse_trackid(req.item_id)?;
-                sonar::metadata_fetch_track(&self.context, track_id)
+                sonar::metadata_fetch_track(&self.context, track_id, params)
                     .await
                     .m()?;
             }
@@ -732,9 +746,10 @@ impl sonar_service_server::SonarService for Server {
     ) -> std::result::Result<tonic::Response<MetadataAlbumTracksResponse>, tonic::Status> {
         let request = request.into_inner();
         let album_id = request.album_id.parse::<sonar::AlbumId>().m()?;
-        let metadata = sonar::metadata_view_album_tracks(&self.context, album_id)
-            .await
-            .m()?;
+        let metadata =
+            sonar::metadata_view_album_tracks(&self.context, album_id, &Default::default())
+                .await
+                .m()?;
         Ok(tonic::Response::new(metadata.into()))
     }
 }

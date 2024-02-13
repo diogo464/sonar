@@ -7,6 +7,29 @@ use crate::{
     TrackId,
 };
 
+pub type MetadataFetchMask = u32;
+pub const METADATA_FETCH_MASK_EMPTY: MetadataFetchMask = 0;
+pub const METADATA_FETCH_MASK_NAME: MetadataFetchMask = 1 << 0;
+pub const METADATA_FETCH_MASK_GENRES: MetadataFetchMask = 1 << 1;
+pub const METADATA_FETCH_MASK_PROPERTIES: MetadataFetchMask = 1 << 2;
+pub const METADATA_FETCH_MASK_COVER: MetadataFetchMask = 1 << 3;
+pub const METADATA_FETCH_MASK_ALL: MetadataFetchMask = 0xFFFFFFFF;
+
+#[derive(Debug, Clone)]
+pub struct MetadataFetchParams {
+    pub mask: MetadataFetchMask,
+    pub providers: Vec<String>,
+}
+
+impl Default for MetadataFetchParams {
+    fn default() -> Self {
+        Self {
+            mask: METADATA_FETCH_MASK_ALL,
+            providers: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MetadataRequestKind {
     Artist,

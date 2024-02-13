@@ -450,3 +450,25 @@ pub fn parse_trackid(id: String) -> Result<sonar::TrackId, tonic::Status> {
 pub fn parse_sonarid(id: String) -> Result<sonar::SonarId, tonic::Status> {
     id.parse::<sonar::SonarId>().m()
 }
+
+pub fn metadata_mask_from_fields(
+    fields: Vec<String>,
+) -> Result<sonar::MetadataFetchMask, tonic::Status> {
+    if fields.is_empty() {
+        return Ok(sonar::METADATA_FETCH_MASK_ALL);
+    }
+
+    let mut mask = sonar::METADATA_FETCH_MASK_EMPTY;
+    for field in fields {
+        match field.as_str() {
+            "name" => mask |= sonar::METADATA_FETCH_MASK_NAME,
+            "genres" => mask |= sonar::METADATA_FETCH_MASK_GENRES,
+            "properties" => mask |= sonar::METADATA_FETCH_MASK_PROPERTIES,
+            "cover" => mask |= sonar::METADATA_FETCH_MASK_COVER,
+            "all" => mask |= sonar::METADATA_FETCH_MASK_ALL,
+            _ => return Err(tonic::Status::invalid_argument("invalid field")),
+        };
+    }
+
+    Ok(mask)
+}

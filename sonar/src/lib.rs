@@ -64,8 +64,10 @@ pub use image::{ImageCreate, ImageDownload};
 pub use importer::Import;
 pub use metadata::{
     AlbumMetadata, AlbumMetadataRequest, AlbumTracksMetadata, AlbumTracksMetadataRequest,
-    ArtistMetadata, ArtistMetadataRequest, MetadataProvider, MetadataRequestKind, TrackMetadata,
-    TrackMetadataRequest,
+    ArtistMetadata, ArtistMetadataRequest, MetadataFetchMask, MetadataFetchParams,
+    MetadataProvider, MetadataRequestKind, TrackMetadata, TrackMetadataRequest,
+    METADATA_FETCH_MASK_ALL, METADATA_FETCH_MASK_COVER, METADATA_FETCH_MASK_GENRES,
+    METADATA_FETCH_MASK_NAME, METADATA_FETCH_MASK_PROPERTIES,METADATA_FETCH_MASK_EMPTY
 };
 pub use playlist::{Playlist, PlaylistCreate, PlaylistTrack, PlaylistUpdate};
 pub use property::{

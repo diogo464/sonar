@@ -28,11 +28,13 @@ use crate::{
     track, user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId,
     ArtistMetadata, ArtistMetadataRequest, ArtistUpdate, Audio, AudioCreate, AudioDownload,
     AudioId, ByteRange, Download, DownloadCreate, DownloadDelete, Error, ErrorKind, Genres,
-    ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics, Playlist, PlaylistCreate,
-    PlaylistId, PlaylistTrack, PlaylistUpdate, Properties, PropertyKey, PropertyUpdate, Result,
-    Scrobble, ScrobbleCreate, ScrobbleId, ScrobbleUpdate, SearchQuery, SonarId, Subscription,
-    SubscriptionCreate, SubscriptionDelete, Track, TrackCreate, TrackId, TrackMetadata,
-    TrackMetadataRequest, TrackUpdate, User, UserCreate, UserId, UserToken, Username, ValueUpdate,
+    ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics, MetadataFetchMask,
+    MetadataFetchParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack, PlaylistUpdate,
+    Properties, PropertyKey, PropertyUpdate, Result, Scrobble, ScrobbleCreate, ScrobbleId,
+    ScrobbleUpdate, SearchQuery, SonarId, Subscription, SubscriptionCreate, SubscriptionDelete,
+    Track, TrackCreate, TrackId, TrackMetadata, TrackMetadataRequest, TrackUpdate, User,
+    UserCreate, UserId, UserToken, Username, ValueUpdate, METADATA_FETCH_MASK_COVER,
+    METADATA_FETCH_MASK_GENRES, METADATA_FETCH_MASK_NAME, METADATA_FETCH_MASK_PROPERTIES,
 };
 
 mod scrobbler_process;
@@ -998,60 +1000,149 @@ async fn metadata_create_image_opt(context: &Context, image: Option<Bytes>) -> O
     }
 }
 
+fn metadata_providers_iter<'s>(
+    providers: &'s [SonarMetadataProvider],
+    kind: MetadataRequestKind,
+    params: &'s MetadataFetchParams,
+) -> impl Iterator<Item = &'s SonarMetadataProvider> + 's {
+    providers.iter().filter(move |p| {
+        p.supports(kind)
+            && if params.providers.is_empty() {
+                true
+            } else {
+                params
+                    .providers
+                    .iter()
+                    .map(|s| s.as_str())
+                    .any(|s| s == p.name())
+            }
+    })
+}
+
+fn metadata_mask_artist_update(update: &mut ArtistUpdate, mask: MetadataFetchMask) {
+    if mask & METADATA_FETCH_MASK_NAME == 0 {
+        update.name = ValueUpdate::Unchanged;
+    }
+    if mask & METADATA_FETCH_MASK_GENRES == 0 {
+        update.genres = Default::default();
+    }
+    if mask & METADATA_FETCH_MASK_PROPERTIES == 0 {
+        update.properties = Default::default();
+    }
+    if mask & METADATA_FETCH_MASK_COVER == 0 {
+        update.cover_art = ValueUpdate::Unchanged;
+    }
+}
+
+fn metadata_mask_album_update(update: &mut AlbumUpdate, mask: MetadataFetchMask) {
+    if mask & METADATA_FETCH_MASK_NAME == 0 {
+        update.name = ValueUpdate::Unchanged;
+    }
+    if mask & METADATA_FETCH_MASK_GENRES == 0 {
+        update.genres = Default::default();
+    }
+    if mask & METADATA_FETCH_MASK_PROPERTIES == 0 {
+        update.properties = Default::default();
+    }
+    if mask & METADATA_FETCH_MASK_COVER == 0 {
+        update.cover_art = ValueUpdate::Unchanged;
+    }
+}
+
+fn metadata_mask_track_update(update: &mut TrackUpdate, mask: MetadataFetchMask) {
+    if mask & METADATA_FETCH_MASK_NAME == 0 {
+        update.name = ValueUpdate::Unchanged;
+    }
+    if mask & METADATA_FETCH_MASK_PROPERTIES == 0 {
+        update.properties = Default::default();
+    }
+    if mask & METADATA_FETCH_MASK_COVER == 0 {
+        update.cover_art = ValueUpdate::Unchanged;
+    }
+}
+
+pub fn metadata_providers(context: &Context) -> Vec<String> {
+    context
+        .providers
+        .iter()
+        .map(|p| p.name().to_string())
+        .collect()
+}
+
 #[tracing::instrument(skip(context))]
-pub async fn metadata_fetch_artist(context: &Context, artist_id: ArtistId) -> Result<()> {
-    let metadata = metadata_view_artist(context, artist_id).await?;
+pub async fn metadata_fetch_artist(
+    context: &Context,
+    artist_id: ArtistId,
+    params: MetadataFetchParams,
+) -> Result<()> {
+    let metadata = metadata_view_artist(context, artist_id, &params).await?;
     let image_id = metadata_create_image_opt(context, metadata.cover).await;
-    let update = ArtistUpdate {
+    let mut update = ArtistUpdate {
         name: ValueUpdate::from_option_unchanged(metadata.name),
         genres: metadata.genres.into_genre_updates(),
         properties: metadata.properties.into_property_updates(),
         cover_art: ValueUpdate::from_option_unchanged(image_id),
     };
+    metadata_mask_artist_update(&mut update, params.mask);
     artist_update(context, artist_id, update).await?;
     Ok(())
 }
 
 #[tracing::instrument(skip(context))]
-pub async fn metadata_fetch_album(context: &Context, album_id: AlbumId) -> Result<()> {
-    let metadata = metadata_view_album(context, album_id).await?;
+pub async fn metadata_fetch_album(
+    context: &Context,
+    album_id: AlbumId,
+    params: MetadataFetchParams,
+) -> Result<()> {
+    let metadata = metadata_view_album(context, album_id, &params).await?;
     let image_id = metadata_create_image_opt(context, metadata.cover).await;
-    let update = AlbumUpdate {
+    let mut update = AlbumUpdate {
         name: ValueUpdate::from_option_unchanged(metadata.name),
         genres: metadata.genres.into_genre_updates(),
         properties: metadata.properties.into_property_updates(),
         cover_art: ValueUpdate::from_option_unchanged(image_id),
         ..Default::default()
     };
+    metadata_mask_album_update(&mut update, params.mask);
     album_update(context, album_id, update).await?;
     Ok(())
 }
 
 #[tracing::instrument(skip(context))]
-pub async fn metadata_fetch_album_tracks(context: &Context, album_id: AlbumId) -> Result<()> {
-    let metadata = metadata_view_album_tracks(context, album_id).await?;
+pub async fn metadata_fetch_album_tracks(
+    context: &Context,
+    album_id: AlbumId,
+    params: MetadataFetchParams,
+) -> Result<()> {
+    let metadata = metadata_view_album_tracks(context, album_id, &params).await?;
     for (track_id, track_metadata) in metadata.tracks {
-        let update = TrackUpdate {
+        let mut update = TrackUpdate {
             // NOTE: we don't add a cover here because we just assume the album has a cover.
             name: ValueUpdate::from_option_unchanged(track_metadata.name),
             properties: track_metadata.properties.into_property_updates(),
             ..Default::default()
         };
+        metadata_mask_track_update(&mut update, params.mask);
         track_update(context, track_id, update).await?;
     }
     Ok(())
 }
 
 #[tracing::instrument(skip(context))]
-pub async fn metadata_fetch_track(context: &Context, track_id: TrackId) -> Result<()> {
-    let metadata = metadata_view_track(context, track_id).await?;
+pub async fn metadata_fetch_track(
+    context: &Context,
+    track_id: TrackId,
+    params: MetadataFetchParams,
+) -> Result<()> {
+    let metadata = metadata_view_track(context, track_id, &params).await?;
     let image_id = metadata_create_image_opt(context, metadata.cover).await;
-    let update = TrackUpdate {
+    let mut update = TrackUpdate {
         name: ValueUpdate::from_option_unchanged(metadata.name),
         properties: metadata.properties.into_property_updates(),
         cover_art: ValueUpdate::from_option_unchanged(image_id),
         ..Default::default()
     };
+    metadata_mask_track_update(&mut update, params.mask);
     track_update(context, track_id, update).await?;
     Ok(())
 }
@@ -1069,14 +1160,12 @@ fn merge_metadata_artist(a: ArtistMetadata, b: ArtistMetadata) -> ArtistMetadata
 pub async fn metadata_view_artist(
     context: &Context,
     artist_id: ArtistId,
+    params: &MetadataFetchParams,
 ) -> Result<ArtistMetadata> {
     let artist = artist_get(context, artist_id).await?;
     let request = ArtistMetadataRequest { artist };
-    let providers = context
-        .providers
-        .iter()
-        .filter(|p| p.supports(MetadataRequestKind::Artist));
-
+    let providers =
+        metadata_providers_iter(&context.providers, MetadataRequestKind::Artist, params);
     let mut metadatas = Vec::new();
     for provider in providers {
         match provider.artist_metadata(context, &request).await {
@@ -1106,14 +1195,15 @@ fn merge_metadata_album(a: AlbumMetadata, b: AlbumMetadata) -> AlbumMetadata {
 }
 
 #[tracing::instrument(skip(context))]
-pub async fn metadata_view_album(context: &Context, album_id: AlbumId) -> Result<AlbumMetadata> {
+pub async fn metadata_view_album(
+    context: &Context,
+    album_id: AlbumId,
+    params: &MetadataFetchParams,
+) -> Result<AlbumMetadata> {
     let album = album_get(context, album_id).await?;
     let artist = artist_get(context, album.artist).await?;
     let request = AlbumMetadataRequest { artist, album };
-    let providers = context
-        .providers
-        .iter()
-        .filter(|p| p.supports(MetadataRequestKind::Album));
+    let providers = metadata_providers_iter(&context.providers, MetadataRequestKind::Album, params);
     let mut metadatas = Vec::new();
     for fetcher in providers {
         match fetcher.album_metadata(context, &request).await {
@@ -1149,6 +1239,7 @@ fn merge_metadata_album_tracks(
 pub async fn metadata_view_album_tracks(
     context: &Context,
     album_id: AlbumId,
+    params: &MetadataFetchParams,
 ) -> Result<AlbumTracksMetadata> {
     let album = album_get(context, album_id).await?;
     let artist = artist_get(context, album.artist).await?;
@@ -1158,10 +1249,8 @@ pub async fn metadata_view_album_tracks(
         album,
         tracks,
     };
-    let providers = context
-        .providers
-        .iter()
-        .filter(|p| p.supports(MetadataRequestKind::AlbumTracks));
+    let providers =
+        metadata_providers_iter(&context.providers, MetadataRequestKind::AlbumTracks, params);
     let mut metadatas = Vec::new();
     for fetcher in providers {
         match fetcher.album_tracks_metadata(context, &request).await {
@@ -1189,7 +1278,11 @@ fn merge_metadata_track(a: TrackMetadata, b: TrackMetadata) -> TrackMetadata {
 }
 
 #[tracing::instrument(skip(context))]
-pub async fn metadata_view_track(context: &Context, track_id: TrackId) -> Result<TrackMetadata> {
+pub async fn metadata_view_track(
+    context: &Context,
+    track_id: TrackId,
+    params: &MetadataFetchParams,
+) -> Result<TrackMetadata> {
     let track = track_get(context, track_id).await?;
     let album = album_get(context, track.album).await?;
     let artist = artist_get(context, album.artist).await?;
