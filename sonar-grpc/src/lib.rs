@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str::FromStr};
 
 use bytes::Bytes;
 use eyre::Context;
@@ -9,12 +9,33 @@ use result_ext::*;
 mod conversions;
 use conversions::*;
 use tokio_stream::StreamExt;
+use tonic::{service::interceptor::InterceptedService, transport::Endpoint};
 
 pub mod ext;
 
 tonic::include_proto!("sonar");
 
-pub type Client = sonar_service_client::SonarServiceClient<tonic::transport::Channel>;
+pub type Client = sonar_service_client::SonarServiceClient<
+    InterceptedService<tonic::transport::Channel, AuthInterceptor>,
+>;
+
+#[derive(Debug, Clone)]
+pub struct AuthInterceptor {
+    token: String,
+}
+
+impl tonic::service::Interceptor for AuthInterceptor {
+    fn call(
+        &mut self,
+        mut request: tonic::Request<()>,
+    ) -> Result<tonic::Request<()>, tonic::Status> {
+        request.metadata_mut().insert(
+            "authorization",
+            tonic::metadata::MetadataValue::try_from(self.token.as_str()).unwrap(),
+        );
+        Ok(request)
+    }
+}
 
 #[derive(Clone)]
 struct Server {
@@ -24,6 +45,49 @@ struct Server {
 impl Server {
     fn new(context: sonar::Context) -> Self {
         Self { context }
+    }
+
+    async fn require_user_mt(
+        &self,
+        metadata: &tonic::metadata::MetadataMap,
+    ) -> Result<sonar::User, tonic::Status> {
+        let token = sonar::UserToken::from_str(
+            metadata
+                .get("authorization")
+                .map(|v| v.to_str().unwrap_or_default())
+                .unwrap_or_default(),
+        )
+        .m()?;
+        let user_id = sonar::user_validate_token(&self.context, &token)
+            .await
+            .m()?;
+        let user = sonar::user_get(&self.context, user_id).await.m()?;
+        Ok(user)
+    }
+
+    async fn require_user<T>(
+        &self,
+        request: &tonic::Request<T>,
+    ) -> Result<sonar::User, tonic::Status> {
+        self.require_user_mt(request.metadata()).await
+    }
+
+    async fn require_admin_mt(
+        &self,
+        metadata: &tonic::metadata::MetadataMap,
+    ) -> Result<sonar::User, tonic::Status> {
+        let user = self.require_user_mt(metadata).await?;
+        if !user.admin {
+            return Err(tonic::Status::permission_denied("not an admin"));
+        }
+        Ok(user)
+    }
+
+    async fn require_admin<T>(
+        &self,
+        request: &tonic::Request<T>,
+    ) -> Result<sonar::User, tonic::Status> {
+        self.require_admin_mt(request.metadata()).await
     }
 
     async fn artist_lookup(&self, id_or_name: &str) -> Result<sonar::Artist, tonic::Status> {
@@ -73,6 +137,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<UserCreateRequest>,
     ) -> std::result::Result<tonic::Response<User>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let username = req.username.parse::<sonar::Username>().m()?;
         let avatar = parse_imageid_opt(req.avatar_id)?;
@@ -80,20 +146,25 @@ impl sonar_service_server::SonarService for Server {
             username,
             password: req.password,
             avatar,
+            admin: req.admin.unwrap_or(false),
         };
         let user = sonar::user_create(&self.context, create).await.m()?;
         Ok(tonic::Response::new(user.into()))
     }
     async fn user_update(
         &self,
-        _request: tonic::Request<UserUpdateRequest>,
+        request: tonic::Request<UserUpdateRequest>,
     ) -> std::result::Result<tonic::Response<User>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         todo!()
     }
     async fn user_delete(
         &self,
         request: tonic::Request<UserDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
         sonar::user_delete(&self.context, user_id).await.m()?;
@@ -127,6 +198,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<ImageCreateRequest>,
     ) -> std::result::Result<tonic::Response<ImageCreateResponse>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let image_id = sonar::image_create(
             &self.context,
@@ -142,8 +215,10 @@ impl sonar_service_server::SonarService for Server {
     }
     async fn image_delete(
         &self,
-        _request: tonic::Request<ImageDeleteRequest>,
+        request: tonic::Request<ImageDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         todo!()
     }
     async fn image_download(
@@ -181,6 +256,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<ArtistCreateRequest>,
     ) -> std::result::Result<tonic::Response<Artist>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let create = sonar::ArtistCreate {
             name: req.name,
@@ -195,6 +272,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<ArtistUpdateRequest>,
     ) -> std::result::Result<tonic::Response<Artist>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let (artist_id, update) = TryFrom::try_from(req)?;
         let artist = self.artist_lookup(&artist_id).await?;
@@ -207,6 +286,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<ArtistDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let artist = self.artist_lookup(&req.artist_id).await?;
         sonar::artist_delete(&self.context, artist.id).await.m()?;
@@ -257,6 +338,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<AlbumUpdateRequest>,
     ) -> std::result::Result<tonic::Response<Album>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let (album_id, update) = TryFrom::try_from(req)?;
         let album = self.album_lookup(&album_id).await?;
@@ -269,6 +352,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<AlbumDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let album = self.album_lookup(&req.album_id).await?;
         sonar::album_delete(&self.context, album.id).await.m()?;
@@ -309,6 +394,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<TrackCreateRequest>,
     ) -> std::result::Result<tonic::Response<Track>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let create = TryFrom::try_from(req)?;
         let track = sonar::track_create(&self.context, create).await.m()?;
@@ -318,6 +405,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<TrackUpdateRequest>,
     ) -> std::result::Result<tonic::Response<Track>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let (track_id, update) = TryFrom::try_from(req)?;
         let track = self.track_lookup(&track_id).await?;
@@ -330,6 +419,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<TrackDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let track = self.track_lookup(&req.track_id).await?;
         sonar::track_delete(&self.context, track.id).await.m()?;
@@ -412,8 +503,17 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<PlaylistCreateRequest>,
     ) -> std::result::Result<tonic::Response<Playlist>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+
         let req = request.into_inner();
-        let create = TryFrom::try_from(req)?;
+        let create: sonar::PlaylistCreate = TryFrom::try_from(req)?;
+
+        if user.id != create.owner && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not the owner of the playlist",
+            ));
+        }
+
         let playlist = sonar::playlist_create(&self.context, create).await.m()?;
         Ok(tonic::Response::new(playlist.into()))
     }
@@ -421,6 +521,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<PlaylistDuplicateRequest>,
     ) -> std::result::Result<tonic::Response<Playlist>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
         let playlist_id = req.playlist_id.parse::<sonar::PlaylistId>().m()?;
@@ -431,6 +533,13 @@ impl sonar_service_server::SonarService for Server {
                 "not the owner of the playlist",
             ));
         }
+
+        if user.id != playlist.owner && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not the owner of the playlist",
+            ));
+        }
+
         let playlist = sonar::playlist_duplicate(&self.context, playlist_id, &new_name)
             .await
             .m()?;
@@ -440,8 +549,19 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<PlaylistUpdateRequest>,
     ) -> std::result::Result<tonic::Response<Playlist>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+
         let req = request.into_inner();
-        let (playlist_id, update) = TryFrom::try_from(req)?;
+        let (playlist_id, update): (sonar::PlaylistId, sonar::PlaylistUpdate) =
+            TryFrom::try_from(req)?;
+        let playlist = sonar::playlist_get(&self.context, playlist_id).await.m()?;
+
+        if user.id != playlist.owner && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not the owner of the playlist",
+            ));
+        }
+
         let playlist = sonar::playlist_update(&self.context, playlist_id, update)
             .await
             .m()?;
@@ -451,8 +571,18 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<PlaylistDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+
         let req = request.into_inner();
         let playlist_id = req.playlist_id.parse::<sonar::PlaylistId>().m()?;
+        let playlist = sonar::playlist_get(&self.context, playlist_id).await.m()?;
+
+        if user.id != playlist.owner && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not the owner of the playlist",
+            ));
+        }
+
         sonar::playlist_delete(&self.context, playlist_id)
             .await
             .m()?;
@@ -496,8 +626,18 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<PlaylistTrackRemoveRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+
         let req = request.into_inner();
         let playlist_id = req.playlist_id.parse::<sonar::PlaylistId>().m()?;
+        let playlist = sonar::playlist_get(&self.context, playlist_id).await.m()?;
+
+        if user.id != playlist.owner && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not the owner of the playlist",
+            ));
+        }
+
         let track_ids = req
             .track_ids
             .into_iter()
@@ -512,8 +652,18 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<PlaylistTrackClearRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+
         let req = request.into_inner();
         let playlist_id = req.playlist_id.parse::<sonar::PlaylistId>().m()?;
+        let playlist = sonar::playlist_get(&self.context, playlist_id).await.m()?;
+
+        if user.id != playlist.owner && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not the owner of the playlist",
+            ));
+        }
+
         sonar::playlist_clear_tracks(&self.context, playlist_id)
             .await
             .m()?;
@@ -533,6 +683,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<ScrobbleCreateRequest>,
     ) -> std::result::Result<tonic::Response<Scrobble>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let create = TryFrom::try_from(req)?;
         let scrobble = sonar::scrobble_create(&self.context, create).await.m()?;
@@ -542,6 +694,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<ScrobbleDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let scrobble_id = req.scrobble_id.parse::<sonar::ScrobbleId>().m()?;
         sonar::scrobble_delete(&self.context, scrobble_id)
@@ -553,8 +707,16 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<PinListRequest>,
     ) -> std::result::Result<tonic::Response<PinListResponse>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
+        if user.id != user_id && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not the owner of the pins",
+            ));
+        }
+
         let pins = sonar::pin_list(&self.context, user_id).await.m()?;
         let pins = pins.into_iter().map(Into::into).collect();
         Ok(tonic::Response::new(PinListResponse { sonar_ids: pins }))
@@ -563,8 +725,16 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<PinSetRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
+        if user.id != user_id && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not the owner of the pins",
+            ));
+        }
+
         let sonar_ids = req
             .sonar_ids
             .into_iter()
@@ -579,8 +749,16 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<PinUnsetRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
+        if user.id != user_id && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not the owner of the pins",
+            ));
+        }
+
         let sonar_ids = req
             .sonar_ids
             .into_iter()
@@ -597,6 +775,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<SubscriptionListRequest>,
     ) -> std::result::Result<tonic::Response<SubscriptionListResponse>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
         let subscriptions = sonar::subscription_list(&self.context, user_id).await.m()?;
@@ -609,6 +789,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<SubscriptionCreateRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
         let external_id = sonar::ExternalMediaId::from(req.external_id);
@@ -627,6 +809,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<SubscriptionDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
         let external_id = sonar::ExternalMediaId::from(req.external_id);
@@ -645,6 +829,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<DownloadListRequest>,
     ) -> std::result::Result<tonic::Response<DownloadListResponse>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
         let downloads = sonar::download_list(&self.context, user_id).await.m()?;
@@ -655,6 +841,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<DownloadStartRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
         let external_id = sonar::ExternalMediaId::from(req.external_id);
@@ -673,6 +861,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<DownloadCancelRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
         let external_id = sonar::ExternalMediaId::from(req.external_id);
@@ -691,7 +881,9 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<tonic::Streaming<ImportRequest>>,
     ) -> std::result::Result<tonic::Response<Track>, tonic::Status> {
-        let mut stream = request.into_inner();
+        let (mt, _, mut stream) = request.into_parts();
+        self.require_admin_mt(&mt).await?;
+
         let first_message = match stream.message().await? {
             Some(message) => message,
             None => return Err(tonic::Status::invalid_argument("empty stream")),
@@ -736,8 +928,10 @@ impl sonar_service_server::SonarService for Server {
     }
     async fn metadata_providers(
         &self,
-        _request: tonic::Request<MetadataProvidersRequest>,
+        request: tonic::Request<MetadataProvidersRequest>,
     ) -> std::result::Result<tonic::Response<MetadataProvidersResponse>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let providers = sonar::metadata_providers(&self.context);
         Ok(tonic::Response::new(MetadataProvidersResponse {
             providers,
@@ -747,6 +941,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<MetadataFetchRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let req = request.into_inner();
         let mask = metadata_mask_from_fields(req.fields)?;
         let params = sonar::MetadataFetchParams {
@@ -791,6 +987,8 @@ impl sonar_service_server::SonarService for Server {
         &self,
         request: tonic::Request<MetadataAlbumTracksRequest>,
     ) -> std::result::Result<tonic::Response<MetadataAlbumTracksResponse>, tonic::Status> {
+        self.require_admin(&request).await?;
+
         let request = request.into_inner();
         let album_id = request.album_id.parse::<sonar::AlbumId>().m()?;
         let metadata =
@@ -802,10 +1000,19 @@ impl sonar_service_server::SonarService for Server {
 }
 
 pub async fn client(endpoint: &str) -> eyre::Result<Client> {
+    client_with_token(endpoint, "").await
+}
+
+pub async fn client_with_token(endpoint: &str, token: &str) -> eyre::Result<Client> {
     tracing::info!("connecting to grpc server on {}", endpoint);
-    sonar_service_client::SonarServiceClient::connect(endpoint.to_string())
-        .await
-        .context("connecting to grpc server")
+    let channel = Endpoint::from_str(endpoint)?.connect().await?;
+    let client = sonar_service_client::SonarServiceClient::with_interceptor(
+        channel,
+        AuthInterceptor {
+            token: token.to_string(),
+        },
+    );
+    Ok(client)
 }
 
 pub async fn start_server(address: SocketAddr, context: sonar::Context) -> eyre::Result<()> {

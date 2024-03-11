@@ -14,7 +14,9 @@ use serde::Serialize;
 use sonar::{Genres, Properties};
 use tokio::io::AsyncWriteExt;
 use tokio_stream::StreamExt;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
+use tracing_subscriber::{
+    fmt::writer::OrElse, layer::SubscriberExt, util::SubscriberInitExt, Layer,
+};
 
 const IMPORT_FILETYPES: &[&str] = &["flac", "mp3", "ogg", "opus", "wav"];
 
@@ -483,7 +485,8 @@ async fn async_main() -> Result<()> {
 
 async fn create_client() -> Result<sonar_grpc::Client> {
     let endpoint = SERVER_ENDPOINT.get().unwrap();
-    sonar_grpc::client(endpoint)
+    let (_, token) = auth_read().await.unwrap_or_default();
+    sonar_grpc::client_with_token(endpoint, token.as_str())
         .await
         .with_context(|| format!("connecting to grpc server at {}", endpoint))
 }
@@ -2030,6 +2033,9 @@ struct AdminUserCreateArgs {
 
     #[clap(long)]
     avatar: Option<PathBuf>,
+
+    #[clap(long)]
+    admin: bool,
 }
 
 async fn cmd_admin_user_create(args: AdminUserCreateArgs) -> Result<()> {
@@ -2052,6 +2058,7 @@ async fn cmd_admin_user_create(args: AdminUserCreateArgs) -> Result<()> {
             username: args.username,
             password: args.password,
             avatar_id: image_id,
+            admin: Some(args.admin),
         })
         .await?;
     println!("{:?}", response.into_inner());
@@ -2068,6 +2075,9 @@ struct AdminUserUpdateArgs {
 
     #[clap(long)]
     avatar: Option<PathBuf>,
+
+    #[clap(long)]
+    admin: Option<bool>,
 }
 
 async fn cmd_admin_user_update(args: AdminUserUpdateArgs) -> Result<()> {
@@ -2081,6 +2091,7 @@ async fn cmd_admin_user_update(args: AdminUserUpdateArgs) -> Result<()> {
             user_id: args.userid.to_string(),
             password: args.password,
             avatar_id: avatar_id.map(|x| x.to_string()),
+            admin: args.admin,
         })
         .await?;
     Ok(())
@@ -2225,6 +2236,12 @@ struct ServerArgs {
     #[clap(long, default_value = ".", env = "SONAR_DATA_DIR")]
     data_dir: PathBuf,
 
+    #[clap(long, env = "SONAR_DEFAULT_ADMIN_USERNAME")]
+    default_admin_username: Option<String>,
+
+    #[clap(long, env = "SONAR_DEFAULT_ADMIN_PASSWORD")]
+    default_admin_password: Option<String>,
+
     #[clap(long, env = "SONAR_SPOTIFY_USERNAME")]
     spotify_username: Option<String>,
 
@@ -2350,6 +2367,29 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     }
 
     let context = sonar::new(config).await.context("creating sonar context")?;
+    if let (Some(default_username), Some(default_password)) =
+        (args.default_admin_username, args.default_admin_password)
+    {
+        let username: sonar::Username = default_username
+            .parse()
+            .context("parsing default username")?;
+        if sonar::user_lookup(&context, &username).await?.is_none() {
+            tracing::info!("creating default admin user {}", username);
+            sonar::user_create(
+                &context,
+                sonar::UserCreate {
+                    username,
+                    password: default_password,
+                    avatar: Default::default(),
+                    admin: true,
+                },
+            )
+            .await?;
+        } else {
+            tracing::info!("default admin user {} already exists", username);
+        }
+    }
+
     let grpc_context = context.clone();
     let f0 = tokio::spawn(async move {
         sonar_grpc::start_server(args.address, grpc_context)

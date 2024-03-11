@@ -118,12 +118,14 @@ message UserCreateRequest {
 	string username = 1;
 	string password = 2;
 	optional string avatar_id = 3;
+	optional bool admin = 4;
 }
 
 message UserUpdateRequest {
 	string user_id = 1;
 	optional string password = 2;
 	optional string avatar_id = 3;
+	optional bool admin = 4;
 }
 
 message UserDeleteRequest {
