@@ -17,4 +17,5 @@ target/
 *.png
 *.jpg
 *.jpeg
+*.mp3
 .envrc

@@ -32,6 +32,12 @@ impl std::fmt::Debug for AudioCreate {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct AudioStat {
+    pub id: AudioId,
+    pub size: u32,
+}
+
 pub struct AudioDownload {
     pub mime_type: String,
     pub stream: ByteStream,
@@ -180,6 +186,18 @@ pub async fn download(
     Ok(AudioDownload {
         mime_type: row.get(0),
         stream,
+    })
+}
+
+pub async fn stat(db: &mut DbC, audio_id: AudioId) -> Result<AudioStat> {
+    let row = sqlx::query("SELECT id, blob_size FROM sqlx_audio WHERE id = ?")
+        .bind(audio_id)
+        .fetch_one(&mut *db)
+        .await?;
+    let size: i64 = row.get(1);
+    Ok(AudioStat {
+        id: audio_id,
+        size: size as u32,
     })
 }
 

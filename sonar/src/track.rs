@@ -3,7 +3,7 @@ use std::time::Duration;
 use sqlx::Row;
 
 use crate::{
-    audio::{self, AudioDownload},
+    audio::{self, AudioDownload, AudioStat},
     blob::BlobStorage,
     db::{self, Db, DbC, SonarView},
     property, AlbumId, ArtistId, AudioId, ByteRange, Error, ErrorKind, ImageId, ListParams,
@@ -281,6 +281,20 @@ pub async fn download(
     if let Some(audio_id) = audio_id {
         let audio_id = AudioId::from_db(audio_id);
         audio::download(db, storage, audio_id, range).await
+    } else {
+        Err(Error::new(ErrorKind::NotFound, "no audio for track"))
+    }
+}
+
+#[tracing::instrument(skip(db))]
+pub async fn stat(db: &mut DbC, track_id: TrackId) -> Result<AudioStat> {
+    let audio_id = sqlx::query_scalar("SELECT audio FROM sqlx_track WHERE id = ?")
+        .bind(track_id)
+        .fetch_one(&mut *db)
+        .await?;
+    if let Some(audio_id) = audio_id {
+        let audio_id = AudioId::from_db(audio_id);
+        audio::stat(db, audio_id).await
     } else {
         Err(Error::new(ErrorKind::NotFound, "no audio for track"))
     }

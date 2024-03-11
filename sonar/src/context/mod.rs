@@ -27,8 +27,8 @@ use crate::{
     subscription::SubscriptionController,
     track, user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId,
     ArtistMetadata, ArtistMetadataRequest, ArtistUpdate, Audio, AudioCreate, AudioDownload,
-    AudioId, ByteRange, Download, DownloadCreate, DownloadDelete, Error, ErrorKind, Genres,
-    ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics, MetadataFetchMask,
+    AudioId, AudioStat, ByteRange, Download, DownloadCreate, DownloadDelete, Error, ErrorKind,
+    Genres, ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics, MetadataFetchMask,
     MetadataFetchParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack, PlaylistUpdate,
     Properties, PropertyKey, PropertyUpdate, Result, Scrobble, ScrobbleCreate, ScrobbleId,
     ScrobbleUpdate, SearchQuery, SonarId, Subscription, SubscriptionCreate, SubscriptionDelete,
@@ -606,6 +606,12 @@ pub async fn track_download(
 ) -> Result<AudioDownload> {
     let mut conn = context.db.acquire().await?;
     track::download(&mut conn, &*context.storage, track_id, range).await
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn track_stat(context: &Context, track_id: TrackId) -> Result<AudioStat> {
+    let mut conn = context.db.acquire().await?;
+    track::stat(&mut conn, track_id).await
 }
 
 #[tracing::instrument(skip(context))]

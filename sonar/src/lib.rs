@@ -52,7 +52,7 @@ pub(crate) mod user;
 
 pub use album::{Album, AlbumCreate, AlbumUpdate};
 pub use artist::{Artist, ArtistCreate, ArtistUpdate};
-pub use audio::{Audio, AudioCreate, AudioDownload};
+pub use audio::{Audio, AudioCreate, AudioDownload, AudioStat};
 pub use download::{Download, DownloadCreate, DownloadDelete, DownloadStatus};
 pub use external::{
     ExternalAlbum, ExternalArtist, ExternalImage, ExternalMediaId, ExternalMediaType,
@@ -66,8 +66,8 @@ pub use metadata::{
     AlbumMetadata, AlbumMetadataRequest, AlbumTracksMetadata, AlbumTracksMetadataRequest,
     ArtistMetadata, ArtistMetadataRequest, MetadataFetchMask, MetadataFetchParams,
     MetadataProvider, MetadataRequestKind, TrackMetadata, TrackMetadataRequest,
-    METADATA_FETCH_MASK_ALL, METADATA_FETCH_MASK_COVER, METADATA_FETCH_MASK_GENRES,
-    METADATA_FETCH_MASK_NAME, METADATA_FETCH_MASK_PROPERTIES,METADATA_FETCH_MASK_EMPTY
+    METADATA_FETCH_MASK_ALL, METADATA_FETCH_MASK_COVER, METADATA_FETCH_MASK_EMPTY,
+    METADATA_FETCH_MASK_GENRES, METADATA_FETCH_MASK_NAME, METADATA_FETCH_MASK_PROPERTIES,
 };
 pub use playlist::{Playlist, PlaylistCreate, PlaylistTrack, PlaylistUpdate};
 pub use property::{

@@ -40,6 +40,8 @@ service SonarService {
 	rpc TrackDelete(TrackDeleteRequest) returns (google.protobuf.Empty);
 	rpc TrackLyrics(TrackLyricsRequest) returns (TrackLyricsResponse);
 	rpc TrackDownload(TrackDownloadRequest) returns (stream TrackDownloadResponse);
+	rpc TrackStat(TrackStatRequest) returns (TrackStatResponse);
+	rpc TrackDownloadChunk(TrackDownloadChunkRequest) returns (TrackDownloadChunkResponse);
 
 	rpc PlaylistList(PlaylistListRequest) returns (PlaylistListResponse);
 	rpc PlaylistGet(PlaylistGetRequest) returns (Playlist);
@@ -322,6 +324,25 @@ message TrackDownloadRequest {
 
 message TrackDownloadResponse {
 	bytes chunk = 1;
+}
+
+message TrackStatRequest {
+	string track_id = 1;
+}
+
+message TrackStatResponse {
+	string track_id = 1;
+	uint32 size = 2;	
+}
+
+message TrackDownloadChunkRequest {
+	string track_id = 1;
+	uint32 offset = 2;
+	uint32 size = 3;
+}
+
+message TrackDownloadChunkResponse {
+	bytes data = 1;
 }
 
 message Lyrics {

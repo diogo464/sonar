@@ -1,20 +1,20 @@
 [package]
-name = "sonar-experimental"
+name = "sonar-player"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+sonar = { path = "../sonar" }
 sonar-grpc = { path = "../sonar-grpc" }
 
-clap = { version = "4.4.18", features = ["env", "derive"] }
-color-eyre = "0.6.2"
 cpal = { version = "0.15.2", features = ["jack"] }
-eyre = "0.6.11"
-lofty = "0.18.2"
 symphonia = { version = "0.5.4", features = ["all"] }
-symphonia-bundle-mp3 = "0.5.4"
-tokio = { version = "1.35.1", features = ["full"] }
+async-trait = "0.1.77"
+bytes = "1.5.0"
+tokio = { version = "1.36.0", features = ["full"] }
+futures = "0.3.30"
 tracing = "0.1.40"
+crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }

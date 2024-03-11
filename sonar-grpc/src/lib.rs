@@ -8,6 +8,9 @@ use result_ext::*;
 
 mod conversions;
 use conversions::*;
+use tokio_stream::StreamExt;
+
+pub mod ext;
 
 tonic::include_proto!("sonar");
 
@@ -355,6 +358,36 @@ impl sonar_service_server::SonarService for Server {
         Ok(tonic::Response::new(SonarTrackDownloadStream::new(
             download,
         )))
+    }
+    async fn track_stat(
+        &self,
+        request: tonic::Request<TrackStatRequest>,
+    ) -> std::result::Result<tonic::Response<TrackStatResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let track = self.track_lookup(&req.track_id).await?;
+        let stat = sonar::track_stat(&self.context, track.id).await.m()?;
+        Ok(tonic::Response::new(TrackStatResponse {
+            track_id: track.id.to_string(),
+            size: stat.size as u32,
+        }))
+    }
+    async fn track_download_chunk(
+        &self,
+        request: tonic::Request<TrackDownloadChunkRequest>,
+    ) -> std::result::Result<tonic::Response<TrackDownloadChunkResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let track = self.track_lookup(&req.track_id).await?;
+        let range = sonar::ByteRange::new(req.offset as u64, req.size as u64);
+        let mut download = sonar::track_download(&self.context, track.id, range)
+            .await
+            .m()?;
+        let mut buffer = Vec::<u8>::with_capacity(req.size as usize);
+        while let Some(Ok(chunk)) = download.stream.next().await {
+            buffer.extend_from_slice(&chunk);
+        }
+        Ok(tonic::Response::new(TrackDownloadChunkResponse {
+            data: buffer,
+        }))
     }
     async fn playlist_list(
         &self,
