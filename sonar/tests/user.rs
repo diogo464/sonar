@@ -14,9 +14,25 @@ async fn create_user_one() {
         username: "User".parse().unwrap(),
         password: "password".to_string(),
         avatar: None,
+        admin: false,
     };
     let user = sonar::user_create(&ctx, create).await.unwrap();
     assert_eq!(user.username.as_str(), "User");
+    assert_eq!(user.admin, false);
+}
+
+#[tokio::test]
+async fn create_user_one_admin() {
+    let ctx = sonar::test::create_context_memory().await;
+    let create = sonar::UserCreate {
+        username: "User".parse().unwrap(),
+        password: "password".to_string(),
+        avatar: None,
+        admin: true,
+    };
+    let user = sonar::user_create(&ctx, create).await.unwrap();
+    assert_eq!(user.username.as_str(), "User");
+    assert_eq!(user.admin, true);
 }
 
 #[tokio::test]
@@ -61,6 +77,32 @@ async fn get_user_one() {
 }
 
 #[tokio::test]
+async fn update_admin() {
+    let ctx = sonar::test::create_context_memory().await;
+    let create = sonar::UserCreate {
+        username: "User".parse().unwrap(),
+        password: "password".to_string(),
+        avatar: None,
+        admin: false,
+    };
+    let user = sonar::user_create(&ctx, create).await.unwrap();
+    assert_eq!(user.username.as_str(), "User");
+    assert_eq!(user.admin, false);
+
+    let user = sonar::user_update(
+        &ctx,
+        user.id,
+        sonar::UserUpdate {
+            admin: sonar::ValueUpdate::Set(true),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(user.admin, true);
+}
+
+#[tokio::test]
 async fn password_min_8() {
     let ctx = sonar::test::create_context_memory().await;
     let result = sonar::user_create(
@@ -69,6 +111,7 @@ async fn password_min_8() {
             username: "User".parse().unwrap(),
             password: "1234567".to_string(),
             avatar: None,
+            admin: false,
         },
     )
     .await;
@@ -80,6 +123,7 @@ async fn password_min_8() {
             username: "User".parse().unwrap(),
             password: "12345678".to_string(),
             avatar: None,
+            admin: false,
         },
     )
     .await;

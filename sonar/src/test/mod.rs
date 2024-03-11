@@ -341,6 +341,7 @@ pub async fn create_user_with_password(ctx: &Context, username: &str, password: 
             username: username.parse().unwrap(),
             password: password.to_owned(),
             avatar: None,
+            admin: true,
         },
     )
     .await

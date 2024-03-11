@@ -7,6 +7,7 @@ CREATE TABLE user (
 	username		TEXT NOT NULL UNIQUE,
 	-- scrypt PHC string
 	password_hash		TEXT NOT NULL DEFAULT '',
+	admin			BOOLEAN NOT NULL DEFAULT FALSE,
 	avatar			INTEGER REFERENCES image(id),
 	created_at		INTEGER NOT NULL DEFAULT (unixepoch())
 );

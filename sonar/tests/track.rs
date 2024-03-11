@@ -128,6 +128,7 @@ async fn track_with_lyrics() {
         lines: vec![sonar::LyricsLine {
             offset: Duration::from_secs(1),
             text: "Lyrics".to_string(),
+            duration: Duration::from_secs(1),
         }],
     };
 

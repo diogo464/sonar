@@ -191,6 +191,32 @@ pub async fn value_update_id_nullable(
     Ok(())
 }
 
+pub async fn value_update_bool_non_null(
+    db: &mut DbC,
+    table: &str,
+    field: &str,
+    id: impl SonarIdentifier,
+    update: ValueUpdate<bool>,
+) -> Result<()> {
+    if let Some(new_value) = match update {
+        ValueUpdate::Set(value) => Some(value),
+        ValueUpdate::Unset => Some(false),
+        ValueUpdate::Unchanged => None,
+    } {
+        sqlx::QueryBuilder::new("UPDATE ")
+            .push(table)
+            .push(" SET ")
+            .push(field)
+            .push(" = ? WHERE id = ?")
+            .build()
+            .bind(new_value)
+            .bind(id.identifier())
+            .execute(db)
+            .await?;
+    }
+    Ok(())
+}
+
 pub fn expand_views<V, I>(views: Vec<V>, ids: &[I]) -> Vec<V>
 where
     V: SonarView,

@@ -10,7 +10,7 @@ use tokio::sync::Notify;
 use crate::{
     album, artist, audio,
     blob::{self, BlobStorage},
-    bytestream::{self},
+    bytestream,
     db::Db,
     download::DownloadController,
     external::{ExternalService, SonarExternalService},
@@ -33,7 +33,7 @@ use crate::{
     Properties, PropertyKey, PropertyUpdate, Result, Scrobble, ScrobbleCreate, ScrobbleId,
     ScrobbleUpdate, SearchQuery, SonarId, Subscription, SubscriptionCreate, SubscriptionDelete,
     Track, TrackCreate, TrackId, TrackMetadata, TrackMetadataRequest, TrackUpdate, User,
-    UserCreate, UserId, UserToken, Username, ValueUpdate, METADATA_FETCH_MASK_COVER,
+    UserCreate, UserId, UserToken, UserUpdate, Username, ValueUpdate, METADATA_FETCH_MASK_COVER,
     METADATA_FETCH_MASK_GENRES, METADATA_FETCH_MASK_NAME, METADATA_FETCH_MASK_PROPERTIES,
 };
 
@@ -272,6 +272,14 @@ pub async fn user_create(context: &Context, create: UserCreate) -> Result<User> 
 pub async fn user_get(context: &Context, user_id: UserId) -> Result<User> {
     let mut conn = context.db.acquire().await?;
     user::get(&mut conn, user_id).await
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn user_update(context: &Context, user_id: UserId, update: UserUpdate) -> Result<User> {
+    let mut tx = context.db.begin().await?;
+    let result = user::update(&mut tx, user_id, update).await?;
+    tx.commit().await?;
+    Ok(result)
 }
 
 #[tracing::instrument(skip(context))]

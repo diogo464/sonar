@@ -18,19 +18,43 @@ pub struct User {
     pub id: UserId,
     pub username: Username,
     pub avatar: Option<ImageId>,
+    pub admin: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct UserCreate {
     pub username: Username,
     pub password: String,
     pub avatar: Option<ImageId>,
+    pub admin: bool,
 }
 
-#[derive(Debug, Clone)]
+impl std::fmt::Debug for UserCreate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UserCreate")
+            .field("username", &self.username)
+            .field("password", &"****")
+            .field("avatar", &self.avatar)
+            .field("admin", &self.admin)
+            .finish()
+    }
+}
+
+#[derive(Clone, Default)]
 pub struct UserUpdate {
     pub password: ValueUpdate<String>,
     pub avatar: ValueUpdate<ImageId>,
+    pub admin: ValueUpdate<bool>,
+}
+
+impl std::fmt::Debug for UserUpdate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UserUpdate")
+            .field("password", &"****")
+            .field("avatar", &self.avatar)
+            .field("admin", &self.admin)
+            .finish()
+    }
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -38,6 +62,7 @@ struct UserView {
     id: i64,
     username: String,
     avatar: Option<i64>,
+    admin: bool,
 }
 
 impl From<UserView> for User {
@@ -46,6 +71,7 @@ impl From<UserView> for User {
             id: UserId::from_db(value.id),
             username: Username::new_uncheked(value.username),
             avatar: value.avatar.map(ImageId::from_db),
+            admin: value.admin,
         }
     }
 }
@@ -64,13 +90,14 @@ pub async fn create(db: &mut DbC, create: UserCreate) -> Result<User> {
     let avatar_id = create.avatar.map(|id| id.to_db());
     let user_id = sqlx::query_scalar(
         r#"
-INSERT INTO user (username, password_hash, avatar)
-VALUES (?, ?, ?) RETURNING id
+INSERT INTO user (username, password_hash, avatar, admin)
+VALUES (?, ?, ?, ?) RETURNING id
 "#,
     )
     .bind(username)
     .bind(password_hash)
     .bind(avatar_id)
+    .bind(create.admin)
     .fetch_one(&mut *db)
     .await?;
     get(db, UserId::from_db(user_id)).await
@@ -79,11 +106,31 @@ VALUES (?, ?, ?) RETURNING id
 #[tracing::instrument(skip(db))]
 pub async fn get(db: &mut DbC, user_id: UserId) -> Result<User> {
     let user_view =
-        sqlx::query_as::<_, UserView>("SELECT id, username, avatar FROM user WHERE id = ?")
+        sqlx::query_as::<_, UserView>("SELECT id, username, avatar, admin FROM user WHERE id = ?")
             .bind(user_id)
             .fetch_one(db)
             .await?;
     Ok(User::from(user_view))
+}
+
+#[tracing::instrument(skip(db))]
+pub async fn update(db: &mut DbC, user_id: UserId, update: UserUpdate) -> Result<User> {
+    tracing::info!("updating user {} with {:#?}", user_id, update);
+
+    let password_update = match update.password {
+        ValueUpdate::Set(password) => {
+            let hash = generate_initial_salt_and_hash(&password)?;
+            ValueUpdate::Set(hash)
+        }
+        ValueUpdate::Unset => return Err(Error::new(ErrorKind::Invalid, "cannot unset password")),
+        ValueUpdate::Unchanged => ValueUpdate::Unchanged,
+    };
+
+    db::value_update_string_non_null(db, "user", "password_hash", user_id, password_update).await?;
+    db::value_update_id_nullable(db, "user", "avatar", user_id, update.avatar).await?;
+    db::value_update_bool_non_null(db, "user", "admin", user_id, update.admin).await?;
+
+    get(db, user_id).await
 }
 
 #[tracing::instrument(skip(db))]
