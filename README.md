@@ -1,5 +1,10 @@
 # opensubsonic
 
+TODO:
++ some authentication middleware
++ rename get_starreed to get_starred
++ maybe add error middleware
+
 ## opensubsonic
 This crate provides types to work with the [OpenSubsonic API](https://opensubsonic.netlify.app/).
 Right now it is mainly focused on implementing server-side functionality.
