@@ -36,9 +36,8 @@ impl Server {
             }
         }
 
-        let _username = request.username.parse::<sonar::Username>().m()?;
-        let username = "admin".parse::<sonar::Username>().m()?;
-        let _password = match &request.authentication {
+        let username = request.username.parse::<sonar::Username>().m()?;
+        let password = match &request.authentication {
             Authentication::Password(password) => password,
             _ => {
                 return Err(opensubsonic::response::Error::with_message(
@@ -47,7 +46,7 @@ impl Server {
                 ))
             }
         };
-        let (user_id, token) = sonar::user_login(&self.context, &username, "test12345")
+        let (user_id, token) = sonar::user_login(&self.context, &username, password)
             .await
             .m()?;
         self.set_token(username.as_str(), token);
