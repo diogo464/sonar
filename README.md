@@ -1,28 +1,29 @@
-TODO:
-+ metadata preview
-+ metadata fetch
+# sonar
 
+Self hosted music database/streaming server.
 
-```rust
-fn main() {
-    let MIGRATION_000 = migrator::include!("migrations/000_init.sql");
-    let MIGRATION_001 = migrator::include!("migrations/001_add_blob_hash.sql");
-    let MIGRATION_002 = migrator::include!("migrations/002_add_modified_timestamp.sql");
+## Server Environment Variables
 
-    let db = todo!();
-
-    migrator::run(&db, &MIGRATION_000).await?;
-    migrator::run_with(&db, &MIGRATION_001, |tx| async {
-        let rows = sqlx::query!("SELECT * FROM blob").await;
-        for row in rows {
-            let path = row.path;
-            let content = tokio::fs::read(&path).await?;
-        }
-    })
-    .await?;
-    migrator::run_with(&db, &MIGRATION_002, |tx| async {
-        
-    })
-    .await?;
-}
 ```
+# listen address for grpc api
+SONAR_ADDRESS="0.0.0.0:3000"
+# listen address for opensubsonic api
+SONAR_OPENSUBSONIC_ADDRESS="0.0.0.0:3001"
+# data directory
+SONAR_DATA_DIR="./"
+# default admin username. created if it does not already exist.
+SONAR_DEFAULT_ADMIN_USERNAME
+# default admin password.
+SONAR_DEFAULT_ADMIN_PASSWORD
+
+## spotify integration (optional)
+# spotify username for the account used to download songs.
+SONAR_SPOTIFY_USERNAME="..."
+# spotify password
+SONAR_SPOTIFY_PASSWORD="..."
+# spotify api client id
+SONAR_SPOTIFY_CLIENT_ID="..."
+# spotify api secret key
+SONAR_SPOTIFY_CLIENT_SECRET="..."
+```
+
