@@ -14,9 +14,7 @@ use serde::Serialize;
 use sonar::{Genres, Properties};
 use tokio::io::AsyncWriteExt;
 use tokio_stream::StreamExt;
-use tracing_subscriber::{
-    fmt::writer::OrElse, layer::SubscriberExt, util::SubscriberInitExt, Layer,
-};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 const IMPORT_FILETYPES: &[&str] = &["flac", "mp3", "ogg", "opus", "wav"];
 
