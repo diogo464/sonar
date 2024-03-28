@@ -2333,13 +2333,13 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     config
         .register_provider("beets", sonar_beets::BeetsMetadataProvider)
         .context("registering beets metadata importer")?;
-    config
-        .register_scrobbler_for_user(
-            "listenbrainz/admin",
-            "admin".parse()?,
-            sonar_listenbrainz::ListenBrainzScrobbler::new(std::env!("LISTENBRAINZ_API_KEY")),
-        )
-        .context("registering listenbrainz scrobbler")?;
+    // config
+    //     .register_scrobbler_for_user(
+    //         "listenbrainz/admin",
+    //         "admin".parse()?,
+    //         sonar_listenbrainz::ListenBrainzScrobbler::new(std::env!("LISTENBRAINZ_API_KEY")),
+    //     )
+    //     .context("registering listenbrainz scrobbler")?;
 
     if let (Some(username), Some(password)) = (args.spotify_username, args.spotify_password) {
         let spotify = sonar_spotify::SpotifyService::new(sonar_spotify::LoginCredentials {
