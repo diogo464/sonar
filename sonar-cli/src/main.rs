@@ -1797,16 +1797,39 @@ async fn cmd_subscription_create(args: SubscriptionCreateArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct SubscriptionDeleteArgs {
+    /// delete by subscription index, starts at 0.
+    #[clap(long)]
+    index: bool,
     external_id: String,
 }
 
 async fn cmd_subscription_delete(args: SubscriptionDeleteArgs) -> Result<()> {
     let mut client = create_client().await?;
     let (user_id, _) = auth_read().await?;
+    let external_id = if args.index {
+        let index = args
+            .external_id
+            .parse::<usize>()
+            .context("invalid subscription index")?;
+        let response = client
+            .subscription_list(sonar_grpc::SubscriptionListRequest {
+                user_id: user_id.clone(),
+            })
+            .await?;
+        let subscriptions = response
+            .into_inner()
+            .subscriptions
+            .into_iter()
+            .map(Subscription::from)
+            .collect::<Vec<_>>();
+        subscriptions[index].external_id.clone()
+    } else {
+        args.external_id
+    };
     client
         .subscription_delete(sonar_grpc::SubscriptionDeleteRequest {
             user_id,
-            external_id: args.external_id,
+            external_id,
         })
         .await?;
     Ok(())
