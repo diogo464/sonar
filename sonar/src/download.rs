@@ -199,7 +199,7 @@ impl Process {
                     let download_id = DownloadKey::new(user_id, external_id);
                     if let Some(download) = self.downloads.get(&download_id) {
                         if download.status == DownloadStatus::Downloading {
-                            return;
+                            continue;
                         }
                     }
 
