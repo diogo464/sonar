@@ -5,12 +5,16 @@ use sonar::{
     ExternalMediaType, ExternalPlaylist, ExternalTrack, Result,
 };
 use spotdl::{LoginCredentials, Resource, ResourceId, SpotifyId};
+use tokio::sync::Semaphore;
 
 use crate::{convert, convert_genres};
+
+const MAX_CONCURRENT_TRACK_DOWNLOADS: usize = 3;
 
 pub struct SpotifyService {
     session: spotdl::session::Session,
     fetcher: Arc<dyn spotdl::fetcher::MetadataFetcher>,
+    download_sem: Arc<Semaphore>,
     _cache_directory: tempfile::TempDir,
 }
 
@@ -37,6 +41,7 @@ impl SpotifyService {
         Ok(Self {
             session,
             fetcher,
+            download_sem: Arc::new(Semaphore::new(MAX_CONCURRENT_TRACK_DOWNLOADS)),
             _cache_directory: cache_directory,
         })
     }
@@ -252,6 +257,13 @@ impl sonar::ExternalService for SpotifyService {
         let mp3_file_path = temp_dir.path().join("track.mp3");
         let sink = spotdl::download::FileDownloadSink::from_path(&temp_file_path)
             .map_err(sonar::Error::wrap)?;
+
+        tracing::debug!("acquiring download permit");
+        let _permit = self
+            .download_sem
+            .acquire()
+            .await
+            .expect("failed to acquire semaphore permit");
 
         tracing::debug!("downloading track: {:#?}", track_id);
         spotdl::download::download(&self.session, sink, track_id)
