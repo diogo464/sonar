@@ -1,5 +1,5 @@
 use super::*;
-use crate::{album, artist, async_trait, db::Db, playlist, track, UserId};
+use crate::{album, artist, async_trait, db::Db, playlist, track};
 
 #[derive(Debug)]
 pub struct BuiltInSearchEngine {
