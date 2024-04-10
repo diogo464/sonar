@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -22,9 +23,12 @@ type Receiver<T> = tokio::sync::mpsc::Receiver<T>;
 type SharedList = Arc<Mutex<Vec<Download>>>;
 
 const DOWNLOAD_MANAGER_CAPACITY: usize = 8;
+const MAX_DOWNLOAD_RETRIES: u8 = 5;
+const DOWNLOAD_RETRY_DELAY: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DownloadStatus {
+    Pending,
     Downloading,
     Complete,
     Failed,
@@ -75,6 +79,11 @@ enum Message {
         user_id: UserId,
         external_id: ExternalMediaId,
     },
+    Started {
+        user_id: UserId,
+        external_id: ExternalMediaId,
+        description: String,
+    },
     Complete {
         user_id: UserId,
         external_id: ExternalMediaId,
@@ -84,6 +93,7 @@ enum Message {
         external_id: ExternalMediaId,
         error: String,
     },
+    Tick,
 }
 
 #[derive(Debug)]
@@ -168,6 +178,8 @@ struct ProcessDownload {
     status: DownloadStatus,
     description: String,
     handle: tokio::task::AbortHandle,
+    num_retries: u8,
+    last_download: Instant,
 }
 
 struct Process {
@@ -190,6 +202,16 @@ impl Drop for Process {
 
 impl Process {
     async fn run(&mut self) {
+        tokio::spawn({
+            let sender = self.sender.clone();
+            async move {
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
+                while sender.send(Message::Tick).await.is_ok() {
+                    interval.tick().await;
+                }
+            }
+        });
+
         while let Some(message) = self.receiver.recv().await {
             match message {
                 Message::Request {
@@ -218,12 +240,25 @@ impl Process {
                     let download = ProcessDownload {
                         user_id,
                         external_id: download_id.external_id.clone(),
-                        status: DownloadStatus::Downloading,
+                        status: DownloadStatus::Pending,
                         description: String::new(),
                         handle: handle.abort_handle(),
+                        num_retries: 0,
+                        last_download: Instant::now(),
                     };
 
                     self.downloads.insert(download_id, download);
+                }
+                Message::Started {
+                    user_id,
+                    external_id,
+                    description,
+                } => {
+                    let download_id = DownloadKey::new(user_id, external_id);
+                    if let Some(download) = self.downloads.get_mut(&download_id) {
+                        download.status = DownloadStatus::Downloading;
+                        download.description = description;
+                    }
                 }
                 Message::Delete {
                     user_id,
@@ -254,6 +289,39 @@ impl Process {
                         download.description = error;
                     }
                 }
+                Message::Tick => {
+                    for (_key, download) in self.downloads.iter_mut() {
+                        if download.status == DownloadStatus::Failed
+                            && download.last_download.elapsed() > DOWNLOAD_RETRY_DELAY
+                            && download.num_retries < MAX_DOWNLOAD_RETRIES
+                        {
+                            let handle = tokio::spawn({
+                                let db = self.db.clone();
+                                let storage = self.storage.clone();
+                                let sender = self.sender.clone();
+                                let services = self.external_services.clone();
+                                let external_id = download.external_id.clone();
+                                let user_id = download.user_id;
+                                async move {
+                                    download_task(
+                                        db,
+                                        storage,
+                                        sender,
+                                        &services,
+                                        user_id,
+                                        external_id,
+                                    )
+                                    .await;
+                                }
+                            });
+
+                            download.status = DownloadStatus::Downloading;
+                            download.last_download = Instant::now();
+                            download.num_retries += 1;
+                            download.handle = handle.abort_handle();
+                        }
+                    }
+                }
             };
             self.update_list();
         }
@@ -278,7 +346,7 @@ async fn download_task(
     user_id: UserId,
     external_id: ExternalMediaId,
 ) {
-    let message = match download(&db, &*storage, services, user_id, &external_id).await {
+    let message = match download(&db, &*storage, services, &sender, user_id, &external_id).await {
         Ok(_) => {
             tracing::info!("download complete: {}", external_id);
             Message::Complete {
@@ -302,6 +370,7 @@ async fn download(
     db: &Db,
     storage: &dyn BlobStorage,
     services: &[SonarExternalService],
+    sender: &Sender<Message>,
     user_id: UserId,
     external_id: &ExternalMediaId,
 ) -> Result<()> {
@@ -310,6 +379,17 @@ async fn download(
         ExternalMediaType::Artist => {
             let external_artist = service.fetch_artist(external_id).await?;
             let artist = find_or_create_artist(db, &external_artist).await?;
+
+            let description = format!("Artist: {}", external_artist.name);
+            sender
+                .send(Message::Started {
+                    user_id,
+                    external_id: external_id.clone(),
+                    description,
+                })
+                .await
+                .unwrap();
+
             for external_id in external_artist.albums.iter() {
                 let album_service =
                     find_service_for(services, external_id, ExternalMediaType::Album).await?;
@@ -333,6 +413,17 @@ async fn download(
             let external_artist = artist_service.fetch_artist(&external_album.artist).await?;
             let artist = find_or_create_artist(db, &external_artist).await?;
             let album = find_or_create_album(db, storage, &external_album, artist.id).await?;
+
+            let description = format!("Album: {}/{}", external_album.artist, external_album.name);
+            sender
+                .send(Message::Started {
+                    user_id,
+                    external_id: external_id.clone(),
+                    description,
+                })
+                .await
+                .unwrap();
+
             for external_id in external_album.tracks.iter() {
                 let track_service =
                     find_service_for(services, external_id, ExternalMediaType::Track).await?;
@@ -351,6 +442,20 @@ async fn download(
                 find_service_for(services, &external_album.artist, ExternalMediaType::Artist)
                     .await?;
             let external_artist = artist_service.fetch_artist(&external_album.artist).await?;
+
+            let description = format!(
+                "Track: {}/{}/{}",
+                external_artist.name, external_album.name, external_track.name
+            );
+            sender
+                .send(Message::Started {
+                    user_id,
+                    external_id: external_id.clone(),
+                    description,
+                })
+                .await
+                .unwrap();
+
             let artist = find_or_create_artist(db, &external_artist).await?;
             let album = find_or_create_album(db, storage, &external_album, artist.id).await?;
             let track = find_or_create_track(db, &external_track, album.id).await?;
@@ -359,6 +464,17 @@ async fn download(
         }
         ExternalMediaType::Playlist => {
             let external_playlist = service.fetch_playlist(external_id).await?;
+
+            let description = format!("Playlist: {}", external_playlist.name);
+            sender
+                .send(Message::Started {
+                    user_id,
+                    external_id: external_id.clone(),
+                    description,
+                })
+                .await
+                .unwrap();
+
             let mut playlist_tracks = Vec::new();
             for external_id in external_playlist.tracks.iter() {
                 let track_service =
