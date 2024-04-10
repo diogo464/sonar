@@ -128,6 +128,14 @@ pub async fn list(db: &mut DbC, params: ListParams) -> Result<Vec<Track>> {
 }
 
 #[tracing::instrument(skip(db))]
+pub async fn list_ids(db: &mut DbC) -> Result<Vec<TrackId>> {
+    let ids = sqlx::query_scalar("SELECT id FROM track")
+        .fetch_all(&mut *db)
+        .await?;
+    Ok(ids.into_iter().map(TrackId::from_db).collect())
+}
+
+#[tracing::instrument(skip(db))]
 pub async fn list_by_album(
     db: &mut DbC,
     album_id: AlbumId,

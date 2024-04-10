@@ -6,6 +6,8 @@ use crate::{
 mod builtin;
 pub use builtin::BuiltInSearchEngine;
 
+mod meilisearch;
+
 pub type SearchFlags = u32;
 
 #[derive(Debug, Clone)]
