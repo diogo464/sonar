@@ -390,6 +390,7 @@ async fn download(
                 .await
                 .unwrap();
 
+            let mut result = Ok(());
             for external_id in external_artist.albums.iter() {
                 let album_service =
                     find_service_for(services, external_id, ExternalMediaType::Album).await?;
@@ -400,10 +401,14 @@ async fn download(
                         find_service_for(services, external_id, ExternalMediaType::Track).await?;
                     let external_track = track_service.fetch_track(external_id).await?;
                     let track = find_or_create_track(db, &external_track, album.id).await?;
-                    download_track(db, storage, track_service, external_id, track.id).await?;
+                    let download_result =
+                        download_track(db, storage, track_service, external_id, track.id).await;
+                    if result.is_ok() && download_result.is_err() {
+                        result = download_result;
+                    }
                 }
             }
-            Ok(())
+            result
         }
         ExternalMediaType::Album => {
             let external_album = service.fetch_album(external_id).await?;
@@ -424,14 +429,19 @@ async fn download(
                 .await
                 .unwrap();
 
+            let mut result = Ok(());
             for external_id in external_album.tracks.iter() {
                 let track_service =
                     find_service_for(services, external_id, ExternalMediaType::Track).await?;
                 let external_track = track_service.fetch_track(external_id).await?;
                 let track = find_or_create_track(db, &external_track, album.id).await?;
-                download_track(db, storage, track_service, external_id, track.id).await?;
+                let download_result =
+                    download_track(db, storage, track_service, external_id, track.id).await;
+                if result.is_ok() && download_result.is_err() {
+                    result = download_result;
+                }
             }
-            Ok(())
+            result
         }
         ExternalMediaType::Track => {
             let external_track = service.fetch_track(external_id).await?;
