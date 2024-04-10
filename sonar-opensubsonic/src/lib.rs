@@ -331,6 +331,9 @@ impl OpenSubsonicServer for Server {
             sonar::user_property_update(&self.context, user_id, sonar_id, &[update])
                 .await
                 .m()?;
+            sonar::favorite_add(&self.context, user_id, sonar_id)
+                .await
+                .m()?;
         }
         Ok(())
     }
@@ -338,10 +341,12 @@ impl OpenSubsonicServer for Server {
     #[tracing::instrument]
     async fn get_starred2(&self, request: Request<GetStarred2>) -> Result<Starred2> {
         let user_id = self.authenticate(&request).await?;
-        let starred_ids =
-            sonar::list_with_user_property(&self.context, user_id, &PROPERTY_USER_STARRED)
-                .await
-                .m()?;
+        let starred_ids = sonar::favorite_list(&self.context, user_id)
+            .await
+            .m()?
+            .into_iter()
+            .map(|f| f.id)
+            .collect::<Vec<_>>();
         let split = sonar::ext::split_sonar_ids(starred_ids);
 
         let artists = sonar::artist_get_bulk(&self.context, &split.artist_ids);
