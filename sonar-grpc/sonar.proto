@@ -43,6 +43,10 @@ service SonarService {
 	rpc TrackStat(TrackStatRequest) returns (TrackStatResponse);
 	rpc TrackDownloadChunk(TrackDownloadChunkRequest) returns (TrackDownloadChunkResponse);
 
+	rpc FavoriteList(FavoriteListRequest) returns (FavoriteListResponse);
+	rpc FavoriteAdd(FavoriteAddRequest) returns (google.protobuf.Empty);
+	rpc FavoriteRemove(FavoriteRemoveRequest) returns (google.protobuf.Empty);
+
 	rpc PlaylistList(PlaylistListRequest) returns (PlaylistListResponse);
 	rpc PlaylistGet(PlaylistGetRequest) returns (Playlist);
 	rpc PlaylistCreate(PlaylistCreateRequest) returns (Playlist);
@@ -356,6 +360,29 @@ message LyricsLine {
 	uint32 offset = 1;
 	uint32 duration = 2;
 	string text = 3;
+}
+
+message Favorite {
+	string item_id = 1;
+	google.protobuf.Timestamp favorite_at = 2;
+}
+
+message FavoriteListRequest {
+	string user_id = 1;
+}
+
+message FavoriteListResponse {
+	repeated Favorite favorites = 1;
+}
+
+message FavoriteAddRequest {
+	string user_id = 1;
+	string item_id = 2;
+}
+
+message FavoriteRemoveRequest {
+	string user_id = 1;
+	string item_id = 2;
 }
 
 message Playlist {

@@ -50,6 +50,7 @@ enum Command {
     Album(AlbumArgs),
     Track(TrackArgs),
     Playlist(PlaylistArgs),
+    Favorite(FavoriteArgs),
     Scrobble(ScrobbleArgs),
     Sync(SyncArgs),
     Pin(PinArgs),
@@ -423,6 +424,11 @@ async fn async_main() -> Result<()> {
             TrackCommand::Search(cargs) => cmd_track_search(cargs).await?,
             TrackCommand::Lyrics(cargs) => cmd_track_lyrics(cargs).await?,
             TrackCommand::Download(cargs) => cmd_track_download(cargs).await?,
+        },
+        Command::Favorite(cargs) => match cargs.command {
+            FavoriteCommand::List(cargs) => cmd_favorite_list(cargs).await?,
+            FavoriteCommand::Add(cargs) => cmd_favorite_add(cargs).await?,
+            FavoriteCommand::Remove(cargs) => cmd_favorite_remove(cargs).await?,
         },
         Command::Playlist(cargs) => match cargs.command {
             PlaylistCommand::List(cargs) => cmd_playlist_list(cargs).await?,
@@ -1201,6 +1207,75 @@ async fn cmd_playlist_remove(args: PlaylistRemoveArgs) -> Result<()> {
             track_ids: args.track_ids.iter().map(|x| x.to_string()).collect(),
         })
         .await?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct FavoriteArgs {
+    #[clap(subcommand)]
+    command: FavoriteCommand,
+}
+
+#[derive(Debug, Parser)]
+enum FavoriteCommand {
+    List(FavoriteListArgs),
+    Add(FavoriteAddArgs),
+    Remove(FavoriteRemoveArgs),
+}
+
+#[derive(Debug, Parser)]
+struct FavoriteListArgs {}
+
+async fn cmd_favorite_list(_args: FavoriteListArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    let response = client
+        .favorite_list(sonar_grpc::FavoriteListRequest { user_id })
+        .await?;
+    let favorites = response.into_inner().favorites;
+
+    for favorite in favorites {
+        println!("{}", favorite.item_id);
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct FavoriteAddArgs {
+    items_ids: Vec<sonar::SonarId>,
+}
+
+async fn cmd_favorite_add(args: FavoriteAddArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    for item_id in args.items_ids {
+        client
+            .favorite_add(sonar_grpc::FavoriteAddRequest {
+                user_id: user_id.clone(),
+                item_id: item_id.to_string(),
+            })
+            .await?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct FavoriteRemoveArgs {
+    items_ids: Vec<sonar::SonarId>,
+}
+
+async fn cmd_favorite_remove(args: FavoriteRemoveArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    let (user_id, _) = auth_read().await?;
+    for item_id in args.items_ids {
+        client
+            .favorite_remove(sonar_grpc::FavoriteRemoveRequest {
+                user_id: user_id.clone(),
+                item_id: item_id.to_string(),
+            })
+            .await?;
+    }
     Ok(())
 }
 

@@ -15,7 +15,7 @@ use crate::{
     download::DownloadController,
     external::{ExternalService, SonarExternalService},
     extractor::{Extractor, SonarExtractor},
-    gc, image,
+    favorite, gc, image,
     importer::{self, Importer},
     metadata::{
         AlbumMetadata, AlbumMetadataRequest, AlbumTracksMetadata, AlbumTracksMetadataRequest,
@@ -28,13 +28,14 @@ use crate::{
     track, user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId,
     ArtistMetadata, ArtistMetadataRequest, ArtistUpdate, Audio, AudioCreate, AudioDownload,
     AudioId, AudioStat, ByteRange, Download, DownloadCreate, DownloadDelete, Error, ErrorKind,
-    Genres, ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics, MetadataFetchMask,
-    MetadataFetchParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack, PlaylistUpdate,
-    Properties, PropertyKey, PropertyUpdate, Result, Scrobble, ScrobbleCreate, ScrobbleId,
-    ScrobbleUpdate, SearchQuery, SonarId, Subscription, SubscriptionCreate, SubscriptionDelete,
-    Track, TrackCreate, TrackId, TrackMetadata, TrackMetadataRequest, TrackUpdate, User,
-    UserCreate, UserId, UserToken, UserUpdate, Username, ValueUpdate, METADATA_FETCH_MASK_COVER,
-    METADATA_FETCH_MASK_GENRES, METADATA_FETCH_MASK_NAME, METADATA_FETCH_MASK_PROPERTIES,
+    Favorite, Genres, ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics,
+    MetadataFetchMask, MetadataFetchParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack,
+    PlaylistUpdate, Properties, PropertyKey, PropertyUpdate, Result, Scrobble, ScrobbleCreate,
+    ScrobbleId, ScrobbleUpdate, SearchQuery, SonarId, Subscription, SubscriptionCreate,
+    SubscriptionDelete, Track, TrackCreate, TrackId, TrackMetadata, TrackMetadataRequest,
+    TrackUpdate, User, UserCreate, UserId, UserToken, UserUpdate, Username, ValueUpdate,
+    METADATA_FETCH_MASK_COVER, METADATA_FETCH_MASK_GENRES, METADATA_FETCH_MASK_NAME,
+    METADATA_FETCH_MASK_PROPERTIES,
 };
 
 mod scrobbler_process;
@@ -792,6 +793,28 @@ pub async fn playlist_remove_tracks(
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
     playlist::remove_tracks(&mut tx, id, tracks).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn favorite_list(context: &Context, user_id: UserId) -> Result<Vec<Favorite>> {
+    let mut conn = context.db.acquire().await?;
+    favorite::user_get(&mut conn, user_id).await
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn favorite_add(context: &Context, user_id: UserId, id: SonarId) -> Result<()> {
+    let mut tx = context.db.begin().await?;
+    favorite::user_put(&mut tx, user_id, id).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn favorite_remove(context: &Context, user_id: UserId, id: SonarId) -> Result<()> {
+    let mut tx = context.db.begin().await?;
+    favorite::user_remove(&mut tx, user_id, id).await?;
     tx.commit().await?;
     Ok(())
 }

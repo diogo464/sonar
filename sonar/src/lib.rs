@@ -33,6 +33,7 @@ pub(crate) mod db;
 pub(crate) mod download;
 pub(crate) mod external;
 pub(crate) mod extractor;
+pub(crate) mod favorite;
 pub(crate) mod gc;
 pub(crate) mod genre;
 pub(crate) mod image;
@@ -59,6 +60,7 @@ pub use external::{
     ExternalPlaylist, ExternalService, ExternalTrack,
 };
 pub use extractor::{ExtractedImage, ExtractedMetadata, Extractor};
+pub use favorite::Favorite;
 pub use genre::{Genre, GenreUpdate, GenreUpdateAction, Genres, InvalidGenreError};
 pub use image::{ImageCreate, ImageDownload};
 pub use importer::Import;

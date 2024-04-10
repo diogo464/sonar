@@ -480,6 +480,72 @@ impl sonar_service_server::SonarService for Server {
             data: buffer,
         }))
     }
+    async fn favorite_list(
+        &self,
+        request: tonic::Request<FavoriteListRequest>,
+    ) -> std::result::Result<tonic::Response<FavoriteListResponse>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+        let req = request.into_inner();
+        let target_user = parse_userid(req.user_id)?;
+
+        if target_user != user.id && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not allowed to view user's favorites",
+            ));
+        }
+
+        let favorites = sonar::favorite_list(&self.context, target_user)
+            .await
+            .m()?
+            .into_iter()
+            .map(|f| Favorite {
+                item_id: f.id.to_string(),
+                favorite_at: Some(convert_timestamp_to_pb(f.favorite_at)),
+            })
+            .collect();
+
+        Ok(tonic::Response::new(FavoriteListResponse { favorites }))
+    }
+    async fn favorite_add(
+        &self,
+        request: tonic::Request<FavoriteAddRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+        let req = request.into_inner();
+        let target_user = parse_userid(req.user_id)?;
+        let item_id = parse_sonarid(req.item_id)?;
+
+        if target_user != user.id && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not allowed to add favorites to target user",
+            ));
+        }
+
+        sonar::favorite_add(&self.context, target_user, item_id)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(()))
+    }
+    async fn favorite_remove(
+        &self,
+        request: tonic::Request<FavoriteRemoveRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        let user = self.require_user(&request).await?;
+        let req = request.into_inner();
+        let target_user = parse_userid(req.user_id)?;
+        let item_id = parse_sonarid(req.item_id)?;
+
+        if target_user != user.id && !user.admin {
+            return Err(tonic::Status::permission_denied(
+                "not allowed to remove favorites from target user",
+            ));
+        }
+
+        sonar::favorite_remove(&self.context, target_user, item_id)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(()))
+    }
     async fn playlist_list(
         &self,
         request: tonic::Request<PlaylistListRequest>,
