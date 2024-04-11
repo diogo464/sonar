@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{path::Path, sync::Arc, time::Duration};
 
 use sonar::{
     bytestream::ByteStream, ExternalAlbum, ExternalArtist, ExternalImage, ExternalMediaId,
@@ -15,11 +15,10 @@ pub struct SpotifyService {
     session: spotdl::session::Session,
     fetcher: Arc<dyn spotdl::fetcher::MetadataFetcher>,
     download_sem: Arc<Semaphore>,
-    _cache_directory: tempfile::TempDir,
 }
 
 impl SpotifyService {
-    pub async fn new(credentials: LoginCredentials) -> Result<Self> {
+    pub async fn new(credentials: LoginCredentials, cache_dir: &Path) -> Result<Self> {
         let credentials = spotdl::session::login(&credentials)
             .await
             .map_err(sonar::Error::wrap)?;
@@ -28,21 +27,17 @@ impl SpotifyService {
             .await
             .map_err(sonar::Error::wrap)?;
 
-        let cache_directory = tempfile::tempdir().map_err(sonar::Error::wrap)?;
         let fetcher = spotdl::fetcher::SpotifyMetadataFetcher::new(session.clone());
-        let fetcher = spotdl::fetcher::FsCacheMetadataFetcher::new(
-            fetcher,
-            cache_directory.path().to_owned(),
-        )
-        .await
-        .map_err(sonar::Error::wrap)?;
+        let fetcher =
+            spotdl::fetcher::FsCacheMetadataFetcher::new(fetcher, cache_dir.to_path_buf())
+                .await
+                .map_err(sonar::Error::wrap)?;
         let fetcher = Arc::new(fetcher);
 
         Ok(Self {
             session,
             fetcher,
             download_sem: Arc::new(Semaphore::new(MAX_CONCURRENT_TRACK_DOWNLOADS)),
-            _cache_directory: cache_directory,
         })
     }
 }

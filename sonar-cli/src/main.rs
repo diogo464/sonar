@@ -2415,10 +2415,14 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     let storage_dir = data_dir.join("storage");
     let database_url = data_dir.join("sonar.db").display().to_string();
 
+    let spotify_cache = data_dir.join("spotify");
+    tokio::fs::create_dir_all(&spotify_cache).await?;
+
     tracing::info!("starting sonar server");
     tracing::info!("\taddress: {}", args.address);
     tracing::info!("\tdatabase: {}", database_url);
     tracing::info!("\tstorage: {}", storage_dir.display());
+    tracing::info!("\tspotify_cache: {}", spotify_cache.display());
 
     let storage_backend = sonar::StorageBackend::Filesystem {
         path: data_dir.join("storage"),
@@ -2440,10 +2444,10 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     //     .context("registering listenbrainz scrobbler")?;
 
     if let (Some(username), Some(password)) = (args.spotify_username, args.spotify_password) {
-        let spotify = sonar_spotify::SpotifyService::new(sonar_spotify::LoginCredentials {
-            username,
-            password,
-        })
+        let spotify = sonar_spotify::SpotifyService::new(
+            sonar_spotify::LoginCredentials { username, password },
+            &spotify_cache,
+        )
         .await
         .context("creating spotify context")?;
         config
