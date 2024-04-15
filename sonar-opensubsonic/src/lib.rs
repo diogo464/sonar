@@ -388,9 +388,10 @@ impl OpenSubsonicServer for Server {
 
     #[tracing::instrument]
     async fn get_playlists(&self, _request: Request<GetPlaylists>) -> Result<Playlists> {
-        let playlists = sonar::playlist_list(&self.context, Default::default())
+        let mut playlists = sonar::playlist_list(&self.context, Default::default())
             .await
             .m()?;
+        playlists.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(Playlists {
             playlist: playlists.into_iter().map(playlist_from_playlist).collect(),
         })
