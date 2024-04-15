@@ -9,7 +9,7 @@ use std::{
 
 use clap::Parser;
 use eyre::{Context, Result};
-use lofty::{Accessor, TaggedFileExt};
+use lofty::{Accessor, TagExt, TaggedFileExt};
 use serde::Serialize;
 use sonar::{Genres, Properties};
 use tokio::io::AsyncWriteExt;
@@ -1593,6 +1593,8 @@ async fn cmd_sync(args: SyncArgs) -> Result<()> {
                         tag.set_disk(disc_number);
                         tag.set_track(track_number);
                         tag.set_genre(genre);
+                        tag.save_to_path(download_path)
+                            .context("saving lofty tag to file")?;
 
                         Ok::<_, eyre::Error>(())
                     }
