@@ -165,7 +165,7 @@ impl SubscriptionController {
                     state.last_download = Instant::now();
                     download_queue.push(key.clone());
                 } else {
-                    tracing::debug!("skipping download for {:?}. elapsed: {:?}", key, elapsed);
+                    tracing::trace!("skipping download for {:?}. elapsed: {:?}", key, elapsed);
                 }
             }
             download_queue
