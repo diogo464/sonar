@@ -2331,6 +2331,9 @@ struct ServerArgs {
     )]
     address_opensubsonic: SocketAddr,
 
+    #[clap(long, env = "SONAR_OPENSUBSONIC_IMAGE_URL_PREFIX")]
+    image_url_prefix: String,
+
     #[clap(long, default_value = ".", env = "SONAR_DATA_DIR")]
     data_dir: PathBuf,
 
@@ -2502,9 +2505,13 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
 
     let opensubsonic_context = context.clone();
     let f1 = tokio::spawn(async move {
-        sonar_opensubsonic::start_server(args.address_opensubsonic, opensubsonic_context)
-            .await
-            .context("starting opensubsonic server")?;
+        sonar_opensubsonic::start_server(
+            args.address_opensubsonic,
+            opensubsonic_context,
+            args.image_url_prefix,
+        )
+        .await
+        .context("starting opensubsonic server")?;
         Ok::<(), eyre::Report>(())
     });
 

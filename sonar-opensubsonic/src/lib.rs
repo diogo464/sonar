@@ -12,13 +12,15 @@ const DEFAULT_MUSIC_FOLDER_NAME: &str = "sonar";
 
 #[derive(Debug)]
 struct Server {
+    image_url_prefix: String,
     context: sonar::Context,
     tokens: Mutex<HashMap<String, sonar::UserToken>>,
 }
 
 impl Server {
-    fn new(context: sonar::Context) -> Self {
+    fn new(context: sonar::Context, image_url_prefix: String) -> Self {
         Self {
+            image_url_prefix,
             context,
             tokens: Default::default(),
         }
@@ -242,9 +244,20 @@ impl OpenSubsonicServer for Server {
     }
 
     #[tracing::instrument]
-    async fn get_artist_info2(&self, _request: Request<GetArtistInfo2>) -> Result<ArtistInfo2> {
+    async fn get_artist_info2(&self, request: Request<GetArtistInfo2>) -> Result<ArtistInfo2> {
+        let artist_id = request.body.id.parse::<sonar::ArtistId>().m()?;
+        let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
+        let cover_art = match artist.cover_art {
+            Some(cover_id) => Some(format!(
+                "{}/rest/getCoverArt?id={}&v=1.15.0&u=0&p=0&c=sonar",
+                self.image_url_prefix, cover_id
+            )),
+            None => None,
+        };
+
         Ok(ArtistInfo2 {
             info: ArtistInfoBase {
+                large_image_url: cover_art,
                 ..Default::default()
             },
             similar_artist: Default::default(),
@@ -684,7 +697,11 @@ fn child_from_playlist_tracks(
     children
 }
 
-pub async fn start_server(address: SocketAddr, context: sonar::Context) -> eyre::Result<()> {
+pub async fn start_server(
+    address: SocketAddr,
+    context: sonar::Context,
+    image_url_prefix: String,
+) -> eyre::Result<()> {
     tracing::info!("starting opensubsonic server on {}", address);
     let listener = tokio::net::TcpListener::bind(address)
         .await
@@ -694,7 +711,8 @@ pub async fn start_server(address: SocketAddr, context: sonar::Context) -> eyre:
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
         // allow requests from any origin
         .allow_origin(Any);
-    let service = OpenSubsonicService::new("0.0.0", "sonar", Server::new(context));
+    let service =
+        OpenSubsonicService::new("0.0.0", "sonar", Server::new(context, image_url_prefix));
     let router = axum::Router::default()
         .nest_service("/", service)
         .layer(tower_http::trace::TraceLayer::new_for_http())
