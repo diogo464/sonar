@@ -5,28 +5,62 @@ pub type Result<T, E = QueryParseError> = std::result::Result<T, E>;
 pub type QueryKey<'a> = Cow<'a, str>;
 pub type QueryValue<'a> = Option<Cow<'a, str>>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueryValueParseErrorKind {
+    Duplicate,
+    Missing,
+    Other,
+}
+
 #[derive(Debug)]
-pub struct QueryValueParseError(String);
+pub struct QueryValueParseError {
+    pub kind: QueryValueParseErrorKind,
+    pub message: Option<String>,
+}
 
 impl std::error::Error for QueryValueParseError {}
 
 impl std::fmt::Display for QueryValueParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        match self.kind {
+            QueryValueParseErrorKind::Duplicate => write!(f, "duplicate value")?,
+            QueryValueParseErrorKind::Missing => write!(f, "missing value")?,
+            QueryValueParseErrorKind::Other => write!(f, "other")?,
+        }
+        if let Some(ref msg) = self.message {
+            write!(f, ": {}", msg)?;
+        }
+        Ok(())
     }
 }
 
 impl QueryValueParseError {
-    pub fn message(msg: impl ToString) -> Self {
-        Self(msg.to_string())
+    pub fn new(kind: QueryValueParseErrorKind, msg: impl ToString) -> Self {
+        Self {
+            kind,
+            message: Some(msg.to_string()),
+        }
     }
 
     pub fn duplicate_value() -> Self {
-        Self::message("duplicate value")
+        Self {
+            kind: QueryValueParseErrorKind::Duplicate,
+            message: None,
+        }
     }
 
-    pub fn empty_value() -> Self {
-        Self::message("empty value")
+    pub fn missing() -> Self {
+        Self {
+            kind: QueryValueParseErrorKind::Missing,
+            message: None,
+        }
+    }
+
+    pub fn other(msg: impl ToString) -> Self {
+        Self {
+            kind: QueryValueParseErrorKind::Other,
+            message: Some(msg.to_string()),
+        }
     }
 }
 
@@ -356,14 +390,14 @@ where
         if self.value.is_some() {
             return Err(QueryValueParseError::duplicate_value());
         }
-        let value = value.ok_or_else(QueryValueParseError::empty_value)?;
+        let value = value.ok_or_else(QueryValueParseError::missing)?;
         let value = if value.contains('+') {
             value
                 .replace('+', " ")
                 .parse()
-                .map_err(QueryValueParseError::message)?
+                .map_err(QueryValueParseError::other)?
         } else {
-            value.parse().map_err(QueryValueParseError::message)?
+            value.parse().map_err(QueryValueParseError::other)?
         };
         self.value = Some(value);
         Ok(())
@@ -372,7 +406,7 @@ where
     fn finish(self) -> Result<Self::Output, QueryValueParseError> {
         match self.value {
             Some(value) => Ok(value),
-            None => Err(QueryValueParseError::empty_value()),
+            None => Err(QueryValueParseError::missing()),
         }
     }
 }
@@ -474,7 +508,7 @@ impl QueryValueAccumulator for QueryValueAccumulatorBool {
             Some(value) => match value.as_ref() {
                 "true" | "1" => true,
                 "false" | "0" => false,
-                _ => return Err(QueryValueParseError::message("invalid boolean value")),
+                _ => return Err(QueryValueParseError::other("invalid boolean value")),
             },
             None => true,
         };
@@ -485,7 +519,7 @@ impl QueryValueAccumulator for QueryValueAccumulatorBool {
     fn finish(self) -> Result<Self::Output, QueryValueParseError> {
         match self.value {
             Some(value) => Ok(value),
-            None => Err(QueryValueParseError::empty_value()),
+            None => Err(QueryValueParseError::missing()),
         }
     }
 }

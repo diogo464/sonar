@@ -226,7 +226,10 @@ const _: () = {
             } else {
                 Err(crate::query::QueryParseError::invalid_value(
                     "p/t/s",
-                    QueryValueParseError::message("one of p, t, s must be present"),
+                    QueryValueParseError::new(
+                        query::QueryValueParseErrorKind::Missing,
+                        "one of p, t, s must be present",
+                    ),
                 ))
             }
         }

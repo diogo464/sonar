@@ -569,8 +569,23 @@ where
         match crate::query::from_query(query) {
             Ok(request) => Ok(request),
             Err(err) => {
-                Err(self
-                    .response_from_error(Error::with_message(ErrorCode::Generic, err.to_string())))
+                let code = match &err {
+                    crate::query::QueryParseError::InvalidValue { key: _, error: _ } => {
+                        match &err {
+                            crate::query::QueryParseError::InvalidValue { key: _, error } => {
+                                match error.kind {
+                                    crate::query::QueryValueParseErrorKind::Missing => {
+                                        ErrorCode::RequiredParameterMissing
+                                    }
+                                    _ => ErrorCode::Generic,
+                                }
+                            }
+                            _ => ErrorCode::Generic,
+                        }
+                    }
+                    _ => ErrorCode::Generic,
+                };
+                Err(self.response_from_error(Error::with_message(code, err.to_string())))
             }
         }
     }
@@ -622,7 +637,7 @@ where
                 self.server_type.clone(),
                 self.server_version.clone(),
             ),
-            http::StatusCode::BAD_REQUEST,
+            http::StatusCode::OK,
         )
     }
 
