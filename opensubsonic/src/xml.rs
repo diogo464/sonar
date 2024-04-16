@@ -1,4 +1,5 @@
-use std::io::Write;
+use std::fmt::Write as _;
+use std::io::Write as _;
 
 pub trait XmlSerialize {
     fn serialize(&self, xml: &mut Xml);
@@ -42,8 +43,17 @@ pub fn elem_begin_close_end(xml: &mut Xml) {
     let _ = write!(xml.buffer, " />\n");
 }
 pub fn attr(xml: &mut Xml, attr: &str, value: &impl std::fmt::Display) {
-    // TODO: escape value
-    let _ = write!(xml.buffer, " {}=\"{}\"", attr, value);
+    let _ = write!(xml.buffer, " {}=\"", attr);
+
+    // TODO: improve clones?
+    let mut value = format!("{}", value);
+    value = value.replace("&", "&amp;");
+    value = value.replace("\"", "&quot;");
+    value = value.replace("<", "&lt;");
+    value = value.replace("<", "&gt;");
+
+    let _ = write!(xml.buffer, "{}", value);
+    let _ = write!(xml.buffer, "\"");
 }
 pub fn elem_end(xml: &mut Xml) {
     let element = xml.tag_stack.pop().expect("empty tag stack");
