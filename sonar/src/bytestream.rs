@@ -6,7 +6,7 @@ use tokio_stream::StreamExt;
 
 pub type ByteStream = Box<dyn tokio_stream::Stream<Item = std::io::Result<Bytes>> + Send + Unpin>;
 
-pub async fn to_file(stream: ByteStream, path: &Path) -> std::io::Result<()> {
+pub async fn to_file(stream: ByteStream, path: impl AsRef<Path>) -> std::io::Result<()> {
     let file = File::create(path).await?;
     let mut writer = BufWriter::new(file);
     let mut reader = tokio_util::io::StreamReader::new(stream);
@@ -14,7 +14,7 @@ pub async fn to_file(stream: ByteStream, path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-pub async fn from_file(path: &Path) -> std::io::Result<ByteStream> {
+pub async fn from_file(path: impl AsRef<Path>) -> std::io::Result<ByteStream> {
     let file = File::open(path).await?;
     Ok(Box::new(tokio_util::io::ReaderStream::new(
         tokio::io::BufReader::new(file),
