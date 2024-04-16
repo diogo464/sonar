@@ -478,6 +478,9 @@ where
         tracing::debug!("path: {}", path);
         tracing::debug!("query: {}", query);
 
+        // NOTE: the amperfy iOS client does a get request to / , probably to try to figure
+        // out what kind of server it is talking to, and will fail to login if it returns
+        // 404.
         if path == "" || path == "/" {
             return Ok(self.response_from_byte_stream(ByteStream::empty()));
         }
