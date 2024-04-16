@@ -134,7 +134,7 @@ impl RequestContext {
         body: B,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let request = Request {
-            username: self.username,
+            username: Some(self.username),
             authentication: self.authentication,
             version: self.version,
             client: self.client,
