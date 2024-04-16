@@ -40,9 +40,17 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::{
-    AverageRating, DateTime, MediaType, Milliseconds, RecordLabel, Seconds, UserRating, Version,
+use crate::{
+    common::{
+        AverageRating, DateTime, Format, MediaType, Milliseconds, RecordLabel, Seconds, UserRating,
+        Version,
+    },
+    xml::{self, XmlSerialize},
 };
+
+pub trait SubsonicSerialize {
+    fn serialize(&self, format: Format) -> Vec<u8>;
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResponseObject {
@@ -63,6 +71,15 @@ impl From<Response> for ResponseObject {
 pub enum ResponseStatus {
     Ok,
     Failed,
+}
+
+impl std::fmt::Display for ResponseStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ok => f.write_str("ok"),
+            Self::Failed => f.write_str("failed"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -951,5 +968,671 @@ impl<'de> serde::Deserialize<'de> for ErrorCode {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let code = u32::deserialize(deserializer)?;
         Ok(ErrorCode::from(code))
+    }
+}
+
+impl XmlSerialize for Response {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "subsonic-response");
+        xml::attr(xml, "status", &self.status);
+        xml::attr(xml, "version", &self.version);
+        xml::attr(xml, "type", &self.server_type);
+        xml::attr(xml, "serverVersion", &self.server_version);
+        xml::attr(xml, "openSubsonic", &self.open_subsonic);
+        xml::elem_begin_close(xml);
+        if let Some(ref body) = self.body {
+            XmlSerialize::serialize(body, xml);
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for ResponseBody {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        match self {
+            ResponseBody::MusicFolders(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Indexes(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Directory(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Genres(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Artists(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Artist(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Album(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Song(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Videos(_) => todo!(),
+            ResponseBody::VideoInfo(_) => todo!(),
+            ResponseBody::NowPlaying(_) => todo!(),
+            ResponseBody::SearchResult(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::SearchResult2(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::SearchResult3(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Playlists(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Playlist(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::JukeboxStatus(_) => todo!(),
+            ResponseBody::JukeboxPlaylist(_) => todo!(),
+            ResponseBody::JukeboxControlResponse(_) => todo!(),
+            ResponseBody::License(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Users(_) => todo!(),
+            ResponseBody::User(_) => todo!(),
+            ResponseBody::ChatMessages(_) => todo!(),
+            ResponseBody::AlbumList(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::AlbumList2(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::RandomSongs(_) => todo!(),
+            ResponseBody::SongsByGenre(_) => todo!(),
+            ResponseBody::Lyrics(_) => todo!(),
+            ResponseBody::Podcasts(_) => todo!(),
+            ResponseBody::NewestPodcasts(_) => todo!(),
+            ResponseBody::InternetRadioStations(_) => todo!(),
+            ResponseBody::Bookmarks(_) => todo!(),
+            ResponseBody::PlayQueue(_) => todo!(),
+            ResponseBody::Shares(_) => todo!(),
+            ResponseBody::Starred(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Starred2(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::AlbumInfo(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::ArtistInfo(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::ArtistInfo2(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::SimilarSongs(_) => todo!(),
+            ResponseBody::SimilarSongs2(_) => todo!(),
+            ResponseBody::TopSongs(_) => todo!(),
+            ResponseBody::ScanStatus(_) => todo!(),
+            ResponseBody::Error(v) => XmlSerialize::serialize(v, xml),
+        }
+    }
+}
+
+impl XmlSerialize for License {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "license");
+        xml::attr(xml, "valid", &self.valid);
+        xml::attr_opt(xml, "email", &self.email);
+        xml::attr_opt(xml, "licenseExpires", &self.license_expires);
+        xml::attr_opt(xml, "trialExpires", &self.trial_expires);
+        xml::elem_begin_close_end(xml);
+    }
+}
+
+impl XmlSerialize for MusicFolder {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "musicFolder");
+        xml::attr(xml, "id", &self.id);
+        xml::attr_opt(xml, "name", &self.name);
+        xml::elem_begin_close_end(xml);
+    }
+}
+
+impl XmlSerialize for MusicFolders {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "musicFolders");
+        xml::elem_begin_close(xml);
+        for folder in &self.music_folder {
+            XmlSerialize::serialize(folder, xml);
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for Index {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "index");
+        xml::attr(xml, "name", &self.name);
+        xml::elem_begin_close(xml);
+        for artist in &self.artist {
+            XmlSerialize::serialize(artist, xml);
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for Indexes {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "indexes");
+        xml::attr(xml, "lastModified", &self.last_modified);
+        xml::attr(xml, "ignoredArticles", &self.ignored_articles);
+        xml::elem_begin_close(xml);
+
+        // TODO: shortcuts
+
+        for index in &self.index {
+            XmlSerialize::serialize(index, xml);
+        }
+        for child in &self.child {
+            XmlSerialize::serialize(child, xml);
+        }
+
+        xml::elem_end(xml);
+    }
+}
+
+impl Artist {
+    fn serialize_as(&self, xml: &mut xml::Xml, element: &'static str) {
+        xml::elem_begin_open(xml, element);
+        xml::attr(xml, "id", &self.id);
+        xml::attr(xml, "name", &self.name);
+        xml::attr_opt(xml, "artistImageUrl", &self.artist_image_url);
+        xml::attr_opt(xml, "starred", &self.starred);
+        xml::attr_opt(xml, "userRating", &self.user_rating);
+        xml::attr_opt(xml, "averageRating", &self.average_rating);
+        xml::elem_begin_close_end(xml);
+    }
+}
+
+impl XmlSerialize for Artist {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        self.serialize_as(xml, "artist");
+    }
+}
+
+impl XmlSerialize for Genres {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "genres");
+        xml::elem_begin_close(xml);
+        for genre in &self.genre {
+            XmlSerialize::serialize(genre, xml);
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for Genre {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "genre");
+        xml::attr(xml, "songCount", &self.song_count);
+        xml::attr(xml, "albumCount", &self.album_count);
+        xml::elem_begin_close(xml);
+        xml::body_display(xml, &self.name);
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for ArtistsID3 {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "artists");
+        xml::attr(xml, "ignoredArticles", &self.ignored_articles);
+        xml::elem_begin_close(xml);
+        for index in &self.index {
+            XmlSerialize::serialize(index, xml);
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for IndexID3 {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "index");
+        xml::attr(xml, "name", &self.name);
+        xml::elem_begin_close(xml);
+        for artist in &self.artist {
+            XmlSerialize::serialize(artist, xml);
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl ArtistID3 {
+    fn serialize_as(&self, xml: &mut xml::Xml, element: &'static str) {
+        xml::elem_begin_open(xml, element);
+        self.serialize_attributes(xml);
+        xml::elem_begin_close_end(xml);
+    }
+
+    fn serialize_attributes(&self, xml: &mut xml::Xml) {
+        xml::attr(xml, "id", &self.id);
+        xml::attr(xml, "name", &self.name);
+        xml::attr_opt(xml, "coverArt", &self.cover_art);
+        xml::attr(xml, "albumCount", &self.album_count);
+        xml::attr_opt(xml, "starred", &self.starred);
+    }
+}
+
+impl XmlSerialize for ArtistID3 {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        self.serialize_as(xml, "artist");
+    }
+}
+
+impl XmlSerialize for ArtistWithAlbumsID3 {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "artist");
+        self.artist.serialize_attributes(xml);
+        xml::elem_begin_close(xml);
+        for album in &self.album {
+            XmlSerialize::serialize(album, xml);
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl AlbumID3 {
+    fn serialize_attributes(&self, xml: &mut xml::Xml) {
+        xml::attr(xml, "id", &self.id);
+        xml::attr(xml, "name", &self.name);
+        xml::attr_opt(xml, "artist", &self.artist);
+        xml::attr_opt(xml, "artistId", &self.artist_id);
+        xml::attr_opt(xml, "coverArt", &self.cover_art);
+        xml::attr(xml, "songCount", &self.song_count);
+        xml::attr(xml, "duration", &self.duration);
+        xml::attr_opt(xml, "playCount", &self.play_count);
+        xml::attr(xml, "created", &self.created);
+        xml::attr_opt(xml, "starred", &self.starred);
+        xml::attr_opt(xml, "year", &self.year);
+        xml::attr_opt(xml, "genre", &self.genre);
+        xml::attr_opt(xml, "userRating", &self.user_rating);
+    }
+}
+
+impl XmlSerialize for AlbumID3 {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "album");
+        self.serialize_attributes(xml);
+        xml::elem_begin_close_end(xml);
+    }
+}
+
+impl XmlSerialize for AlbumWithSongsID3 {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "album");
+        self.album.serialize_attributes(xml);
+        xml::elem_begin_close(xml);
+        for song in &self.song {
+            song.serialize_as(xml, "song");
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for Directory {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "directory");
+        xml::attr(xml, "id", &self.id);
+        xml::attr_opt(xml, "parent", &self.parent);
+        xml::attr(xml, "name", &self.name);
+        xml::attr_opt(xml, "starred", &self.starred);
+        xml::attr_opt(xml, "userRating", &self.user_rating);
+        xml::attr_opt(xml, "averageRating", &self.average_rating);
+        xml::attr_opt(xml, "playCount", &self.play_count);
+        xml::elem_begin_close(xml);
+        for child in &self.child {
+            XmlSerialize::serialize(child, xml);
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl Child {
+    fn serialize_as(&self, xml: &mut xml::Xml, element: &'static str) {
+        xml::elem_begin_open(xml, element);
+        xml::attr(xml, "id", &self.id);
+        xml::attr_opt(xml, "parent", &self.parent);
+        xml::attr(xml, "isDir", &self.is_dir);
+        xml::attr(xml, "title", &self.title);
+        xml::attr_opt(xml, "album", &self.album);
+        xml::attr_opt(xml, "artist", &self.artist);
+        xml::attr_opt(xml, "track", &self.track);
+        xml::attr_opt(xml, "year", &self.year);
+        xml::attr_opt(xml, "genre", &self.genre);
+        xml::attr_opt(xml, "coverArt", &self.cover_art);
+        xml::attr_opt(xml, "size", &self.size);
+        xml::attr_opt(xml, "contentType", &self.content_type);
+        xml::attr_opt(xml, "suffix", &self.suffix);
+        xml::attr_opt(xml, "transcodedContentType", &self.transcoded_content_type);
+        xml::attr_opt(xml, "transcodedSuffix", &self.transcoded_suffix);
+        xml::attr_opt(xml, "duration", &self.duration);
+        xml::attr_opt(xml, "bitRate", &self.bit_rate);
+        xml::attr_opt(xml, "path", &self.path);
+        xml::attr_opt(xml, "isVideo", &self.is_video);
+        xml::attr_opt(xml, "userRating", &self.user_rating);
+        xml::attr_opt(xml, "averageRating", &self.average_rating);
+        xml::attr_opt(xml, "playCount", &self.play_count);
+        xml::attr_opt(xml, "discNumber", &self.disc_number);
+        xml::attr_opt(xml, "created", &self.disc_number);
+        xml::attr_opt(xml, "starred", &self.starred);
+        xml::attr_opt(xml, "albumId", &self.album_id);
+        xml::attr_opt(xml, "artistId", &self.artist_id);
+        xml::attr_opt(xml, "type", &self.media_type);
+        xml::attr_opt(xml, "bookmarkPosition", &self.bookmark_position);
+        xml::attr_opt(xml, "originalWidth", &self.original_width);
+        xml::attr_opt(xml, "originalHeight", &self.original_height);
+        xml::elem_begin_close_end(xml);
+    }
+}
+
+impl XmlSerialize for Child {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        self.serialize_as(xml, "child");
+    }
+}
+
+impl XmlSerialize for SearchResult {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "searchResult");
+        xml::attr(xml, "offset", &self.offset);
+        xml::attr(xml, "totalHits", &self.total_hits);
+        for m in &self.matches {
+            m.serialize_as(xml, "match");
+        }
+        xml::elem_begin_close(xml);
+    }
+}
+
+impl XmlSerialize for SearchResult2 {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "searchResult2");
+        xml::elem_begin_close(xml);
+        for artist in &self.artist {
+            XmlSerialize::serialize(artist, xml);
+        }
+        for album in &self.album {
+            album.serialize_as(xml, "album");
+        }
+        for song in &self.song {
+            song.serialize_as(xml, "song");
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for SearchResult3 {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "searchResult3");
+        xml::elem_begin_close(xml);
+        for artist in &self.artist {
+            XmlSerialize::serialize(artist, xml);
+        }
+        for album in &self.album {
+            XmlSerialize::serialize(album, xml);
+        }
+        for song in &self.song {
+            song.serialize_as(xml, "song");
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for Playlists {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "playlists");
+        xml::elem_begin_close(xml);
+        for playlist in &self.playlist {
+            XmlSerialize::serialize(playlist, xml);
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl Playlist {
+    fn serialize_attributes(&self, xml: &mut xml::Xml) {
+        xml::attr(xml, "id", &self.id);
+        xml::attr(xml, "name", &self.name);
+        xml::attr_opt(xml, "comment", &self.comment);
+        xml::attr_opt(xml, "owner", &self.owner);
+        xml::attr_opt(xml, "public", &self.public);
+        xml::attr(xml, "songCount", &self.song_count);
+        xml::attr(xml, "duration", &self.duration);
+        xml::attr(xml, "created", &self.created);
+        xml::attr(xml, "changed", &self.changed);
+        xml::attr_opt(xml, "coverArt", &self.cover_art);
+    }
+
+    fn serialize_allowed_users(&self, xml: &mut xml::Xml) {
+        for allowed_user in &self.allowed_user {
+            xml::elem_begin_open(xml, "allowedUser");
+            xml::elem_begin_close(xml);
+            xml::body_display(xml, allowed_user);
+            xml::elem_end(xml);
+        }
+    }
+}
+
+impl XmlSerialize for Playlist {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "playlist");
+        self.serialize_attributes(xml);
+        xml::elem_begin_close(xml);
+        self.serialize_allowed_users(xml);
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for PlaylistWithSongs {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "playlist");
+        self.playlist.serialize_attributes(xml);
+        xml::elem_begin_close(xml);
+        self.playlist.serialize_allowed_users(xml);
+        for entry in &self.entry {
+            entry.serialize_as(xml, "entry");
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for AlbumList {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "albumList");
+        xml::elem_begin_close(xml);
+        for album in &self.album {
+            album.serialize_as(xml, "album");
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for AlbumList2 {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "albumList2");
+        xml::elem_begin_close(xml);
+        for album in &self.album {
+            XmlSerialize::serialize(album, xml);
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl Songs {
+    fn serialize_as(&self, xml: &mut xml::Xml, element: &'static str) {
+        xml::elem_begin_open(xml, element);
+        xml::elem_begin_close(xml);
+        for song in &self.song {
+            song.serialize_as(xml, "song");
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for Songs {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        self.serialize_as(xml, "songs");
+    }
+}
+
+impl XmlSerialize for Starred {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "starred");
+        xml::elem_begin_close(xml);
+        for artist in &self.artist {
+            XmlSerialize::serialize(artist, xml);
+        }
+        for album in &self.album {
+            album.serialize_as(xml, "album");
+        }
+        for song in &self.song {
+            song.serialize_as(xml, "song");
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for AlbumInfo {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "albumInfo");
+        xml::elem_begin_close(xml);
+
+        xml::elem_begin_open(xml, "notes");
+        xml::elem_begin_close(xml);
+        xml::body_display(xml, &self.notes);
+        xml::elem_end(xml);
+
+        xml::elem_begin_open(xml, "musicBrainzId");
+        xml::elem_begin_close(xml);
+        xml::body_display(xml, &self.music_brainz_id);
+        xml::elem_end(xml);
+
+        xml::elem_begin_open(xml, "lastFmUrl");
+        xml::elem_begin_close(xml);
+        xml::body_display(xml, &self.last_fm_url);
+        xml::elem_end(xml);
+
+        xml::elem_begin_open(xml, "smallImageUrl");
+        xml::elem_begin_close(xml);
+        xml::body_display(xml, &self.small_image_url);
+        xml::elem_end(xml);
+
+        xml::elem_begin_open(xml, "mediumImageUrl");
+        xml::elem_begin_close(xml);
+        xml::body_display(xml, &self.medium_image_url);
+        xml::elem_end(xml);
+
+        xml::elem_begin_open(xml, "largeImageUrl");
+        xml::elem_begin_close(xml);
+        xml::body_display(xml, &self.large_image_url);
+        xml::elem_end(xml);
+
+        xml::elem_end(xml);
+    }
+}
+
+impl ArtistInfoBase {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        if let Some(ref biography) = self.biography {
+            xml::elem_begin_open(xml, "biography");
+            xml::elem_begin_close(xml);
+            xml::body_display(xml, biography);
+            xml::elem_end(xml);
+        }
+
+        if let Some(ref musicbrainz_id) = self.music_brainz_id {
+            xml::elem_begin_open(xml, "musicBrainzId");
+            xml::elem_begin_close(xml);
+            xml::body_display(xml, musicbrainz_id);
+            xml::elem_end(xml);
+        }
+
+        if let Some(ref last_fm_url) = self.last_fm_url {
+            xml::elem_begin_open(xml, "lastFmUrl");
+            xml::elem_begin_close(xml);
+            xml::body_display(xml, last_fm_url);
+            xml::elem_end(xml);
+        }
+
+        if let Some(ref small_image_url) = self.small_image_url {
+            xml::elem_begin_open(xml, "smallImageUrl");
+            xml::elem_begin_close(xml);
+            xml::body_display(xml, small_image_url);
+            xml::elem_end(xml);
+        }
+
+        if let Some(ref medium_image_url) = self.medium_image_url {
+            xml::elem_begin_open(xml, "mediumImageUrl");
+            xml::elem_begin_close(xml);
+            xml::body_display(xml, medium_image_url);
+            xml::elem_end(xml);
+        }
+
+        if let Some(ref large_image_url) = self.large_image_url {
+            xml::elem_begin_open(xml, "largeImageUrl");
+            xml::elem_begin_close(xml);
+            xml::body_display(xml, large_image_url);
+            xml::elem_end(xml);
+        }
+    }
+}
+
+impl XmlSerialize for ArtistInfo {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "artistInfo");
+        xml::elem_begin_close(xml);
+
+        self.info.serialize(xml);
+        for similar in &self.similar_artist {
+            similar.serialize_as(xml, "similarArtist");
+        }
+
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for ArtistInfo2 {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "artistInfo2");
+        xml::elem_begin_close(xml);
+
+        self.info.serialize(xml);
+        for similar in &self.similar_artist {
+            similar.serialize_as(xml, "similarArtist");
+        }
+
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for Starred2 {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "starred2");
+        xml::elem_begin_close(xml);
+        for artist in &self.artist {
+            XmlSerialize::serialize(artist, xml);
+        }
+        for album in &self.album {
+            XmlSerialize::serialize(album, xml);
+        }
+        for song in &self.song {
+            song.serialize_as(xml, "song");
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for Error {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "error");
+        xml::attr(xml, "code", &u32::from(self.code));
+        xml::attr_opt(xml, "message", &self.message);
+        xml::elem_begin_close_end(xml);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_xml_license() {
+        insta::assert_snapshot!(xml::serialize(&License {
+            valid: true,
+            email: Some("hello@world.com".to_string()),
+            ..Default::default()
+        }));
+    }
+
+    #[test]
+    fn test_xml_music_folder() {
+        insta::assert_snapshot!(xml::serialize(&MusicFolder {
+            id: 5,
+            name: Some("folder name".to_string())
+        }));
+    }
+
+    #[test]
+    fn test_xml_music_folders() {
+        insta::assert_snapshot!(xml::serialize(&MusicFolders {
+            music_folder: vec![
+                MusicFolder {
+                    id: 1,
+                    name: Some("folder 1 name".to_string())
+                },
+                MusicFolder {
+                    id: 2,
+                    name: Some("folder 2 name".to_string())
+                }
+            ]
+        }));
     }
 }

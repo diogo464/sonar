@@ -12,5 +12,6 @@ pub mod query;
 pub mod request;
 pub mod response;
 pub mod service;
+pub(crate) mod xml;
 
 pub use async_trait::async_trait;

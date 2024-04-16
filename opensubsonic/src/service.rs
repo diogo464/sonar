@@ -34,7 +34,7 @@ use std::{borrow::Cow, future::Future, pin::Pin, sync::Arc};
 use bytes::Bytes;
 
 use crate::{
-    common::{ByteStream, Version},
+    common::{ByteStream, Format, Version},
     request::{
         annotation::{Scrobble, SetRating, Star, Unstar},
         bookmark::{CreateBookmark, DeleteBookmark, GetBookmarks, GetPlayQueue, SavePlayQueue},
@@ -75,6 +75,7 @@ use crate::{
         Shares, SimilarSongs, SimilarSongs2, Songs, Starred, Starred2, TopSongs, User, Users,
         VideoInfo, Videos,
     },
+    xml,
 };
 
 pub mod prelude {
@@ -417,32 +418,38 @@ macro_rules! case {
     };
     // responses that return ()
     ($self:expr, $query:expr,$method:ident) => {{
-        let request = $self.parse_query($query)?;
+        let format = $crate::query::from_query::<$crate::common::Format>($query)
+            .unwrap_or($crate::common::Format::Xml);
+        let request = $self.parse_query(format, $query)?;
         $self
             .server
             .$method(request)
             .await
-            .map_err(|err| $self.response_from_error(err))?;
-        Ok($self.response_from_body(None))
+            .map_err(|err| $self.response_from_error(format, err))?;
+        Ok($self.response_from_body(format, None))
     }};
     // responses that return some concrete type
     ($self:expr, $query:expr,$method:ident, $body:ident) => {{
-        let request = $self.parse_query($query)?;
+        let format = $crate::query::from_query::<$crate::common::Format>($query)
+            .unwrap_or($crate::common::Format::Xml);
+        let request = $self.parse_query(format, $query)?;
         let response_body = $self
             .server
             .$method(request)
             .await
-            .map_err(|err| $self.response_from_error(err))?;
-        Ok($self.response_from_body(Some(ResponseBody::$body(response_body))))
+            .map_err(|err| $self.response_from_error(format, err))?;
+        Ok($self.response_from_body(format, Some(ResponseBody::$body(response_body))))
     }};
     // responses that return a byte stream with mime-type
     ($self:expr, $query:expr,$method:ident ->) => {{
-        let request = $self.parse_query($query)?;
+        let format = $crate::query::from_query::<$crate::common::Format>($query)
+            .unwrap_or($crate::common::Format::Xml);
+        let request = $self.parse_query(format, $query)?;
         let stream = $self
             .server
             .$method(request)
             .await
-            .map_err(|err| $self.response_from_error(err))?;
+            .map_err(|err| $self.response_from_error(format, err))?;
         Ok($self.response_from_byte_stream(stream))
     }};
 }
@@ -470,6 +477,11 @@ where
     async fn handle_request(&self, path: &str, query: &str) -> Result<HttpResponse, HttpResponse> {
         tracing::debug!("path: {}", path);
         tracing::debug!("query: {}", query);
+
+        if path == "" || path == "/" {
+            return Ok(self.response_from_byte_stream(ByteStream::empty()));
+        }
+
         match path {
             case!("addChatMessage") => case!(self, query, add_chat_message),
             case!("changePassword") => case!(self, query, change_password),
@@ -562,7 +574,7 @@ where
         }
     }
 
-    fn parse_query<Q>(&self, query: &str) -> Result<Q, HttpResponse>
+    fn parse_query<Q>(&self, format: Format, query: &str) -> Result<Q, HttpResponse>
     where
         Q: crate::query::FromQuery,
     {
@@ -585,13 +597,14 @@ where
                     }
                     _ => ErrorCode::Generic,
                 };
-                Err(self.response_from_error(Error::with_message(code, err.to_string())))
+                Err(self.response_from_error(format, Error::with_message(code, err.to_string())))
             }
         }
     }
 
-    fn response_from_body(&self, body: Option<ResponseBody>) -> HttpResponse {
+    fn response_from_body(&self, format: Format, body: Option<ResponseBody>) -> HttpResponse {
         self.response_from_response(
+            format,
             match body {
                 Some(body) => Response::ok(
                     Self::VERSION,
@@ -628,9 +641,10 @@ where
         response
     }
 
-    fn response_from_error(&self, error: Error) -> HttpResponse {
+    fn response_from_error(&self, format: Format, error: Error) -> HttpResponse {
         tracing::error!("error: {:?}", error);
         self.response_from_response(
+            format,
             Response::failed(
                 Self::VERSION,
                 error,
@@ -641,9 +655,17 @@ where
         )
     }
 
-    fn response_from_response(&self, response: Response, status: http::StatusCode) -> HttpResponse {
-        let serialized = serde_json::to_vec(&ResponseObject::from(response))
-            .expect("failed to serialize response");
+    fn response_from_response(
+        &self,
+        format: Format,
+        response: Response,
+        status: http::StatusCode,
+    ) -> HttpResponse {
+        let serialized = match format {
+            Format::Xml => xml::serialize(&response).into_bytes(),
+            Format::Json => serde_json::to_vec(&ResponseObject::from(response))
+                .expect("failed to serialize response"),
+        };
         let mut response = http::Response::new(http_body_util::StreamBody::new(
             OpenSubsonicBodyStream::Bytes(Some(From::from(serialized))),
         ));

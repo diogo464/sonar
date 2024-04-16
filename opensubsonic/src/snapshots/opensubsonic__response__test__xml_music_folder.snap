@@ -1,0 +1,5 @@
+---
+source: opensubsonic/src/response.rs
+expression: "xml::serialize(&MusicFolder { id: 5, name: Some(\"folder name\".to_string()) })"
+---
+<musicFolder id="5" name="folder name" />

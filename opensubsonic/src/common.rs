@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 use time::{OffsetDateTime, PrimitiveDateTime};
 use tokio_stream::Stream;
 
-use crate::{impl_from_query_value_for_parse, impl_to_query_value_for_display};
+use crate::{
+    impl_from_query_value_for_parse, impl_to_query_value_for_display,
+    query::{FromQuery, QueryAccumulator},
+};
 
 pub struct ByteStream {
     mime_type: Option<String>,
@@ -29,6 +32,13 @@ impl ByteStream {
         Self {
             mime_type: Some(mime_type.into()),
             stream: Box::new(stream),
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            mime_type: None,
+            stream: Box::new(tokio_stream::empty()),
         }
     }
 
@@ -97,6 +107,40 @@ impl FromStr for Format {
         }
     }
 }
+
+const _: () = {
+    #[derive(Default)]
+    pub struct Accumulator {
+        format: Option<Format>,
+    }
+
+    impl QueryAccumulator for Accumulator {
+        type Output = Format;
+
+        fn consume<'a>(
+            &mut self,
+            pair: crate::query::QueryPair<'a>,
+        ) -> crate::query::Result<crate::query::ConsumeStatus<'a>> {
+            if pair.key == "f" {
+                if let Some(ref value) = pair.value {
+                    if value == "json" {
+                        self.format = Some(Format::Json);
+                        return Ok(crate::query::ConsumeStatus::Consumed);
+                    }
+                }
+            }
+            Ok(crate::query::ConsumeStatus::Ignored(pair))
+        }
+
+        fn finish(self) -> crate::query::Result<Self::Output> {
+            Ok(self.format.unwrap_or(Format::Xml))
+        }
+    }
+
+    impl FromQuery for Format {
+        type QueryAccumulator = Accumulator;
+    }
+};
 
 /// A date and time.
 /// Use [`time::OffsetDateTime`] to convert to and from [`DateTime`].
@@ -625,6 +669,18 @@ pub enum MediaType {
     Podcast,
     AudioBook,
     Video,
+}
+
+impl std::fmt::Display for MediaType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            MediaType::Music => "music",
+            MediaType::Podcast => "podcast",
+            MediaType::AudioBook => "audiobook",
+            MediaType::Video => "video",
+        };
+        f.write_str(value)
+    }
 }
 
 #[derive(Debug)]
