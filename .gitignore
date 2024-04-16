@@ -12,6 +12,8 @@ music/
 # beets config
 /sonar-cli/*.yaml
 
+/serve.go
+
 # misc
 *.db
 *.db-wal
