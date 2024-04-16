@@ -726,12 +726,18 @@ pub struct AlbumInfo {
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistInfoBase {
-    pub biography: String,
-    pub music_brainz_id: String,
-    pub last_fm_url: String,
-    pub small_image_url: String,
-    pub medium_image_url: String,
-    pub large_image_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub biography: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub music_brainz_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_fm_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub small_image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub medium_image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub large_image_url: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]

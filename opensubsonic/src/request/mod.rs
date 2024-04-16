@@ -139,13 +139,12 @@ pub trait SubsonicRequest:
 pub enum Authentication {
     Password(String),
     Token { token: String, salt: String },
-    Empty,
 }
 
 #[derive(Debug, Clone, PartialEq, ToQuery, FromQuery)]
 pub struct Request<R: SubsonicRequest> {
     #[query(rename = "u")]
-    pub username: Option<String>,
+    pub username: String,
     #[query(flatten)]
     pub authentication: Authentication,
     #[query(rename = "v")]
@@ -171,7 +170,6 @@ impl ToQuery for Authentication {
                 builder.emit_key_value("t", token);
                 builder.emit_key_value("s", salt);
             }
-            Authentication::Empty => {}
         }
     }
 }
@@ -226,7 +224,10 @@ const _: () = {
             } else if let Some(password) = self.password {
                 Ok(Authentication::Password(password))
             } else {
-                Ok(Authentication::Empty)
+                Err(crate::query::QueryParseError::invalid_value(
+                    "p/t/s",
+                    QueryValueParseError::message("one of p, t, s must be present"),
+                ))
             }
         }
     }
@@ -259,7 +260,7 @@ mod tests {
     #[test]
     fn test_ping_request() {
         let req = Request {
-            username: Some("user".to_string()),
+            username: "user".to_string(),
             authentication: Authentication::Password("password".to_string()),
             version: Version::new(1, 16, 1),
             client: "test".to_string(),
