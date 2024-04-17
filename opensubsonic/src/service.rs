@@ -34,7 +34,7 @@ use std::{borrow::Cow, future::Future, pin::Pin, sync::Arc};
 use bytes::Bytes;
 
 use crate::{
-    common::{ByteStream, Format, Version},
+    common::{ByteRange, ByteStream, Format, Version},
     request::{
         annotation::{Scrobble, SetRating, Star, Unstar},
         bookmark::{CreateBookmark, DeleteBookmark, GetBookmarks, GetPlayQueue, SavePlayQueue},
@@ -72,8 +72,8 @@ use crate::{
         ErrorCode, Genres, InternetRadioStations, JukeboxControlResponse, License, Lyrics,
         MusicFolders, NewestPodcasts, NowPlaying, PlayQueue, PlaylistWithSongs, Playlists,
         Podcasts, Response, ResponseBody, ResponseObject, ScanStatus, SearchResult, SearchResult2,
-        SearchResult3, Shares, SimilarSongs, SimilarSongs2, Songs, Starred, Starred2, TopSongs,
-        User, Users, VideoInfo, Videos,
+        SearchResult3, Shares, SimilarSongs, SimilarSongs2, Songs, Starred, Starred2, StreamChunk,
+        TopSongs, User, Users, VideoInfo, Videos,
     },
     xml,
 };
@@ -338,7 +338,7 @@ pub trait OpenSubsonicServer: Send + Sync + 'static {
     async fn start_scan(&self, request: Request<StartScan>) -> Result<ScanStatus> {
         unsupported()
     }
-    async fn stream(&self, request: Request<Stream>) -> Result<ByteStream> {
+    async fn stream(&self, request: Request<Stream>, range: ByteRange) -> Result<StreamChunk> {
         unsupported()
     }
     async fn unstar(&self, request: Request<Unstar>) -> Result<()> {
@@ -474,7 +474,12 @@ where
 {
     const VERSION: Version = Version::V1_16_1;
 
-    async fn handle_request(&self, path: &str, query: &str) -> Result<HttpResponse, HttpResponse> {
+    async fn handle_request(
+        &self,
+        path: &str,
+        query: &str,
+        range: ByteRange,
+    ) -> Result<HttpResponse, HttpResponse> {
         tracing::debug!("path: {}", path);
         tracing::debug!("query: {}", query);
 
@@ -566,7 +571,57 @@ where
             case!("setRating") => case!(self, query, set_rating),
             case!("star") => case!(self, query, star),
             case!("startScan") => case!(self, query, start_scan, ScanStatus),
-            case!("stream") => case!(self, query, stream ->),
+            case!("stream") => {
+                let format = crate::query::from_query::<Format>(query).unwrap_or(Format::Xml);
+                let request = self.parse_query(format, query)?;
+                let stream_chunk = self
+                    .server
+                    .stream(request, range)
+                    .await
+                    .map_err(|err| self.response_from_error(format, err))?;
+
+                let content_length = stream_chunk.data.len();
+                let range_offset = range.offset.unwrap_or(0);
+                let range_length = range.length.unwrap_or(stream_chunk.content_length);
+
+                let mut response = http::Response::new(http_body_util::StreamBody::new(
+                    OpenSubsonicBodyStream::Bytes(Some(stream_chunk.data)),
+                ));
+                *response.status_mut() = http::StatusCode::PARTIAL_CONTENT;
+
+                let headers = response.headers_mut();
+                headers.insert(
+                    http::header::ACCEPT_RANGES,
+                    http::header::HeaderValue::from_static("bytes"),
+                );
+                headers.insert(
+                    http::header::CONTENT_LENGTH,
+                    http::HeaderValue::from(content_length),
+                );
+                headers.insert(
+                    http::header::CONTENT_TYPE,
+                    stream_chunk.mime_type.parse().unwrap(),
+                );
+                headers.insert(
+                    http::header::CONTENT_RANGE,
+                    format!(
+                        "bytes {}-{}/{}",
+                        range_offset,
+                        range_offset + range_length - 1,
+                        stream_chunk.content_length
+                    )
+                    .parse()
+                    .unwrap(),
+                );
+                headers.insert(
+                    "X-Content-Duration",
+                    format!("{:.02}", stream_chunk.content_duration.as_secs_f32())
+                        .parse()
+                        .unwrap(),
+                );
+
+                Ok(response)
+            }
             case!("unstar") => case!(self, query, unstar),
             case!("updateInternetRadioStation") => {
                 case!(self, query, update_internet_radio_station)
@@ -635,6 +690,8 @@ where
             }
             None => http::HeaderValue::from_static("application/octet-stream"),
         };
+        let stream_length = stream.stream_length();
+        let content_duration = stream.content_duration();
         let mut response = http::Response::new(http_body_util::StreamBody::new(
             OpenSubsonicBodyStream::ByteStream(stream),
         ));
@@ -642,6 +699,19 @@ where
         response
             .headers_mut()
             .insert(http::header::CONTENT_TYPE, mime_type);
+        if let Some(stream_length) = stream_length {
+            response.headers_mut().insert(
+                http::header::CONTENT_LENGTH,
+                http::HeaderValue::from(stream_length),
+            );
+        }
+        if let Some(content_duration) = content_duration {
+            let duration = format!("{:.02}", content_duration.as_secs_f32());
+            response
+                .headers_mut()
+                .insert("X-Content-Duration", duration.parse().unwrap());
+        }
+
         response
     }
 
@@ -708,9 +778,13 @@ where
         let svc = self.clone();
         let path = req.uri().path().to_string();
         let query = req.uri().query().unwrap_or_default().to_string();
-
+        let range = req
+            .headers()
+            .get(http::header::RANGE)
+            .and_then(get_range_from_header_value)
+            .unwrap_or_default();
         Box::pin(async move {
-            Ok(match svc.handle_request(&path, &query).await {
+            Ok(match svc.handle_request(&path, &query, range).await {
                 Ok(response) => response,
                 Err(response) => response,
             })
@@ -723,4 +797,32 @@ fn unsupported<T>() -> Result<T> {
         ErrorCode::Generic,
         "unsupported method",
     ))
+}
+
+fn get_range_from_header_value(value: &http::HeaderValue) -> Option<ByteRange> {
+    let value = std::str::from_utf8(value.as_bytes()).ok()?;
+    let value = value.trim().strip_prefix("bytes=")?;
+    let (from, to) = value.split_once("-")?;
+    let from = match from.parse::<u64>().ok() {
+        Some(from) => from,
+        None => return Some(Default::default()),
+    };
+    match to.parse::<u64>().ok() {
+        Some(to) => Some(ByteRange::new(from, to - from + 1)),
+        None => Some(ByteRange {
+            offset: Some(from),
+            length: None,
+        }),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_get_range_from_header_value() {
+        let range = get_range_from_header_value(&(" bytes=0-1023".parse().unwrap())).unwrap();
+        assert_eq!(range, ByteRange::new(0, 1024));
+    }
 }

@@ -38,6 +38,9 @@
 //! # }
 //! ```
 
+use std::time::Duration;
+
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -192,6 +195,17 @@ pub enum ResponseBody {
     TopSongs(TopSongs),
     ScanStatus(ScanStatus),
     Error(Error),
+}
+
+#[derive(Debug, Clone)]
+pub struct StreamChunk {
+    /// total duration of the song
+    pub content_duration: Duration,
+    /// total length of the song
+    pub content_length: u64,
+    /// audio mime type
+    pub mime_type: String,
+    pub data: Bytes,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]

@@ -11,9 +11,27 @@ use crate::{
     query::{FromQuery, QueryAccumulator},
 };
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ByteRange {
+    pub offset: Option<u64>,
+    pub length: Option<u64>,
+}
+
+impl ByteRange {
+    pub fn new(start: u64, length: u64) -> Self {
+        Self {
+            offset: Some(start),
+            length: Some(length),
+        }
+    }
+}
+
 pub struct ByteStream {
     mime_type: Option<String>,
     stream: Box<dyn Stream<Item = std::io::Result<bytes::Bytes>> + Unpin + Send + 'static>,
+    content_length: Option<u64>,
+    content_duration: Option<Duration>,
+    stream_length: Option<u64>,
 }
 
 impl std::fmt::Debug for ByteStream {
@@ -32,6 +50,9 @@ impl ByteStream {
         Self {
             mime_type: Some(mime_type.into()),
             stream: Box::new(stream),
+            content_length: None,
+            content_duration: None,
+            stream_length: None,
         }
     }
 
@@ -39,6 +60,9 @@ impl ByteStream {
         Self {
             mime_type: None,
             stream: Box::new(tokio_stream::empty()),
+            content_length: Some(0),
+            content_duration: None,
+            stream_length: None,
         }
     }
 
@@ -48,11 +72,40 @@ impl ByteStream {
         Self {
             mime_type: None,
             stream: Box::new(stream),
+            content_length: None,
+            content_duration: None,
+            stream_length: None,
         }
     }
 
     pub fn mime_type(&self) -> Option<&str> {
         self.mime_type.as_deref()
+    }
+
+    // total content lenght
+    pub fn content_length(&self) -> Option<u64> {
+        self.content_length
+    }
+
+    pub fn set_content_length(&mut self, length: u64) {
+        self.content_length = Some(length);
+    }
+
+    pub fn content_duration(&self) -> Option<Duration> {
+        self.content_duration
+    }
+
+    pub fn set_content_duration(&mut self, duration: Duration) {
+        self.content_duration = Some(duration);
+    }
+
+    // length of this stream that could just contain part of the total content
+    pub fn stream_length(&self) -> Option<u64> {
+        self.stream_length
+    }
+
+    pub fn set_stream_length(&mut self, length: u64) {
+        self.stream_length = Some(length);
     }
 }
 
@@ -125,11 +178,10 @@ const _: () = {
                 if let Some(ref value) = pair.value {
                     if value == "json" {
                         self.format = Some(Format::Json);
-                        return Ok(crate::query::ConsumeStatus::Consumed);
                     }
                 }
             }
-            Ok(crate::query::ConsumeStatus::Ignored(pair))
+            Ok(crate::query::ConsumeStatus::Consumed)
         }
 
         fn finish(self) -> crate::query::Result<Self::Output> {
@@ -951,6 +1003,21 @@ impl<'de> serde::Deserialize<'de> for Version {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_format_from_query() {
+        let query = "u=admin&s=&t=&p=admin&v=1.15.0&c=app&f=json";
+        let format = crate::query::from_query::<Format>(query).unwrap();
+        assert_eq!(format, Format::Json);
+
+        let query = "u=admin&s=&t=&p=admin&v=1.15.0&c=app&f=xml";
+        let format = crate::query::from_query::<Format>(query).unwrap();
+        assert_eq!(format, Format::Xml);
+
+        let query = "u=admin&s=&t=&p=admin&v=1.15.0&c=app";
+        let format = crate::query::from_query::<Format>(query).unwrap();
+        assert_eq!(format, Format::Xml);
+    }
 
     #[test]
     fn test_milliseconds() {

@@ -200,18 +200,25 @@ impl OpenSubsonicServer for FilesystemServer {
                 .collect(),
         })
     }
-    async fn stream(&self, request: Request<Stream>) -> Result<ByteStream> {
-        let track_id = &request.body.id;
-        let track = self
-            .tracks
-            .get(track_id)
-            .expect(&format!("track '{}' not found", track_id));
-        let content = std::fs::read(track.path.as_ref().unwrap()).expect("failed to read file");
-        Ok(ByteStream::new(
-            "audio/mpeg",
-            tokio_stream::once(Ok(From::from(content))),
-        ))
-    }
+
+    // TODO: re-add this method
+    // async fn stream(
+    //     &self,
+    //     request: Request<Stream>,
+    //     // TODO: use range
+    //     _range: Option<ByteRange>,
+    // ) -> Result<ByteStream> {
+    //     let track_id = &request.body.id;
+    //     let track = self
+    //         .tracks
+    //         .get(track_id)
+    //         .expect(&format!("track '{}' not found", track_id));
+    //     let content = std::fs::read(track.path.as_ref().unwrap()).expect("failed to read file");
+    //     Ok(ByteStream::new(
+    //         "audio/mpeg",
+    //         tokio_stream::once(Ok(From::from(content))),
+    //     ))
+    // }
 }
 
 struct Picture {
