@@ -68,12 +68,12 @@ use crate::{
     },
     response::{
         AlbumInfo, AlbumList, AlbumList2, AlbumWithSongsID3, ArtistInfo, ArtistInfo2,
-        ArtistWithAlbumsID3, ArtistsID3, Bookmarks, ChatMessages, Directory, Error, ErrorCode,
-        Genres, InternetRadioStations, JukeboxControlResponse, License, Lyrics, MusicFolders,
-        NewestPodcasts, NowPlaying, PlayQueue, PlaylistWithSongs, Playlists, Podcasts, Response,
-        ResponseBody, ResponseObject, ScanStatus, SearchResult, SearchResult2, SearchResult3,
-        Shares, SimilarSongs, SimilarSongs2, Songs, Starred, Starred2, TopSongs, User, Users,
-        VideoInfo, Videos,
+        ArtistWithAlbumsID3, ArtistsID3, Bookmarks, ChatMessages, Child, Directory, Error,
+        ErrorCode, Genres, InternetRadioStations, JukeboxControlResponse, License, Lyrics,
+        MusicFolders, NewestPodcasts, NowPlaying, PlayQueue, PlaylistWithSongs, Playlists,
+        Podcasts, Response, ResponseBody, ResponseObject, ScanStatus, SearchResult, SearchResult2,
+        SearchResult3, Shares, SimilarSongs, SimilarSongs2, Songs, Starred, Starred2, TopSongs,
+        User, Users, VideoInfo, Videos,
     },
     xml,
 };
@@ -272,7 +272,7 @@ pub trait OpenSubsonicServer: Send + Sync + 'static {
     ) -> Result<SimilarSongs2> {
         unsupported()
     }
-    async fn get_song(&self, request: Request<GetSong>) -> Result<Songs> {
+    async fn get_song(&self, request: Request<GetSong>) -> Result<Child> {
         unsupported()
     }
     async fn get_songs_by_genre(&self, request: Request<GetSongsByGenre>) -> Result<Songs> {
@@ -546,6 +546,7 @@ where
             case!("getShares") => case!(self, query, get_shares, Shares),
             case!("getSimilarSongs") => case!(self, query, get_similar_songs, SimilarSongs),
             case!("getSimilarSongs2") => case!(self, query, get_similar_songs2, SimilarSongs2),
+            case!("getSong") => case!(self, query, get_song, Song),
             case!("getStarred") => case!(self, query, get_starred, Starred),
             case!("getStarred2") => case!(self, query, get_starred2, Starred2),
             case!("getTopSongs") => case!(self, query, get_top_songs, TopSongs),

@@ -997,7 +997,7 @@ impl XmlSerialize for ResponseBody {
             ResponseBody::Artists(v) => XmlSerialize::serialize(v, xml),
             ResponseBody::Artist(v) => XmlSerialize::serialize(v, xml),
             ResponseBody::Album(v) => XmlSerialize::serialize(v, xml),
-            ResponseBody::Song(v) => XmlSerialize::serialize(v, xml),
+            ResponseBody::Song(v) => v.serialize_as(xml, "song"),
             ResponseBody::Videos(_) => todo!(),
             ResponseBody::VideoInfo(_) => todo!(),
             ResponseBody::NowPlaying(_) => todo!(),
