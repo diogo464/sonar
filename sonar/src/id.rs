@@ -209,6 +209,12 @@ impl std::fmt::Display for SonarId {
     }
 }
 
+impl From<&SonarId> for SonarId {
+    fn from(value: &SonarId) -> Self {
+        *value
+    }
+}
+
 impl TryFrom<u32> for SonarId {
     type Error = InvalidIdError;
 

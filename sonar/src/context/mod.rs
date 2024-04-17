@@ -812,7 +812,17 @@ pub async fn playlist_remove_tracks(
 #[tracing::instrument(skip(context))]
 pub async fn favorite_list(context: &Context, user_id: UserId) -> Result<Vec<Favorite>> {
     let mut conn = context.db.acquire().await?;
-    favorite::user_get(&mut conn, user_id).await
+    favorite::user_list(&mut conn, user_id).await
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn favorite_get_bulk(
+    context: &Context,
+    user_id: UserId,
+    ids: &[SonarId],
+) -> Result<Vec<Favorite>> {
+    let mut conn = context.db.acquire().await?;
+    favorite::user_get_bulk(&mut conn, user_id, ids).await
 }
 
 #[tracing::instrument(skip(context))]

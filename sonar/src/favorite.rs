@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::{db::DbC, Error, Result, SonarId, SonarIdentifier, Timestamp, UserId};
 
 use sqlx::Row;
@@ -8,7 +10,15 @@ pub struct Favorite {
     pub favorite_at: Timestamp,
 }
 
-pub(crate) async fn user_get(db: &mut DbC, user_id: UserId) -> Result<Vec<Favorite>> {
+#[derive(Debug)]
+struct FavoriteView {
+    user: u32,
+    namespace: u32,
+    identifier: u32,
+    created_at: u32,
+}
+
+pub(crate) async fn user_list(db: &mut DbC, user_id: UserId) -> Result<Vec<Favorite>> {
     let rows = sqlx::query("SELECT * FROM favorite WHERE user = ?")
         .bind(user_id)
         .fetch_all(db)
@@ -28,6 +38,20 @@ pub(crate) async fn user_get(db: &mut DbC, user_id: UserId) -> Result<Vec<Favori
         });
     }
     Ok(favorites)
+}
+
+pub(crate) async fn user_get_bulk(
+    db: &mut DbC,
+    user_id: UserId,
+    ids: &[SonarId],
+) -> Result<Vec<Favorite>> {
+    // TODO: improve this
+    let favorites = user_list(db, user_id).await?;
+    let id_set = ids.iter().collect::<HashSet<_>>();
+    Ok(favorites
+        .into_iter()
+        .filter(|f| id_set.contains(&f.id))
+        .collect())
 }
 
 pub(crate) async fn user_put(db: &mut DbC, user_id: UserId, id: SonarId) -> Result<()> {

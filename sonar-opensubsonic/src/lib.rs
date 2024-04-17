@@ -10,6 +10,37 @@ const PROPERTY_USER_STARRED: PropertyKey =
 const DEFAULT_MUSIC_FOLDER_ID: u32 = 1;
 const DEFAULT_MUSIC_FOLDER_NAME: &str = "sonar";
 
+#[derive(Debug, Default)]
+struct FavoritesSet {
+    favorites: HashMap<sonar::SonarId, sonar::Favorite>,
+}
+
+impl FavoritesSet {
+    async fn populate_with<I, ID>(
+        &mut self,
+        context: &sonar::Context,
+        user_id: sonar::UserId,
+        ids: I,
+    ) -> Result<()>
+    where
+        I: IntoIterator<Item = ID>,
+        ID: Into<sonar::SonarId>,
+    {
+        let ids = ids.into_iter().map(|id| id.into()).collect::<Vec<_>>();
+        let favorites = sonar::favorite_get_bulk(context, user_id, &ids).await.m()?;
+        for favorite in favorites {
+            self.favorites.insert(favorite.id, favorite);
+        }
+        Ok(())
+    }
+
+    fn starred(&self, id: impl Into<sonar::SonarId>) -> Option<DateTime> {
+        let id = id.into();
+        let favorite = self.favorites.get(&id)?;
+        Some(DateTime::from_unix_seconds(favorite.favorite_at.seconds()))
+    }
+}
+
 #[derive(Debug)]
 struct Server {
     image_url_prefix: String,
@@ -53,6 +84,40 @@ impl Server {
             .m()?;
         self.set_token(username.as_str(), token);
         Ok(user_id)
+    }
+
+    async fn get_artists_id3(&self, user_id: sonar::UserId) -> Result<ArtistsID3> {
+        let artists = sonar::artist_list(&self.context, Default::default())
+            .await
+            .m()?;
+
+        let mut favorites = FavoritesSet::default();
+        favorites
+            .populate_with(
+                &self.context,
+                user_id,
+                artists.iter().map(|artist| artist.id),
+            )
+            .await?;
+
+        let mut index: HashMap<char, Vec<ArtistID3>> = HashMap::new();
+        for artist in artists {
+            index
+                .entry(artist.name.chars().next().unwrap_or('#'))
+                .or_default()
+                .push(artistid3_from_artist(&favorites, artist));
+        }
+
+        Ok(ArtistsID3 {
+            index: index
+                .into_iter()
+                .map(|(key, value)| IndexID3 {
+                    name: key.to_string(),
+                    artist: value,
+                })
+                .collect(),
+            ignored_articles: Default::default(),
+        })
     }
 
     fn get_token(&self, username: &str) -> Option<sonar::UserToken> {
@@ -106,32 +171,41 @@ impl OpenSubsonicServer for Server {
             let songs = sonar::track_list(&self.context, song_params);
             let (artists, albums, songs) = tokio::try_join!(artists, albums, songs).m()?;
 
+            let mut favorites = FavoritesSet::default();
+            favorites
+                .populate_with(&self.context, user_id, artists.iter().map(|v| v.id))
+                .await?;
+            favorites
+                .populate_with(&self.context, user_id, albums.iter().map(|v| v.id))
+                .await?;
+            favorites
+                .populate_with(&self.context, user_id, songs.iter().map(|v| v.id))
+                .await?;
+
             let album_artists = sonar::ext::get_albums_artists_map(&self.context, &albums);
-            let album_user_props = sonar::ext::user_property_bulk_map(
-                &self.context,
-                user_id,
-                albums.iter().map(|album| sonar::SonarId::from(album.id)),
-            );
             let track_albums = sonar::ext::get_tracks_albums_map(&self.context, &songs);
             let track_artists = sonar::ext::get_tracks_artists_map(&self.context, &songs);
-            let (album_artists, album_user_props, track_albums, track_artists) =
-                tokio::try_join!(album_artists, album_user_props, track_albums, track_artists)
-                    .m()?;
+            let (album_artists, track_albums, track_artists) =
+                tokio::try_join!(album_artists, track_albums, track_artists).m()?;
             let audios = sonar::ext::get_tracks_audios_map(&self.context, &songs)
                 .await
                 .m()?;
             let albums = sonar::ext::albums_map(albums);
 
-            artist = artists.into_iter().map(artistid3_from_artist).collect();
-            album =
-                multi_albumid3_from_album_and_artist(&album_artists, &albums, &album_user_props);
+            artist = artists
+                .into_iter()
+                .map(|a| artistid3_from_artist(&favorites, a))
+                .collect();
+            album = multi_albumid3_from_album_and_artist(&favorites, &album_artists, &albums);
             song = songs
                 .into_iter()
                 .map(|track| {
                     let album = &track_albums[&track.album];
                     let artist = &track_artists[&track.artist];
                     let audio = track.audio.and_then(|id| audios.get(&id)).cloned();
-                    child_from_audio_track_and_album_and_artist(artist, album, track, audio)
+                    child_from_audio_track_and_album_and_artist(
+                        &favorites, artist, album, track, audio,
+                    )
                 })
                 .collect();
         } else {
@@ -158,17 +232,22 @@ impl OpenSubsonicServer for Server {
             .await
             .m()?;
 
+            let mut favorites = FavoritesSet::default();
+            favorites
+                .populate_with(&self.context, user_id, result.artists().map(|v| v.id))
+                .await?;
+            favorites
+                .populate_with(&self.context, user_id, result.albums().map(|v| v.id))
+                .await?;
+            favorites
+                .populate_with(&self.context, user_id, result.tracks().map(|v| v.id))
+                .await?;
+
             let album_artists = sonar::ext::get_albums_artists_map(&self.context, result.albums());
-            let album_user_props = sonar::ext::user_property_bulk_map(
-                &self.context,
-                user_id,
-                result.albums().map(|album| sonar::SonarId::from(album.id)),
-            );
             let track_albums = sonar::ext::get_tracks_albums_map(&self.context, result.tracks());
             let track_artists = sonar::ext::get_tracks_artists_map(&self.context, result.tracks());
-            let (album_artists, album_user_props, track_albums, track_artists) =
-                tokio::try_join!(album_artists, album_user_props, track_albums, track_artists)
-                    .m()?;
+            let (album_artists, track_albums, track_artists) =
+                tokio::try_join!(album_artists, track_albums, track_artists).m()?;
             let audios = sonar::ext::get_tracks_audios_map(&self.context, result.tracks())
                 .await
                 .m()?;
@@ -177,10 +256,9 @@ impl OpenSubsonicServer for Server {
             artist = result
                 .artists()
                 .cloned()
-                .map(artistid3_from_artist)
+                .map(|a| artistid3_from_artist(&favorites, a))
                 .collect::<Vec<_>>();
-            album =
-                multi_albumid3_from_album_and_artist(&album_artists, &albums, &album_user_props);
+            album = multi_albumid3_from_album_and_artist(&favorites, &album_artists, &albums);
             song = result
                 .tracks()
                 .cloned()
@@ -188,7 +266,9 @@ impl OpenSubsonicServer for Server {
                     let album = &track_albums[&track.album];
                     let artist = &track_artists[&track.artist];
                     let audio = track.audio.and_then(|id| audios.get(&id)).cloned();
-                    child_from_audio_track_and_album_and_artist(artist, album, track, audio)
+                    child_from_audio_track_and_album_and_artist(
+                        &favorites, artist, album, track, audio,
+                    )
                 })
                 .collect();
         }
@@ -199,55 +279,15 @@ impl OpenSubsonicServer for Server {
             song,
         })
     }
-    async fn get_indexes(&self, _request: Request<GetIndexes>) -> Result<ArtistsID3> {
-        // TODO: refactor with get_artists
-        let artists = sonar::artist_list(&self.context, Default::default())
-            .await
-            .m()?;
-
-        let mut index: HashMap<char, Vec<ArtistID3>> = HashMap::new();
-        for artist in artists {
-            index
-                .entry(artist.name.chars().next().unwrap_or('#'))
-                .or_default()
-                .push(artistid3_from_artist(artist));
-        }
-
-        Ok(ArtistsID3 {
-            index: index
-                .into_iter()
-                .map(|(key, value)| IndexID3 {
-                    name: key.to_string(),
-                    artist: value,
-                })
-                .collect(),
-            ignored_articles: Default::default(),
-        })
+    async fn get_indexes(&self, request: Request<GetIndexes>) -> Result<ArtistsID3> {
+        let user_id = self.authenticate(&request).await?;
+        self.get_artists_id3(user_id).await
     }
+
     #[tracing::instrument(skip(self))]
-    async fn get_artists(&self, _request: Request<GetArtists>) -> Result<ArtistsID3> {
-        let artists = sonar::artist_list(&self.context, Default::default())
-            .await
-            .m()?;
-
-        let mut index: HashMap<char, Vec<ArtistID3>> = HashMap::new();
-        for artist in artists {
-            index
-                .entry(artist.name.chars().next().unwrap_or('#'))
-                .or_default()
-                .push(artistid3_from_artist(artist));
-        }
-
-        Ok(ArtistsID3 {
-            index: index
-                .into_iter()
-                .map(|(key, value)| IndexID3 {
-                    name: key.to_string(),
-                    artist: value,
-                })
-                .collect(),
-            ignored_articles: Default::default(),
-        })
+    async fn get_artists(&self, request: Request<GetArtists>) -> Result<ArtistsID3> {
+        let user_id = self.authenticate(&request).await?;
+        self.get_artists_id3(user_id).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -273,16 +313,26 @@ impl OpenSubsonicServer for Server {
 
     #[tracing::instrument(skip(self))]
     async fn get_artist(&self, request: Request<GetArtist>) -> Result<ArtistWithAlbumsID3> {
+        let user_id = self.authenticate(&request).await?;
         let artist_id = request.body.id.parse::<sonar::ArtistId>().m()?;
         let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
         let albums = sonar::album_list_by_artist(&self.context, artist_id, Default::default())
             .await
             .m()?;
+
+        let mut favorites = FavoritesSet::default();
+        favorites
+            .populate_with(&self.context, user_id, std::iter::once(artist_id))
+            .await?;
+        favorites
+            .populate_with(&self.context, user_id, albums.iter().map(|v| v.id))
+            .await?;
+
         let album = albums
             .into_iter()
-            .map(|album| albumid3_from_album_and_artist(&artist, album))
+            .map(|album| albumid3_from_album_and_artist(&favorites, &artist, album))
             .collect();
-        let artist = artistid3_from_artist(artist);
+        let artist = artistid3_from_artist(&favorites, artist);
         Ok(ArtistWithAlbumsID3 { artist, album })
     }
 
@@ -293,12 +343,25 @@ impl OpenSubsonicServer for Server {
 
     #[tracing::instrument(skip(self))]
     async fn get_album(&self, request: Request<GetAlbum>) -> Result<AlbumWithSongsID3> {
+        let user_id = self.authenticate(&request).await?;
         let album_id = request.body.id.parse::<sonar::AlbumId>().m()?;
         let album = sonar::album_get(&self.context, album_id).await.m()?;
         let artist = sonar::artist_get(&self.context, album.artist).await.m()?;
         let tracks = sonar::track_list_by_album(&self.context, album_id, Default::default())
             .await
             .m()?;
+
+        let mut favorites = FavoritesSet::default();
+        favorites
+            .populate_with(&self.context, user_id, std::iter::once(album_id))
+            .await?;
+        favorites
+            .populate_with(&self.context, user_id, std::iter::once(artist.id))
+            .await?;
+        favorites
+            .populate_with(&self.context, user_id, tracks.iter().map(|v| v.id))
+            .await?;
+
         let audios = sonar::ext::get_tracks_audios_map(&self.context, &tracks)
             .await
             .m()?;
@@ -306,12 +369,14 @@ impl OpenSubsonicServer for Server {
             .into_iter()
             .map(|track| {
                 let audio = track.audio.and_then(|id| audios.get(&id)).cloned();
-                child_from_audio_track_and_album_and_artist(&artist, &album, track, audio)
+                child_from_audio_track_and_album_and_artist(
+                    &favorites, &artist, &album, track, audio,
+                )
             })
             .collect();
         song.sort_by_key(|child| child.track.unwrap_or_default());
         Ok(AlbumWithSongsID3 {
-            album: albumid3_from_album_and_artist(&artist, album),
+            album: albumid3_from_album_and_artist(&favorites, &artist, album),
             song,
         })
     }
@@ -327,19 +392,22 @@ impl OpenSubsonicServer for Server {
         let artists = sonar::ext::artist_bulk_map(&self.context, albums.values().map(|v| v.artist))
             .await
             .m()?;
-        let album_properties = sonar::ext::user_property_bulk_map(
-            &self.context,
-            user_id,
-            albums.keys().copied().map(sonar::SonarId::from),
-        )
-        .await
-        .m()?;
-        let album = multi_albumid3_from_album_and_artist(&artists, &albums, &album_properties);
+
+        let mut favorites = FavoritesSet::default();
+        favorites
+            .populate_with(&self.context, user_id, albums.values().map(|v| v.id))
+            .await?;
+        favorites
+            .populate_with(&self.context, user_id, artists.values().map(|v| v.id))
+            .await?;
+
+        let album = multi_albumid3_from_album_and_artist(&favorites, &artists, &albums);
         Ok(AlbumList2 { album })
     }
 
     #[tracing::instrument(skip(self))]
     async fn get_song(&self, request: Request<GetSong>) -> Result<Child> {
+        let user_id = self.authenticate(&request).await?;
         let track_id = request.body.id.parse::<sonar::TrackId>().m()?;
         let track = sonar::track_get(&self.context, track_id).await.m()?;
         let album = sonar::album_get(&self.context, track.album).await.m()?;
@@ -348,7 +416,22 @@ impl OpenSubsonicServer for Server {
             Some(audio_id) => Some(sonar::audio_get(&self.context, audio_id).await.m()?),
             None => None,
         };
-        let child = child_from_audio_track_and_album_and_artist(&artist, &album, track, audio);
+
+        let mut favorites = FavoritesSet::default();
+        favorites
+            .populate_with(
+                &self.context,
+                user_id,
+                &[
+                    sonar::SonarId::from(track.id),
+                    sonar::SonarId::from(album.id),
+                    sonar::SonarId::from(artist.id),
+                ],
+            )
+            .await?;
+
+        let child =
+            child_from_audio_track_and_album_and_artist(&favorites, &artist, &album, track, audio);
         Ok(child)
     }
 
@@ -391,6 +474,17 @@ impl OpenSubsonicServer for Server {
         let tracks = sonar::track_get_bulk(&self.context, &split.track_ids);
         let (artists, albums, tracks) = tokio::try_join!(artists, albums, tracks).m()?;
 
+        let mut favorites = FavoritesSet::default();
+        favorites
+            .populate_with(&self.context, user_id, artists.iter().map(|v| v.id))
+            .await?;
+        favorites
+            .populate_with(&self.context, user_id, albums.iter().map(|v| v.id))
+            .await?;
+        favorites
+            .populate_with(&self.context, user_id, tracks.iter().map(|v| v.id))
+            .await?;
+
         let audio_ids = tracks.iter().filter_map(|t| t.audio).collect::<Vec<_>>();
 
         let album_artists = sonar::ext::get_albums_artists_map(&self.context, &albums);
@@ -409,6 +503,7 @@ impl OpenSubsonicServer for Server {
             let artist = &track_artists[&track.artist];
             let audio = track.audio.and_then(|id| audios.get(&id));
             song.push(child_from_audio_track_and_album_and_artist(
+                &favorites,
                 artist,
                 album,
                 track,
@@ -418,7 +513,7 @@ impl OpenSubsonicServer for Server {
 
         for alb in albums {
             let artist = &album_artists[&alb.artist];
-            album.push(child_from_album_and_artist(&alb, &artist));
+            album.push(child_from_album_and_artist(&favorites, &alb, &artist));
         }
 
         for art in artists {
@@ -441,6 +536,12 @@ impl OpenSubsonicServer for Server {
             .into_iter()
             .map(|f| f.id)
             .collect::<Vec<_>>();
+
+        let mut favorites = FavoritesSet::default();
+        favorites
+            .populate_with(&self.context, user_id, &starred_ids)
+            .await?;
+
         let split = sonar::ext::split_sonar_ids(starred_ids);
 
         let artists = sonar::artist_get_bulk(&self.context, &split.artist_ids);
@@ -466,6 +567,7 @@ impl OpenSubsonicServer for Server {
             let artist = &track_artists[&track.artist];
             let audio = track.audio.and_then(|id| audios.get(&id));
             song.push(child_from_audio_track_and_album_and_artist(
+                &favorites,
                 artist,
                 album,
                 track,
@@ -475,11 +577,11 @@ impl OpenSubsonicServer for Server {
 
         for alb in albums {
             let artist = &album_artists[&alb.artist];
-            album.push(albumid3_from_album_and_artist(artist, alb));
+            album.push(albumid3_from_album_and_artist(&favorites, artist, alb));
         }
 
         for art in artists {
-            artist.push(artistid3_from_artist(art));
+            artist.push(artistid3_from_artist(&favorites, art));
         }
 
         Ok(Starred2 {
@@ -696,18 +798,22 @@ fn artist_from_artist(artist: sonar::Artist) -> Artist {
     }
 }
 
-fn artistid3_from_artist(artist: sonar::Artist) -> ArtistID3 {
+fn artistid3_from_artist(favorites: &FavoritesSet, artist: sonar::Artist) -> ArtistID3 {
     ArtistID3 {
         id: artist.id.to_string(),
         name: artist.name,
         cover_art: artist.cover_art.map(|id| id.to_string()),
         artist_image_url: None,
         album_count: artist.album_count,
-        starred: None,
+        starred: favorites.starred(artist.id),
     }
 }
 
-fn albumid3_from_album_and_artist(artist: &sonar::Artist, album: sonar::Album) -> AlbumID3 {
+fn albumid3_from_album_and_artist(
+    favorites: &FavoritesSet,
+    artist: &sonar::Artist,
+    album: sonar::Album,
+) -> AlbumID3 {
     AlbumID3 {
         id: album.id.to_string(),
         name: album.name,
@@ -718,7 +824,7 @@ fn albumid3_from_album_and_artist(artist: &sonar::Artist, album: sonar::Album) -
         duration: Default::default(),
         play_count: Some(album.listen_count as u64),
         created: Default::default(),
-        starred: None,
+        starred: favorites.starred(album.id),
         year: None,
         genre: None,
         user_rating: None,
@@ -727,25 +833,24 @@ fn albumid3_from_album_and_artist(artist: &sonar::Artist, album: sonar::Album) -
 }
 
 fn multi_albumid3_from_album_and_artist(
+    favorites: &FavoritesSet,
     artists: &HashMap<sonar::ArtistId, sonar::Artist>,
     albums: &HashMap<sonar::AlbumId, sonar::Album>,
-    albums_user_properties: &HashMap<sonar::SonarId, sonar::Properties>,
 ) -> Vec<AlbumID3> {
     let mut albumid3s = Vec::with_capacity(albums.len());
     for album in albums.values() {
         let artist = &artists[&album.artist];
-        let properties = &albums_user_properties[&sonar::SonarId::from(album.id)];
-        let mut album = albumid3_from_album_and_artist(artist, album.clone());
-        if let Some(value) = properties.get(PROPERTY_USER_STARRED) {
-            let starred = value.as_str().parse::<sonar::DateTime>().unwrap();
-            album.starred = Some(starred.to_rfc3339().parse().unwrap());
-        }
+        let album = albumid3_from_album_and_artist(favorites, artist, album.clone());
         albumid3s.push(album);
     }
     albumid3s
 }
 
-fn child_from_album_and_artist(album: &sonar::Album, artist: &sonar::Artist) -> Child {
+fn child_from_album_and_artist(
+    favorites: &FavoritesSet,
+    album: &sonar::Album,
+    artist: &sonar::Artist,
+) -> Child {
     Child {
         id: album.id.to_string(),
         parent: Some(album.artist.to_string()),
@@ -756,11 +861,13 @@ fn child_from_album_and_artist(album: &sonar::Album, artist: &sonar::Artist) -> 
         duration: Some(Seconds::from(album.duration)),
         album_id: Some(album.id.to_string()),
         artist_id: Some(artist.id.to_string()),
+        starred: favorites.starred(album.id),
         ..Default::default()
     }
 }
 
 fn child_from_audio_track_and_album_and_artist(
+    favorites: &FavoritesSet,
     artist: &sonar::Artist,
     album: &sonar::Album,
     track: sonar::Track,
@@ -782,19 +889,14 @@ fn child_from_audio_track_and_album_and_artist(
         duration: Some(From::from(track.duration)),
         play_count: Some(track.listen_count as u64),
         disc_number: track.properties.get_parsed(sonar::prop::DISC_NUMBER),
-        starred: None,
+        starred: favorites.starred(track.id),
         album_id: Some(album.id.to_string()),
         artist_id: Some(artist.id.to_string()),
         media_type: Some(MediaType::Music),
         is_video: Some(false),
-        // test
-        //content_type: Some("audio/mpeg".to_string()),
-        //bit_rate: Some(200),
-        //suffix: Some("mp3".to_string()),
-        size: audio.map(|a| u64::from(a.size)),
-        //path: Some(track.id.to_string()),
-        //created: Some("2021-12-17T06:31:23.538924948Z".parse().unwrap()),
-        //year: Some(2013),
+        content_type: audio.as_ref().map(|a| a.mime_type.clone()),
+        bit_rate: audio.as_ref().map(|a| a.bitrate),
+        size: audio.as_ref().map(|a| u64::from(a.size)),
         ..Default::default()
     }
 }
@@ -815,6 +917,7 @@ fn playlist_from_playlist(playlist: sonar::Playlist) -> Playlist {
     }
 }
 
+// TODO: refactor with above method
 fn child_from_playlist_tracks(
     playlist_tracks: &[sonar::PlaylistTrack],
     tracks: &[sonar::Track],
