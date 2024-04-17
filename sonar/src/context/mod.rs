@@ -630,6 +630,18 @@ pub async fn track_get_lyrics(context: &Context, track_id: TrackId) -> Result<Ly
 }
 
 #[tracing::instrument(skip(context))]
+pub async fn audio_get(context: &Context, audio_id: AudioId) -> Result<Audio> {
+    let mut conn = context.db.acquire().await?;
+    audio::get(&mut conn, audio_id).await
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn audio_get_bulk(context: &Context, audio_ids: &[AudioId]) -> Result<Vec<Audio>> {
+    let mut conn = context.db.acquire().await?;
+    audio::get_bulk(&mut conn, audio_ids).await
+}
+
+#[tracing::instrument(skip(context))]
 pub async fn audio_list_by_track(context: &Context, track_id: TrackId) -> Result<Vec<Audio>> {
     let mut conn = context.db.acquire().await?;
     audio::list_by_track(&mut conn, track_id).await

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    Album, AlbumId, Artist, ArtistId, Context, PlaylistId, Properties, Result, SonarId, Track,
-    TrackId, UserId,
+    Album, AlbumId, Artist, ArtistId, Audio, AudioId, Context, PlaylistId, Properties, Result,
+    SonarId, Track, TrackId, UserId,
 };
 
 #[derive(Debug, Clone)]
@@ -26,6 +26,10 @@ pub fn albums_map(albums: impl IntoIterator<Item = Album>) -> HashMap<AlbumId, A
 
 pub fn tracks_map(tracks: impl IntoIterator<Item = Track>) -> HashMap<TrackId, Track> {
     tracks.into_iter().map(|track| (track.id, track)).collect()
+}
+
+pub fn audios_map(audios: impl IntoIterator<Item = Audio>) -> HashMap<AudioId, Audio> {
+    audios.into_iter().map(|audio| (audio.id, audio)).collect()
 }
 
 pub async fn artist_bulk(
@@ -79,6 +83,23 @@ pub async fn track_bulk_map(
     Ok(tracks_map(tracks))
 }
 
+pub async fn audio_bulk(
+    context: &Context,
+    audio_ids: impl IntoIterator<Item = AudioId>,
+) -> Result<Vec<Audio>> {
+    let audio_ids = audio_ids.into_iter().collect::<Vec<_>>();
+    let audios = crate::audio_get_bulk(context, &audio_ids).await?;
+    Ok(audios)
+}
+
+pub async fn audio_bulk_map(
+    context: &Context,
+    audio_ids: impl IntoIterator<Item = AudioId>,
+) -> Result<HashMap<AudioId, Audio>> {
+    let audios = audio_bulk(context, audio_ids).await?;
+    Ok(audios_map(audios))
+}
+
 pub async fn user_property_bulk_map(
     context: &Context,
     user_id: UserId,
@@ -123,6 +144,18 @@ pub async fn get_tracks_albums_map(
     }
     let albums = album_bulk(context, album_ids).await?;
     Ok(albums_map(albums))
+}
+
+pub async fn get_tracks_audios_map(
+    context: &Context,
+    tracks: impl IntoIterator<Item = &Track>,
+) -> Result<HashMap<AudioId, Audio>> {
+    let audio_ids = tracks
+        .into_iter()
+        .filter_map(|t| t.audio)
+        .collect::<Vec<_>>();
+    let audios = audio_bulk(context, audio_ids).await?;
+    Ok(audios_map(audios))
 }
 
 pub fn split_sonar_ids(ids: impl IntoIterator<Item = SonarId>) -> SplitIds {

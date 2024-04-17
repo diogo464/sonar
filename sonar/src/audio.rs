@@ -41,6 +41,7 @@ pub struct AudioStat {
 pub struct AudioDownload {
     pub mime_type: String,
     pub stream: ByteStream,
+    pub audio: Audio,
 }
 
 impl std::fmt::Debug for AudioDownload {
@@ -163,6 +164,11 @@ pub async fn get(db: &mut DbC, audio_id: AudioId) -> Result<Audio> {
     Ok(Audio::from(view))
 }
 
+pub async fn get_bulk(db: &mut DbC, audio_ids: &[AudioId]) -> Result<Vec<Audio>> {
+    let views = db::list_bulk::<AudioView, _>(db, "sqlx_audio", audio_ids).await?;
+    Ok(views.into_iter().map(Audio::from).collect())
+}
+
 pub async fn delete(db: &mut DbC, audio_id: AudioId) -> Result<()> {
     sqlx::query("DELETE FROM audio WHERE id = ?")
         .bind(audio_id)
@@ -177,6 +183,7 @@ pub async fn download(
     audio_id: AudioId,
     range: ByteRange,
 ) -> Result<AudioDownload> {
+    let audio = get(&mut *db, audio_id).await?;
     let row = sqlx::query("SELECT mime_type, blob_key FROM sqlx_audio WHERE id = ?")
         .bind(audio_id)
         .fetch_one(&mut *db)
@@ -186,6 +193,7 @@ pub async fn download(
     Ok(AudioDownload {
         mime_type: row.get(0),
         stream,
+        audio,
     })
 }
 

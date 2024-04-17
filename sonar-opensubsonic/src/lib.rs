@@ -68,7 +68,7 @@ impl Server {
 
 #[opensubsonic::async_trait]
 impl OpenSubsonicServer for Server {
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn ping(&self, request: Request<Ping>) -> Result<()> {
         let _user_id = self.authenticate(&request).await?;
         Ok(())
@@ -117,7 +117,9 @@ impl OpenSubsonicServer for Server {
             let (album_artists, album_user_props, track_albums, track_artists) =
                 tokio::try_join!(album_artists, album_user_props, track_albums, track_artists)
                     .m()?;
-
+            let audios = sonar::ext::get_tracks_audios_map(&self.context, &songs)
+                .await
+                .m()?;
             let albums = sonar::ext::albums_map(albums);
 
             artist = artists.into_iter().map(artistid3_from_artist).collect();
@@ -128,7 +130,8 @@ impl OpenSubsonicServer for Server {
                 .map(|track| {
                     let album = &track_albums[&track.album];
                     let artist = &track_artists[&track.artist];
-                    child_from_track_and_album_and_artist(artist, album, track)
+                    let audio = track.audio.and_then(|id| audios.get(&id)).cloned();
+                    child_from_audio_track_and_album_and_artist(artist, album, track, audio)
                 })
                 .collect();
         } else {
@@ -166,6 +169,9 @@ impl OpenSubsonicServer for Server {
             let (album_artists, album_user_props, track_albums, track_artists) =
                 tokio::try_join!(album_artists, album_user_props, track_albums, track_artists)
                     .m()?;
+            let audios = sonar::ext::get_tracks_audios_map(&self.context, result.tracks())
+                .await
+                .m()?;
             let albums = sonar::ext::albums_map(result.albums().cloned());
 
             artist = result
@@ -181,7 +187,8 @@ impl OpenSubsonicServer for Server {
                 .map(|track| {
                     let album = &track_albums[&track.album];
                     let artist = &track_artists[&track.artist];
-                    child_from_track_and_album_and_artist(artist, album, track)
+                    let audio = track.audio.and_then(|id| audios.get(&id)).cloned();
+                    child_from_audio_track_and_album_and_artist(artist, album, track, audio)
                 })
                 .collect();
         }
@@ -217,7 +224,7 @@ impl OpenSubsonicServer for Server {
             ignored_articles: Default::default(),
         })
     }
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_artists(&self, _request: Request<GetArtists>) -> Result<ArtistsID3> {
         let artists = sonar::artist_list(&self.context, Default::default())
             .await
@@ -243,7 +250,7 @@ impl OpenSubsonicServer for Server {
         })
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_artist_info2(&self, request: Request<GetArtistInfo2>) -> Result<ArtistInfo2> {
         let artist_id = request.body.id.parse::<sonar::ArtistId>().m()?;
         let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
@@ -264,7 +271,7 @@ impl OpenSubsonicServer for Server {
         })
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_artist(&self, request: Request<GetArtist>) -> Result<ArtistWithAlbumsID3> {
         let artist_id = request.body.id.parse::<sonar::ArtistId>().m()?;
         let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
@@ -279,12 +286,12 @@ impl OpenSubsonicServer for Server {
         Ok(ArtistWithAlbumsID3 { artist, album })
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_top_songs(&self, _request: Request<GetTopSongs>) -> Result<TopSongs> {
         Ok(Default::default())
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_album(&self, request: Request<GetAlbum>) -> Result<AlbumWithSongsID3> {
         let album_id = request.body.id.parse::<sonar::AlbumId>().m()?;
         let album = sonar::album_get(&self.context, album_id).await.m()?;
@@ -292,9 +299,15 @@ impl OpenSubsonicServer for Server {
         let tracks = sonar::track_list_by_album(&self.context, album_id, Default::default())
             .await
             .m()?;
+        let audios = sonar::ext::get_tracks_audios_map(&self.context, &tracks)
+            .await
+            .m()?;
         let mut song: Vec<Child> = tracks
             .into_iter()
-            .map(|track| child_from_track_and_album_and_artist(&artist, &album, track))
+            .map(|track| {
+                let audio = track.audio.and_then(|id| audios.get(&id)).cloned();
+                child_from_audio_track_and_album_and_artist(&artist, &album, track, audio)
+            })
             .collect();
         song.sort_by_key(|child| child.track.unwrap_or_default());
         Ok(AlbumWithSongsID3 {
@@ -305,7 +318,7 @@ impl OpenSubsonicServer for Server {
     async fn get_album_info2(&self, _request: Request<GetAlbumInfo2>) -> Result<AlbumInfo> {
         Ok(AlbumInfo::default())
     }
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_album_list2(&self, request: Request<GetAlbumList2>) -> Result<AlbumList2> {
         let user_id = self.authenticate(&request).await?;
         let params = sonar::ListParams::from((request.body.offset, request.body.size));
@@ -325,7 +338,21 @@ impl OpenSubsonicServer for Server {
         Ok(AlbumList2 { album })
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
+    async fn get_song(&self, request: Request<GetSong>) -> Result<Child> {
+        let track_id = request.body.id.parse::<sonar::TrackId>().m()?;
+        let track = sonar::track_get(&self.context, track_id).await.m()?;
+        let album = sonar::album_get(&self.context, track.album).await.m()?;
+        let artist = sonar::artist_get(&self.context, track.artist).await.m()?;
+        let audio = match track.audio {
+            Some(audio_id) => Some(sonar::audio_get(&self.context, audio_id).await.m()?),
+            None => None,
+        };
+        let child = child_from_audio_track_and_album_and_artist(&artist, &album, track, audio);
+        Ok(child)
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn star(&self, request: Request<Star>) -> Result<()> {
         let user_id = self.authenticate(&request).await?;
         let star_ids = request
@@ -348,7 +375,64 @@ impl OpenSubsonicServer for Server {
         Ok(())
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
+    async fn get_starred(&self, request: Request<GetStarred>) -> Result<Starred> {
+        let user_id = self.authenticate(&request).await?;
+        let starred_ids = sonar::favorite_list(&self.context, user_id)
+            .await
+            .m()?
+            .into_iter()
+            .map(|f| f.id)
+            .collect::<Vec<_>>();
+        let split = sonar::ext::split_sonar_ids(starred_ids);
+
+        let artists = sonar::artist_get_bulk(&self.context, &split.artist_ids);
+        let albums = sonar::album_get_bulk(&self.context, &split.album_ids);
+        let tracks = sonar::track_get_bulk(&self.context, &split.track_ids);
+        let (artists, albums, tracks) = tokio::try_join!(artists, albums, tracks).m()?;
+
+        let audio_ids = tracks.iter().filter_map(|t| t.audio).collect::<Vec<_>>();
+
+        let album_artists = sonar::ext::get_albums_artists_map(&self.context, &albums);
+        let track_artists = sonar::ext::get_tracks_artists_map(&self.context, &tracks);
+        let track_albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks);
+        let audios = sonar::ext::audio_bulk_map(&self.context, audio_ids);
+        let (album_artists, track_artists, track_albums, audios) =
+            tokio::try_join!(album_artists, track_artists, track_albums, audios).m()?;
+
+        let mut song = Vec::with_capacity(tracks.len());
+        let mut album = Vec::with_capacity(albums.len());
+        let mut artist = Vec::with_capacity(artists.len());
+
+        for track in tracks {
+            let album = &track_albums[&track.album];
+            let artist = &track_artists[&track.artist];
+            let audio = track.audio.and_then(|id| audios.get(&id));
+            song.push(child_from_audio_track_and_album_and_artist(
+                artist,
+                album,
+                track,
+                audio.cloned(),
+            ));
+        }
+
+        for alb in albums {
+            let artist = &album_artists[&alb.artist];
+            album.push(child_from_album_and_artist(&alb, &artist));
+        }
+
+        for art in artists {
+            artist.push(artist_from_artist(art));
+        }
+
+        Ok(Starred {
+            song,
+            album,
+            artist,
+        })
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn get_starred2(&self, request: Request<GetStarred2>) -> Result<Starred2> {
         let user_id = self.authenticate(&request).await?;
         let starred_ids = sonar::favorite_list(&self.context, user_id)
@@ -364,11 +448,14 @@ impl OpenSubsonicServer for Server {
         let tracks = sonar::track_get_bulk(&self.context, &split.track_ids);
         let (artists, albums, tracks) = tokio::try_join!(artists, albums, tracks).m()?;
 
+        let audio_ids = tracks.iter().filter_map(|t| t.audio).collect::<Vec<_>>();
+
         let album_artists = sonar::ext::get_albums_artists_map(&self.context, &albums);
         let track_artists = sonar::ext::get_tracks_artists_map(&self.context, &tracks);
         let track_albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks);
-        let (album_artists, track_artists, track_albums) =
-            tokio::try_join!(album_artists, track_artists, track_albums).m()?;
+        let audios = sonar::ext::audio_bulk_map(&self.context, audio_ids);
+        let (album_artists, track_artists, track_albums, audios) =
+            tokio::try_join!(album_artists, track_artists, track_albums, audios).m()?;
 
         let mut song = Vec::with_capacity(tracks.len());
         let mut album = Vec::with_capacity(albums.len());
@@ -377,7 +464,13 @@ impl OpenSubsonicServer for Server {
         for track in tracks {
             let album = &track_albums[&track.album];
             let artist = &track_artists[&track.artist];
-            song.push(child_from_track_and_album_and_artist(artist, album, track));
+            let audio = track.audio.and_then(|id| audios.get(&id));
+            song.push(child_from_audio_track_and_album_and_artist(
+                artist,
+                album,
+                track,
+                audio.cloned(),
+            ));
         }
 
         for alb in albums {
@@ -396,7 +489,7 @@ impl OpenSubsonicServer for Server {
         })
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_playlists(&self, _request: Request<GetPlaylists>) -> Result<Playlists> {
         let mut playlists = sonar::playlist_list(&self.context, Default::default())
             .await
@@ -407,7 +500,7 @@ impl OpenSubsonicServer for Server {
         })
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_playlist(&self, request: Request<GetPlaylist>) -> Result<PlaylistWithSongs> {
         let playlist_id = request.body.id.parse::<sonar::PlaylistId>().m()?;
         let playlist = sonar::playlist_get(&self.context, playlist_id).await.m()?;
@@ -431,7 +524,7 @@ impl OpenSubsonicServer for Server {
         })
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn create_playlist(&self, request: Request<CreatePlaylist>) -> Result<PlaylistWithSongs> {
         let user_id = self.authenticate(&request).await?;
         let track_ids = request
@@ -489,7 +582,7 @@ impl OpenSubsonicServer for Server {
         })
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_cover_art(&self, request: Request<GetCoverArt>) -> Result<ByteStream> {
         let image_id = request.body.id.parse::<sonar::ImageId>().m()?;
         let download = sonar::image_download(&self.context, image_id).await.m()?;
@@ -499,7 +592,7 @@ impl OpenSubsonicServer for Server {
         ))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn scrobble(&self, request: Request<Scrobble>) -> Result<()> {
         let user_id = self.authenticate(&request).await?;
 
@@ -533,10 +626,10 @@ impl OpenSubsonicServer for Server {
         Ok(())
     }
 
-    #[tracing::instrument]
-    async fn stream(&self, request: Request<Stream>) -> Result<ByteStream> {
+    #[tracing::instrument(skip(self))]
+    async fn download(&self, request: Request<Download>) -> Result<ByteStream> {
         let track_id = request.body.id.parse::<sonar::TrackId>().m()?;
-        let download = sonar::track_download(&self.context, track_id, Default::default())
+        let download = sonar::track_download(&self.context, track_id, sonar::ByteRange::default())
             .await
             .m()?;
         Ok(opensubsonic::common::ByteStream::new(
@@ -545,7 +638,30 @@ impl OpenSubsonicServer for Server {
         ))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
+    async fn stream(&self, request: Request<Stream>, range: ByteRange) -> Result<StreamChunk> {
+        let track_id = request.body.id.parse::<sonar::TrackId>().m()?;
+        let range = sonar::ByteRange {
+            offset: range.offset,
+            length: range.length,
+        };
+        let download = sonar::track_download(&self.context, track_id, range)
+            .await
+            .m()?;
+
+        let data = sonar::bytestream::to_bytes(download.stream)
+            .await
+            .map_err(Error::custom)?;
+
+        Ok(StreamChunk {
+            content_duration: download.audio.duration,
+            content_length: u64::from(download.audio.size),
+            mime_type: download.audio.mime_type,
+            data,
+        })
+    }
+
+    #[tracing::instrument(skip(self))]
     async fn get_music_folders(&self, _request: Request<GetMusicFolders>) -> Result<MusicFolders> {
         Ok(MusicFolders {
             music_folder: vec![MusicFolder {
@@ -555,17 +671,28 @@ impl OpenSubsonicServer for Server {
         })
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_podcasts(&self, _request: Request<GetPodcasts>) -> Result<Podcasts> {
         Ok(Default::default())
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_internet_radio_stations(
         &self,
         _request: Request<GetInternetRadioStations>,
     ) -> Result<InternetRadioStations> {
         Ok(Default::default())
+    }
+}
+
+fn artist_from_artist(artist: sonar::Artist) -> Artist {
+    Artist {
+        id: artist.id.to_string(),
+        name: artist.name,
+        artist_image_url: None,
+        starred: None,
+        user_rating: None,
+        average_rating: None,
     }
 }
 
@@ -618,10 +745,26 @@ fn multi_albumid3_from_album_and_artist(
     albumid3s
 }
 
-fn child_from_track_and_album_and_artist(
+fn child_from_album_and_artist(album: &sonar::Album, artist: &sonar::Artist) -> Child {
+    Child {
+        id: album.id.to_string(),
+        parent: Some(album.artist.to_string()),
+        is_dir: true,
+        album: Some(album.name.clone()),
+        artist: Some(artist.name.clone()),
+        cover_art: album.cover_art.map(|id| id.to_string()),
+        duration: Some(Seconds::from(album.duration)),
+        album_id: Some(album.id.to_string()),
+        artist_id: Some(artist.id.to_string()),
+        ..Default::default()
+    }
+}
+
+fn child_from_audio_track_and_album_and_artist(
     artist: &sonar::Artist,
     album: &sonar::Album,
     track: sonar::Track,
+    audio: Option<sonar::Audio>,
 ) -> Child {
     Child {
         id: track.id.to_string(),
@@ -631,7 +774,6 @@ fn child_from_track_and_album_and_artist(
         album: Some(album.name.clone()),
         artist: Some(artist.name.clone()),
         track: track.properties.get_parsed(sonar::prop::TRACK_NUMBER),
-        year: None,
         genre: None,
         cover_art: track
             .cover_art
@@ -640,10 +782,19 @@ fn child_from_track_and_album_and_artist(
         duration: Some(From::from(track.duration)),
         play_count: Some(track.listen_count as u64),
         disc_number: track.properties.get_parsed(sonar::prop::DISC_NUMBER),
-        created: None,
         starred: None,
         album_id: Some(album.id.to_string()),
         artist_id: Some(artist.id.to_string()),
+        media_type: Some(MediaType::Music),
+        is_video: Some(false),
+        // test
+        //content_type: Some("audio/mpeg".to_string()),
+        //bit_rate: Some(200),
+        //suffix: Some("mp3".to_string()),
+        size: audio.map(|a| u64::from(a.size)),
+        //path: Some(track.id.to_string()),
+        //created: Some("2021-12-17T06:31:23.538924948Z".parse().unwrap()),
+        //year: Some(2013),
         ..Default::default()
     }
 }
