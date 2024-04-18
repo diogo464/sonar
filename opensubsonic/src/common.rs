@@ -201,6 +201,12 @@ pub struct DateTime(OffsetDateTime);
 impl_to_query_value_for_display!(DateTime);
 impl_from_query_value_for_parse!(DateTime);
 
+impl DateTime {
+    pub fn from_unix_seconds(s: u64) -> Self {
+        Self::from(OffsetDateTime::from_unix_timestamp(s as i64).unwrap())
+    }
+}
+
 impl From<PrimitiveDateTime> for DateTime {
     fn from(value: PrimitiveDateTime) -> Self {
         Self(value.assume_utc())
