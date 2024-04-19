@@ -184,7 +184,7 @@ pub async fn list_top_from_artist(
     query.push("SELECT * FROM sqlx_track");
     query.push(" WHERE artist = ");
     query.push_bind(artist_id);
-    query.push(" ORDER BY listen_count");
+    query.push(" ORDER BY listen_count DESC");
     query.push(params.sql_display());
     tracks_from_views_query(db, query).await
 }
