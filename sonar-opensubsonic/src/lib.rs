@@ -307,8 +307,12 @@ impl OpenSubsonicServer for Server {
             genre,
         };
         let tracks = sonar::track_list_random(&self.context, params).await.m()?;
-        let artists = sonar::ext::get_tracks_artists_map(&self.context, &tracks).await.m()?;
-        let albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks).await.m()?;
+        let artists = sonar::ext::get_tracks_artists_map(&self.context, &tracks)
+            .await
+            .m()?;
+        let albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks)
+            .await
+            .m()?;
         let audios = sonar::ext::get_tracks_audios_map(&self.context, &tracks)
             .await
             .m()?;
@@ -421,7 +425,7 @@ impl OpenSubsonicServer for Server {
                 )
             })
             .collect();
-        song.sort_by_key(|child| child.track.unwrap_or_default());
+        song.sort_by(child_sort_disc_track);
         Ok(AlbumWithSongsID3 {
             album: albumid3_from_album_and_artist(&favorites, &artist, album),
             song,
@@ -1024,6 +1028,21 @@ fn genre_string_from_genres<'a>(genres: impl IntoIterator<Item = &'a sonar::Genr
         .next()
         .map(|g| g.to_string())
         .unwrap_or_default()
+}
+
+fn child_sort_disc_track(a: &Child, b: &Child) -> std::cmp::Ordering {
+    match (a.disc_number, b.disc_number) {
+        (None, _) => std::cmp::Ordering::Less,
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (Some(a_d), Some(b_d)) => match a_d.cmp(&b_d) {
+            std::cmp::Ordering::Equal => match (a.track, b.track) {
+                (None, _) => std::cmp::Ordering::Less,
+                (Some(_), None) => std::cmp::Ordering::Greater,
+                (Some(a_t), Some(b_t)) => a_t.cmp(&b_t),
+            },
+            ord @ _ => ord,
+        },
+    }
 }
 
 pub async fn start_server(
