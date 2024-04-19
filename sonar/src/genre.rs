@@ -304,6 +304,14 @@ impl GenreUpdate {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenreStats {
+    pub genre: Genre,
+    pub num_artists: u32,
+    pub num_albums: u32,
+    pub num_tracks: u32,
+}
+
 #[tracing::instrument(skip(db))]
 pub(crate) async fn get(db: &mut DbC, id: impl SonarIdentifier) -> Result<Genres> {
     let genres = sqlx::query_scalar::<_, String>(

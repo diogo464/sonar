@@ -142,7 +142,17 @@ impl OpenSubsonicServer for Server {
         Ok(Default::default())
     }
     async fn get_genres(&self, _request: Request<GetGenres>) -> Result<Genres> {
-        Ok(Default::default())
+        let genres = sonar::genre_list(&self.context)
+            .await
+            .m()?
+            .into_iter()
+            .map(|g| Genre {
+                song_count: g.num_tracks,
+                album_count: g.num_albums,
+                value: g.genre.to_string(),
+            })
+            .collect();
+        Ok(Genres { genre: genres })
     }
     async fn search3(&self, request: Request<Search3>) -> Result<SearchResult3> {
         const DEFAULT_LIMIT: u32 = 50;
@@ -387,7 +397,22 @@ impl OpenSubsonicServer for Server {
     async fn get_album_list2(&self, request: Request<GetAlbumList2>) -> Result<AlbumList2> {
         let user_id = self.authenticate(&request).await?;
         let params = sonar::ListParams::from((request.body.offset, request.body.size));
-        let albums = sonar::album_list(&self.context, params).await.m()?;
+
+        let albums = match request.body.list_type {
+            ListType::ByGenre => {
+                let genre = request
+                    .body
+                    .genre
+                    .unwrap_or_default()
+                    .parse::<sonar::Genre>()
+                    .m()?;
+                sonar::album_list_by_genre(&self.context, &genre, params)
+                    .await
+                    .m()?
+            }
+            _ => sonar::album_list(&self.context, params).await.m()?,
+        };
+
         let albums = sonar::ext::albums_map(albums);
         let artists = sonar::ext::artist_bulk_map(&self.context, albums.values().map(|v| v.artist))
             .await
@@ -814,6 +839,7 @@ fn albumid3_from_album_and_artist(
     artist: &sonar::Artist,
     album: sonar::Album,
 ) -> AlbumID3 {
+    let genre = genre_string_from_genres(artist.genres.iter().chain(album.genres.iter()));
     AlbumID3 {
         id: album.id.to_string(),
         name: album.name,
@@ -826,7 +852,7 @@ fn albumid3_from_album_and_artist(
         created: Default::default(),
         starred: favorites.starred(album.id),
         year: None,
-        genre: None,
+        genre: Some(genre),
         user_rating: None,
         record_labels: Default::default(),
     }
@@ -926,20 +952,24 @@ fn child_from_playlist_tracks(
 ) -> Vec<Child> {
     let mut children = Vec::with_capacity(playlist_tracks.len());
     for (idx, track) in tracks.iter().enumerate() {
+        let artist = &artists[&track.artist];
+        let album = &albums[&track.album];
+        let genre = genre_string_from_genres(artist.genres.iter().chain(album.genres.iter()));
+
         children.push(Child {
             id: track.id.to_string(),
             parent: Some(track.album.to_string()),
             is_dir: false,
             title: track.name.clone(),
-            album: Some(albums[&track.album].name.clone()),
-            artist: Some(artists[&track.artist].name.clone()),
+            album: Some(album.name.clone()),
+            artist: Some(artist.name.clone()),
             track: Some((idx + 1) as u32),
             year: None,
-            genre: None,
+            genre: Some(genre),
             cover_art: track
                 .cover_art
                 .map(|id| id.to_string())
-                .or_else(|| albums[&track.album].cover_art.map(|id| id.to_string())),
+                .or_else(|| album.cover_art.map(|id| id.to_string())),
             duration: Some(From::from(track.duration)),
             play_count: Some(track.listen_count as u64),
             disc_number: None,
@@ -949,6 +979,14 @@ fn child_from_playlist_tracks(
         });
     }
     children
+}
+
+fn genre_string_from_genres<'a>(genres: impl IntoIterator<Item = &'a sonar::Genre>) -> String {
+    genres
+        .into_iter()
+        .next()
+        .map(|g| g.to_string())
+        .unwrap_or_default()
 }
 
 pub async fn start_server(
@@ -1007,6 +1045,17 @@ impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidIdError> {
 }
 
 impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidUsernameError> {
+    fn m(self) -> Result<T, opensubsonic::response::Error> {
+        self.map_err(|err| {
+            opensubsonic::response::Error::with_message(
+                opensubsonic::response::ErrorCode::Generic,
+                err.to_string(),
+            )
+        })
+    }
+}
+
+impl<T> ResultExt<T> for sonar::Result<T, sonar::InvalidGenreError> {
     fn m(self) -> Result<T, opensubsonic::response::Error> {
         self.map_err(|err| {
             opensubsonic::response::Error::with_message(

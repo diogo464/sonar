@@ -15,7 +15,9 @@ use crate::{
     download::DownloadController,
     external::{ExternalService, SonarExternalService},
     extractor::{Extractor, SonarExtractor},
-    favorite, gc, image,
+    favorite, gc,
+    genre::GenreStats,
+    image,
     importer::{self, Importer},
     metadata::{
         AlbumMetadata, AlbumMetadataRequest, AlbumTracksMetadata, AlbumTracksMetadataRequest,
@@ -28,7 +30,7 @@ use crate::{
     track, user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId,
     ArtistMetadata, ArtistMetadataRequest, ArtistUpdate, Audio, AudioCreate, AudioDownload,
     AudioId, AudioStat, ByteRange, Download, DownloadCreate, DownloadDelete, Error, ErrorKind,
-    Favorite, Genres, ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics,
+    Favorite, Genre, Genres, ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics,
     MetadataFetchMask, MetadataFetchParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack,
     PlaylistUpdate, Properties, PropertyKey, PropertyUpdate, Result, Scrobble, ScrobbleCreate,
     ScrobbleId, ScrobbleUpdate, SearchQuery, SonarId, Subscription, SubscriptionCreate,
@@ -37,6 +39,9 @@ use crate::{
     METADATA_FETCH_MASK_COVER, METADATA_FETCH_MASK_GENRES, METADATA_FETCH_MASK_NAME,
     METADATA_FETCH_MASK_PROPERTIES,
 };
+
+mod memory_indexes;
+use memory_indexes::*;
 
 mod scrobbler_process;
 
@@ -184,6 +189,7 @@ pub struct Context {
     downloads: DownloadController,
     subscriptions: SubscriptionController,
     scrobbler_notify: Arc<Notify>,
+    memory_indexes: Arc<Mutex<MemoryIndexes>>,
 }
 
 pub async fn new(config: Config) -> Result<Context> {
@@ -239,6 +245,7 @@ pub async fn new(config: Config) -> Result<Context> {
         downloads,
         subscriptions,
         scrobbler_notify: Arc::new(Notify::new()),
+        memory_indexes: Default::default(),
     };
 
     for scrobbler in context.scrobblers.iter().cloned() {
@@ -249,6 +256,11 @@ pub async fn new(config: Config) -> Result<Context> {
             context.scrobbler_notify.clone(),
         ));
     }
+
+    tokio::spawn({
+        let context = context.clone();
+        async move { memory_indexes_rebuild(&context).await }
+    });
 
     context.scrobbler_notify.notify_waiters();
 
@@ -483,6 +495,17 @@ pub async fn album_list_by_artist(
 ) -> Result<Vec<Album>> {
     let mut conn = context.db.acquire().await?;
     album::list_by_artist(&mut conn, artist_id, params).await
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn album_list_by_genre(
+    context: &Context,
+    genre: &Genre,
+    params: ListParams,
+) -> Result<Vec<Album>> {
+    let indexes = clone_memory_indexes(context);
+    let album_ids = indexes.genres().list_albums_by_genre(genre, params);
+    album_get_bulk(context, &album_ids).await
 }
 
 #[tracing::instrument(skip(context))]
@@ -807,6 +830,12 @@ pub async fn playlist_remove_tracks(
     playlist::remove_tracks(&mut tx, id, tracks).await?;
     tx.commit().await?;
     Ok(())
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn genre_list(context: &Context) -> Result<Vec<GenreStats>> {
+    let indexes = clone_memory_indexes(context);
+    Ok(indexes.genres().list_genres())
 }
 
 #[tracing::instrument(skip(context))]
@@ -1373,21 +1402,24 @@ pub async fn metadata_view_track(
 }
 
 async fn on_artist_crud(context: &Context, artist_id: ArtistId) {
-    let search = context.search.clone();
+    let context = context.clone();
     tokio::spawn(async move {
-        search.synchronize_artist(artist_id).await;
+        context.search.synchronize_artist(artist_id).await;
+        memory_indexes_rebuild(&context).await;
     });
 }
 async fn on_album_crud(context: &Context, album_id: AlbumId) {
-    let search = context.search.clone();
+    let context = context.clone();
     tokio::spawn(async move {
-        search.synchronize_album(album_id).await;
+        context.search.synchronize_album(album_id).await;
+        memory_indexes_rebuild(&context).await;
     });
 }
 async fn on_track_crud(context: &Context, track_id: TrackId) {
-    let search = context.search.clone();
+    let context = context.clone();
     tokio::spawn(async move {
-        search.synchronize_track(track_id).await;
+        context.search.synchronize_track(track_id).await;
+        memory_indexes_rebuild(&context).await;
     });
 }
 async fn on_playlist_crud(context: &Context, playlist_id: PlaylistId) {
@@ -1395,4 +1427,8 @@ async fn on_playlist_crud(context: &Context, playlist_id: PlaylistId) {
     tokio::spawn(async move {
         search.synchronize_playlist(playlist_id).await;
     });
+}
+
+fn clone_memory_indexes(context: &Context) -> MemoryIndexes {
+    context.memory_indexes.lock().unwrap().clone()
 }

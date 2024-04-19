@@ -26,6 +26,7 @@ pub async fn run(db: &Db) -> Result<()> {
     tracing::info!("running migrations");
     run_migration(db, migration!("000_init.sql")).await?;
     run_migration(db, migration!("001_favorite.sql")).await?;
+    run_migration(db, migration!("002_genre_index_namespace_genre.sql")).await?;
     tracing::info!("migrations complete");
     Ok(())
 }
