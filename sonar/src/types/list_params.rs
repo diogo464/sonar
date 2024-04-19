@@ -1,3 +1,12 @@
+use crate::Genre;
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub enum ListKind {
+    #[default]
+    Unspecified,
+    ByGenre(Genre),
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ListParams {
     pub offset: Option<u32>,

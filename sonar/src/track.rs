@@ -6,8 +6,9 @@ use crate::{
     audio::{self, AudioDownload, AudioStat},
     blob::BlobStorage,
     db::{self, Db, DbC, SonarView},
-    property, AlbumId, ArtistId, AudioId, ByteRange, Error, ErrorKind, ImageId, ListParams,
+    property, AlbumId, ArtistId, AudioId, ByteRange, Error, ErrorKind, Genre, ImageId, ListParams,
     Properties, PropertyUpdate, Result, SonarId, Timestamp, TrackId, ValueUpdate,
+    ID_NAMESPACE_ARTIST,
 };
 
 #[derive(Debug, Clone)]
@@ -77,6 +78,12 @@ pub struct Lyrics {
     pub track: TrackId,
     pub kind: LyricsKind,
     pub lines: Vec<LyricsLine>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrackListRandom {
+    pub limit: Option<u32>,
+    pub genre: Option<Genre>,
 }
 
 #[derive(Clone, sqlx::FromRow)]
@@ -165,6 +172,37 @@ pub async fn list_album_id_pairs(db: &mut DbC) -> Result<Vec<(AlbumId, TrackId)>
         pairs.push((album_id, track_id));
     }
     Ok(pairs)
+}
+
+#[tracing::instrument(skip(db))]
+pub async fn list_random(db: &mut DbC, params: TrackListRandom) -> Result<Vec<Track>> {
+    let mut builder =
+        sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT sqlx_track.id FROM sqlx_track ");
+
+    if let Some(genre) = params.genre {
+        // TODO: add album genres to?
+        builder.push("JOIN genre ON (genre.namespace = ");
+        builder.push(ID_NAMESPACE_ARTIST);
+        builder.push(" AND genre.identifier = sqlx_track.artist)");
+        builder.push(" WHERE genre.genre = '");
+        builder.push(genre);
+        builder.push("' ");
+    }
+
+    builder.push("ORDER BY RANDOM() ");
+    if let Some(limit) = params.limit {
+        builder.push("LIMIT ");
+        builder.push(limit);
+    }
+
+    let rows = builder.build().fetch_all(&mut *db).await?;
+    let mut track_ids = Vec::with_capacity(rows.len());
+    for row in rows {
+        let id = row.get::<i64, _>(0);
+        track_ids.push(TrackId::from_db(id));
+    }
+
+    get_bulk(db, &track_ids).await
 }
 
 #[tracing::instrument(skip(db))]

@@ -2062,7 +2062,7 @@ async fn cmd_metadata_fetch(args: MetadataFetchArgs) -> Result<()> {
         sonar::SonarId::Track(_) => {
             client
                 .metadata_fetch(sonar_grpc::MetadataFetchRequest {
-                    kind: sonar_grpc::MetadataFetchKind::Album as i32,
+                    kind: sonar_grpc::MetadataFetchKind::Track as i32,
                     item_id: args.id.to_string(),
                     fields,
                     providers,

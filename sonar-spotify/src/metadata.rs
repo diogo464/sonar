@@ -224,6 +224,10 @@ fn simplified_track_to_track_metadata(track: rspotify::model::SimplifiedTrack) -
         sonar::prop::TRACK_NUMBER,
         PropertyValue::new(track.track_number.to_string()).unwrap(),
     );
+    properties.insert(
+        sonar::prop::EXTERNAL_SPOTIFY_ID,
+        PropertyValue::new(track.id.unwrap().to_string()).unwrap(),
+    );
     TrackMetadata {
         name: Some(track.name),
         properties,
@@ -240,6 +244,10 @@ fn full_track_to_track_metadata(track: rspotify::model::FullTrack) -> TrackMetad
     properties.insert(
         sonar::prop::TRACK_NUMBER,
         PropertyValue::new(track.track_number.to_string()).unwrap(),
+    );
+    properties.insert(
+        sonar::prop::EXTERNAL_SPOTIFY_ID,
+        PropertyValue::new(track.id.unwrap().to_string()).unwrap(),
     );
     TrackMetadata {
         name: Some(track.name),

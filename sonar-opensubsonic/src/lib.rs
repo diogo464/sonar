@@ -289,9 +289,46 @@ impl OpenSubsonicServer for Server {
             song,
         })
     }
+
     async fn get_indexes(&self, request: Request<GetIndexes>) -> Result<ArtistsID3> {
         let user_id = self.authenticate(&request).await?;
         self.get_artists_id3(user_id).await
+    }
+
+    async fn get_random_songs(&self, request: Request<GetRandomSongs>) -> Result<Songs> {
+        let user_id = self.authenticate(&request).await?;
+        let limit = request.body.size.unwrap_or(500);
+        let genre = match request.body.genre {
+            Some(genre) => Some(genre.parse::<sonar::Genre>().m()?),
+            None => None,
+        };
+        let params = sonar::TrackListRandom {
+            limit: Some(limit),
+            genre,
+        };
+        let tracks = sonar::track_list_random(&self.context, params).await.m()?;
+        let artists = sonar::ext::get_tracks_artists_map(&self.context, &tracks).await.m()?;
+        let albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks).await.m()?;
+        let audios = sonar::ext::get_tracks_audios_map(&self.context, &tracks)
+            .await
+            .m()?;
+
+        let mut favorites = FavoritesSet::default();
+        favorites
+            .populate_with(&self.context, user_id, tracks.iter().map(|t| t.id))
+            .await?;
+
+        let mut child = Vec::with_capacity(tracks.len());
+        for track in tracks {
+            let artist = &artists[&track.artist];
+            let album = &albums[&track.album];
+            let audio = track.audio.map(|id| &audios[&id]).cloned();
+            child.push(child_from_audio_track_and_album_and_artist(
+                &favorites, artist, album, track, audio,
+            ));
+        }
+
+        Ok(Songs { song: child })
     }
 
     #[tracing::instrument(skip(self))]

@@ -150,3 +150,24 @@ async fn track_with_lyrics() {
     assert_eq!(fetched_lyrics.kind, lyrics.kind);
     assert_eq!(fetched_lyrics.lines, lyrics.lines);
 }
+
+#[tokio::test]
+async fn track_list_properties() {
+    let ctx = sonar::test::create_context_memory().await;
+    let artist = sonar::test::create_artist(&ctx, "artist").await;
+    let album = sonar::test::create_album(&ctx, artist.id, "album").await;
+    let _data = sonar::test::create_stream(b"track data");
+    let create = sonar::TrackCreate {
+        name: "Track".to_string(),
+        album: album.id,
+        cover_art: None,
+        audio: None,
+        lyrics: None,
+        properties: sonar::test::create_simple_properties(),
+    };
+    sonar::track_create(&ctx, create).await.unwrap();
+    let tracks = sonar::track_list(&ctx, Default::default()).await.unwrap();
+    assert_eq!(tracks.len(), 1);
+    assert_eq!(tracks[0].name, "Track");
+    assert_eq!(tracks[0].properties.len(), 2);
+}

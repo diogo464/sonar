@@ -237,14 +237,13 @@ pub(crate) async fn get_bulk(
     query.push_str(") AND user IS NULL");
 
     let rows = sqlx::query(&query).fetch_all(&mut *db).await?;
-    let mut properties = HashMap::with_capacity(ids.len());
+    let mut properties: HashMap<u32, Properties> = HashMap::with_capacity(ids.len());
     for row in rows {
-        let mut props = Properties::new();
         let identifier = row.get::<i64, _>(0) as u32;
         let key = PropertyKey(row.get::<String, _>(1).into());
         let value = PropertyValue(row.get::<String, _>(2).into());
+        let props = properties.entry(identifier).or_default();
         props.insert(key, value);
-        properties.insert(identifier, props);
     }
 
     let mut result = Vec::with_capacity(ids.len());
@@ -439,8 +438,11 @@ pub(crate) async fn user_list_with_property(
     let mut ids = Vec::with_capacity(rows.len());
     for row in rows {
         ids.push(
-            SonarId::from_namespace_and_id(row.get::<i64, _>(0) as u32, row.get::<i64, _>(1) as u32)
-                .expect("invalid id in database"),
+            SonarId::from_namespace_and_id(
+                row.get::<i64, _>(0) as u32,
+                row.get::<i64, _>(1) as u32,
+            )
+            .expect("invalid id in database"),
         );
     }
     Ok(ids)

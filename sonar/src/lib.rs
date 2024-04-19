@@ -80,7 +80,9 @@ pub use scrobble::{Scrobble, ScrobbleCreate, ScrobbleUpdate};
 pub use scrobbler::Scrobbler;
 pub use search::{SearchFlags, SearchQuery, SearchResult};
 pub use subscription::{Subscription, SubscriptionCreate, SubscriptionDelete};
-pub use track::{Lyrics, LyricsKind, LyricsLine, Track, TrackCreate, TrackLyrics, TrackUpdate};
+pub use track::{
+    Lyrics, LyricsKind, LyricsLine, Track, TrackCreate, TrackListRandom, TrackLyrics, TrackUpdate,
+};
 pub use user::{
     InvalidUserTokenError, InvalidUsernameError, User, UserCreate, UserToken, UserUpdate, Username,
 };

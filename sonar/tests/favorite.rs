@@ -26,7 +26,7 @@ async fn favorite_add_one() {
         .unwrap();
     let favorites = sonar::favorite_list(&ctx, user.id).await.unwrap();
     assert_eq!(favorites.len(), 1);
-    assert!(favorites.contains(&From::from(artist.id)));
+    assert_eq!(favorites[0].id, From::from(artist.id));
 }
 
 #[tokio::test]
@@ -46,10 +46,11 @@ async fn favorite_add_three() {
         .unwrap();
 
     let favorites = sonar::favorite_list(&ctx, user.id).await.unwrap();
+    let favorites_ids = favorites.iter().map(|f| f.id).collect::<Vec<_>>();
     assert_eq!(favorites.len(), 3);
-    assert!(favorites.contains(&From::from(artist.id)));
-    assert!(favorites.contains(&From::from(album.id)));
-    assert!(favorites.contains(&From::from(track.id)));
+    assert!(favorites_ids.contains(&From::from(artist.id)));
+    assert!(favorites_ids.contains(&From::from(album.id)));
+    assert!(favorites_ids.contains(&From::from(track.id)));
 }
 
 #[tokio::test]
@@ -66,7 +67,7 @@ async fn favorite_add_repeated() {
         .unwrap();
     let favorites = sonar::favorite_list(&ctx, user.id).await.unwrap();
     assert_eq!(favorites.len(), 1);
-    assert!(favorites.contains(&From::from(artist.id)));
+    assert_eq!(favorites[0].id, From::from(artist.id));
 }
 
 #[tokio::test]
@@ -88,7 +89,8 @@ async fn favorite_remove() {
         .await
         .unwrap();
     let favorites = sonar::favorite_list(&ctx, user.id).await.unwrap();
+    let favorites_ids = favorites.iter().map(|f| f.id).collect::<Vec<_>>();
     assert_eq!(favorites.len(), 2);
-    assert!(favorites.contains(&From::from(artist.id)));
-    assert!(favorites.contains(&From::from(track.id)));
+    assert!(favorites_ids.contains(&From::from(artist.id)));
+    assert!(favorites_ids.contains(&From::from(track.id)));
 }

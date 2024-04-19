@@ -27,17 +27,17 @@ use crate::{
     scrobbler::{self, SonarScrobbler},
     search::{BuiltInSearchEngine, SearchEngine, SearchResults},
     subscription::SubscriptionController,
-    track, user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId,
-    ArtistMetadata, ArtistMetadataRequest, ArtistUpdate, Audio, AudioCreate, AudioDownload,
-    AudioId, AudioStat, ByteRange, Download, DownloadCreate, DownloadDelete, Error, ErrorKind,
-    Favorite, Genre, Genres, ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics,
-    MetadataFetchMask, MetadataFetchParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack,
-    PlaylistUpdate, Properties, PropertyKey, PropertyUpdate, Result, Scrobble, ScrobbleCreate,
-    ScrobbleId, ScrobbleUpdate, SearchQuery, SonarId, Subscription, SubscriptionCreate,
-    SubscriptionDelete, Track, TrackCreate, TrackId, TrackMetadata, TrackMetadataRequest,
-    TrackUpdate, User, UserCreate, UserId, UserToken, UserUpdate, Username, ValueUpdate,
-    METADATA_FETCH_MASK_COVER, METADATA_FETCH_MASK_GENRES, METADATA_FETCH_MASK_NAME,
-    METADATA_FETCH_MASK_PROPERTIES,
+    track::{self, TrackListRandom},
+    user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId, ArtistMetadata,
+    ArtistMetadataRequest, ArtistUpdate, Audio, AudioCreate, AudioDownload, AudioId, AudioStat,
+    ByteRange, Download, DownloadCreate, DownloadDelete, Error, ErrorKind, Favorite, Genre, Genres,
+    ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics, MetadataFetchMask,
+    MetadataFetchParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack, PlaylistUpdate,
+    Properties, PropertyKey, PropertyUpdate, Result, Scrobble, ScrobbleCreate, ScrobbleId,
+    ScrobbleUpdate, SearchQuery, SonarId, Subscription, SubscriptionCreate, SubscriptionDelete,
+    Track, TrackCreate, TrackId, TrackMetadata, TrackMetadataRequest, TrackUpdate, User,
+    UserCreate, UserId, UserToken, UserUpdate, Username, ValueUpdate, METADATA_FETCH_MASK_COVER,
+    METADATA_FETCH_MASK_GENRES, METADATA_FETCH_MASK_NAME, METADATA_FETCH_MASK_PROPERTIES,
 };
 
 mod memory_indexes;
@@ -575,6 +575,12 @@ pub async fn track_list_by_album(
 ) -> Result<Vec<Track>> {
     let mut conn = context.db.acquire().await?;
     track::list_by_album(&mut conn, album_id, params).await
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn track_list_random(context: &Context, params: TrackListRandom) -> Result<Vec<Track>> {
+    let mut conn = context.db.acquire().await?;
+    track::list_random(&mut conn, params).await
 }
 
 #[tracing::instrument(skip(context))]
@@ -1432,3 +1438,5 @@ async fn on_playlist_crud(context: &Context, playlist_id: PlaylistId) {
 fn clone_memory_indexes(context: &Context) -> MemoryIndexes {
     context.memory_indexes.lock().unwrap().clone()
 }
+
+async fn update_listen_counts(context: &Context) {}
