@@ -270,7 +270,7 @@ pub struct Genres {
 pub struct Genre {
     pub song_count: u32,
     pub album_count: u32,
-    pub name: String,
+    pub value: String,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
@@ -1151,7 +1151,7 @@ impl XmlSerialize for Genre {
         xml::attr(xml, "songCount", &self.song_count);
         xml::attr(xml, "albumCount", &self.album_count);
         xml::elem_begin_close(xml);
-        xml::body_display(xml, &self.name);
+        xml::body_display(xml, &self.value);
         xml::elem_end(xml);
     }
 }
