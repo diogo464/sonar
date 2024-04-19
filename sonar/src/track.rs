@@ -192,7 +192,7 @@ pub async fn list_top_from_artist(
 #[tracing::instrument(skip(db))]
 pub async fn list_random(db: &mut DbC, params: TrackListRandom) -> Result<Vec<Track>> {
     let mut query =
-        sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT sqlx_track.id FROM sqlx_track ");
+        sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT * FROM sqlx_track ");
 
     if let Some(genre) = params.genre {
         // TODO: add album genres to?
