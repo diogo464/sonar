@@ -29,6 +29,9 @@ where
     finish(xml)
 }
 pub fn elem_begin_open(xml: &mut Xml, element: &'static str) {
+    if !xml.tag_stack.is_empty() {
+        let _ = write!(xml.buffer, "\n");
+    }
     for _ in 0..xml.tag_stack.len() {
         let _ = write!(xml.buffer, "\t");
     }
@@ -36,11 +39,11 @@ pub fn elem_begin_open(xml: &mut Xml, element: &'static str) {
     let _ = write!(xml.buffer, "<{}", element);
 }
 pub fn elem_begin_close(xml: &mut Xml) {
-    let _ = write!(xml.buffer, ">\n");
+    let _ = write!(xml.buffer, ">");
 }
 pub fn elem_begin_close_end(xml: &mut Xml) {
     xml.tag_stack.pop().expect("empty tag stack");
-    let _ = write!(xml.buffer, " />\n");
+    let _ = write!(xml.buffer, " />");
 }
 pub fn attr(xml: &mut Xml, attr: &str, value: &impl std::fmt::Display) {
     let _ = write!(xml.buffer, " {}=\"", attr);
@@ -57,10 +60,10 @@ pub fn attr(xml: &mut Xml, attr: &str, value: &impl std::fmt::Display) {
 }
 pub fn elem_end(xml: &mut Xml) {
     let element = xml.tag_stack.pop().expect("empty tag stack");
-    for _ in 0..xml.tag_stack.len() {
-        let _ = write!(xml.buffer, "\t");
-    }
-    let _ = write!(xml.buffer, "</{}>\n", element);
+    // for _ in 0..xml.tag_stack.len() {
+    //     let _ = write!(xml.buffer, "\t");
+    // }
+    let _ = write!(xml.buffer, "</{}>", element);
 }
 pub fn attr_opt(xml: &mut Xml, attr_: &str, value: &Option<impl std::fmt::Display>) {
     if let Some(value) = value {
