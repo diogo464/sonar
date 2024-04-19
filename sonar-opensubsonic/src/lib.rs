@@ -903,13 +903,47 @@ impl OpenSubsonicServer for Server {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_cover_art(&self, request: Request<GetCoverArt>) -> Result<ByteStream> {
-        let image_id = request.body.id.parse::<sonar::ImageId>().m()?;
+    async fn get_cover_art(&self, request: Request<GetCoverArt>) -> Result<Image> {
+        // NOTE: I saw substreamer making some requests with 'al-' prefixed for albums so I will
+        // just remove the other prefixes just in case.
+        let id = request
+            .body
+            .id
+            .trim_start_matches("al-")
+            .trim_start_matches("ar-")
+            .trim_start_matches("tr-");
+
+        let id = id.parse::<sonar::SonarId>().m()?;
+        let image_id = match id {
+            sonar::SonarId::Artist(id) => {
+                let artist = sonar::artist_get(&self.context, id).await.m()?;
+                artist.cover_art
+            }
+            sonar::SonarId::Album(id) => {
+                let album = sonar::album_get(&self.context, id).await.m()?;
+                album.cover_art
+            }
+            sonar::SonarId::Track(id) => {
+                let track = sonar::track_get(&self.context, id).await.m()?;
+                track.cover_art
+            }
+            sonar::SonarId::Image(id) => Some(id),
+            _ => None,
+        };
+
+        let image_id = match image_id {
+            Some(image_id) => image_id,
+            None => return Err(Error::new(ErrorCode::DataNotFound)),
+        };
+
         let download = sonar::image_download(&self.context, image_id).await.m()?;
-        Ok(opensubsonic::common::ByteStream::new(
-            download.mime_type,
-            download.stream,
-        ))
+        let data = sonar::bytestream::to_bytes(download.stream)
+            .await
+            .map_err(Error::custom)?;
+        Ok(Image {
+            mime_type: download.mime_type,
+            data,
+        })
     }
 
     #[tracing::instrument(skip(self))]

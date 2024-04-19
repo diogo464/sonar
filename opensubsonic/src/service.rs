@@ -69,7 +69,7 @@ use crate::{
     response::{
         AlbumInfo, AlbumList, AlbumList2, AlbumWithSongsID3, ArtistInfo, ArtistInfo2,
         ArtistWithAlbumsID3, ArtistsID3, Bookmarks, ChatMessages, Child, Directory, Error,
-        ErrorCode, Genres, InternetRadioStations, JukeboxControlResponse, License, Lyrics,
+        ErrorCode, Genres, Image, InternetRadioStations, JukeboxControlResponse, License, Lyrics,
         MusicFolders, NewestPodcasts, NowPlaying, PlayQueue, PlaylistWithSongs, Playlists,
         Podcasts, Response, ResponseBody, ResponseObject, ScanStatus, SearchResult, SearchResult2,
         SearchResult3, Shares, SimilarSongs, SimilarSongs2, Songs, Starred, Starred2, StreamChunk,
@@ -205,7 +205,7 @@ pub trait OpenSubsonicServer: Send + Sync + 'static {
     async fn get_chat_message(&self, request: Request<GetChatMessages>) -> Result<ChatMessages> {
         unsupported()
     }
-    async fn get_cover_art(&self, request: Request<GetCoverArt>) -> Result<ByteStream> {
+    async fn get_cover_art(&self, request: Request<GetCoverArt>) -> Result<Image> {
         unsupported()
     }
     async fn get_genres(&self, request: Request<GetGenres>) -> Result<Genres> {
@@ -525,7 +525,33 @@ where
             case!("getBookmarks") => case!(self, query, get_bookmarks, Bookmarks),
             case!("getCaptions") => case!(self, query, get_captions ->),
             case!("getChatMessages") => case!(self, query, get_chat_message, ChatMessages),
-            case!("getCoverArt") => case!(self, query, get_cover_art ->),
+            case!("getCoverArt") => {
+                let format = crate::query::from_query::<Format>(query).unwrap_or(Format::Xml);
+                let request = self.parse_query(format, query)?;
+                let image = self
+                    .server
+                    .get_cover_art(request)
+                    .await
+                    .map_err(|err| self.response_from_error(format, err))?;
+
+                let content_length = image.data.len();
+
+                let mut response = http::Response::new(http_body_util::StreamBody::new(
+                    OpenSubsonicBodyStream::Bytes(Some(image.data)),
+                ));
+
+                let headers = response.headers_mut();
+                headers.insert(
+                    http::header::CONTENT_LENGTH,
+                    http::HeaderValue::from(content_length),
+                );
+                headers.insert(
+                    http::header::CONTENT_TYPE,
+                    image.mime_type.parse().unwrap(),
+                );
+
+                Ok(response)
+            }
             case!("getGenres") => case!(self, query, get_genres, Genres),
             case!("getIndexes") => case!(self, query, get_indexes, Indexes),
             case!("getInternetRadioStations") => {

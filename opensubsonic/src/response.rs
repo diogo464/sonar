@@ -208,6 +208,12 @@ pub struct StreamChunk {
     pub data: Bytes,
 }
 
+#[derive(Debug, Clone)]
+pub struct Image {
+    pub mime_type: String,
+    pub data: Bytes,
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct License {
