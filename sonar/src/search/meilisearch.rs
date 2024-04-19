@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     album, artist, db::Db, ext, playlist, track, AlbumId, ArtistId, Error, PlaylistId, Result,
-    SearchQuery, SearchResult, TrackId, UserId,
+    SearchQuery, SearchResult, SonarId, TrackId, UserId,
 };
 
 use super::{SearchEngine, SearchResults};
@@ -16,7 +16,7 @@ use super::{SearchEngine, SearchResults};
 
 const DEFAULT_SEARCH_LIMIT: u32 = 50;
 const INDEX_NAME: &'static str = "items";
-const INDEX_KEY: &'static str = "key";
+const INDEX_KEY: &'static str = "id";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 enum DocumentKind {
@@ -63,6 +63,11 @@ impl MeiliSearchEngine {
         meilisearch_key: impl AsRef<str>,
     ) -> Result<Self> {
         let client = Client::new(meilisearch_url.as_ref(), Some(meilisearch_key.as_ref()));
+        client
+            .create_index(INDEX_NAME, Some(INDEX_KEY))
+            .await
+            .map_err(|e| Error::internal(format!("failed to create meilisearch index: {e}")))?;
+
         let mut index = client.index(INDEX_NAME);
 
         index
@@ -71,10 +76,6 @@ impl MeiliSearchEngine {
             .map_err(Error::wrap)?;
 
         Ok(Self { db, client, index })
-    }
-
-    async fn insert_document(&self, document: Document) {
-        self.insert_documents(&[document]).await;
     }
 
     async fn insert_documents(&self, documents: &[Document]) {
@@ -120,7 +121,7 @@ impl MeiliSearchEngine {
         let mut documents = Vec::with_capacity(artists.len());
         for artist in artists {
             documents.push(Document {
-                id: artist.id.to_string(),
+                id: sonar_id_to_meilisearch_id(artist.id),
                 kind: DocumentKind::Artist,
                 artist_name: Some(artist.name),
                 album_name: None,
@@ -143,8 +144,8 @@ impl MeiliSearchEngine {
         for album in albums {
             let artist = &artists[&album.artist];
             documents.push(Document {
-                id: album.id.to_string(),
-                kind: DocumentKind::Artist,
+                id: sonar_id_to_meilisearch_id(album.id),
+                kind: DocumentKind::Album,
                 artist_name: Some(artist.name.clone()),
                 album_name: Some(album.name),
                 track_name: None,
@@ -182,8 +183,8 @@ impl MeiliSearchEngine {
                 .ok();
 
             documents.push(Document {
-                id: track.id.to_string(),
-                kind: DocumentKind::Artist,
+                id: sonar_id_to_meilisearch_id(track.id),
+                kind: DocumentKind::Track,
                 artist_name: Some(artist.name.clone()),
                 album_name: Some(album.name.clone()),
                 track_name: Some(track.name),
@@ -199,7 +200,7 @@ impl MeiliSearchEngine {
         let mut documents = Vec::with_capacity(playlists.len());
         for playlist in playlists {
             documents.push(Document {
-                id: playlist.id.to_string(),
+                id: sonar_id_to_meilisearch_id(playlist.id),
                 kind: DocumentKind::Playlist,
                 artist_name: None,
                 album_name: None,
@@ -230,10 +231,18 @@ impl SearchEngine for MeiliSearchEngine {
 
         for document in results.hits.iter() {
             match document.result.kind {
-                DocumentKind::Artist => artist_ids.push(document.result.id.parse().unwrap()),
-                DocumentKind::Album => album_ids.push(document.result.id.parse().unwrap()),
-                DocumentKind::Track => track_ids.push(document.result.id.parse().unwrap()),
-                DocumentKind::Playlist => playlist_ids.push(document.result.id.parse().unwrap()),
+                DocumentKind::Artist => {
+                    artist_ids.push(meilisearch_id_to_artist_id(&document.result.id))
+                }
+                DocumentKind::Album => {
+                    album_ids.push(meilisearch_id_to_album_id(&document.result.id))
+                }
+                DocumentKind::Track => {
+                    track_ids.push(meilisearch_id_to_track_id(&document.result.id))
+                }
+                DocumentKind::Playlist => {
+                    playlist_ids.push(meilisearch_id_to_playlist_id(&document.result.id))
+                }
             }
         }
 
@@ -266,16 +275,16 @@ impl SearchEngine for MeiliSearchEngine {
         for document in results.hits {
             match document.result.kind {
                 DocumentKind::Artist => search_results.push(SearchResult::Artist(
-                    artists[&document.result.id.parse().unwrap()].clone(),
+                    artists[&meilisearch_id_to_artist_id(&document.result.id)].clone(),
                 )),
                 DocumentKind::Album => search_results.push(SearchResult::Album(
-                    albums[&document.result.id.parse().unwrap()].clone(),
+                    albums[&meilisearch_id_to_album_id(&document.result.id)].clone(),
                 )),
                 DocumentKind::Track => search_results.push(SearchResult::Track(
-                    tracks[&document.result.id.parse().unwrap()].clone(),
+                    tracks[&meilisearch_id_to_track_id(&document.result.id)].clone(),
                 )),
                 DocumentKind::Playlist => search_results.push(SearchResult::Playlist(
-                    playlists[&document.result.id.parse().unwrap()].clone(),
+                    playlists[&meilisearch_id_to_playlist_id(&document.result.id)].clone(),
                 )),
             }
         }
@@ -306,4 +315,24 @@ impl SearchEngine for MeiliSearchEngine {
         self.synchronize_albums(album_ids).await;
         self.synchronize_artists(artist_ids).await;
     }
+}
+
+fn sonar_id_to_meilisearch_id(id: impl Into<SonarId>) -> String {
+    id.into().to_string().replace(":", "_")
+}
+
+fn meilisearch_id_to_artist_id(id: &str) -> ArtistId {
+    id.replace("_", ":").parse().unwrap()
+}
+
+fn meilisearch_id_to_album_id(id: &str) -> AlbumId {
+    id.replace("_", ":").parse().unwrap()
+}
+
+fn meilisearch_id_to_track_id(id: &str) -> TrackId {
+    id.replace("_", ":").parse().unwrap()
+}
+
+fn meilisearch_id_to_playlist_id(id: &str) -> PlaylistId {
+    id.replace("_", ":").parse().unwrap()
 }

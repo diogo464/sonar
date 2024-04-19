@@ -7,6 +7,7 @@ mod builtin;
 pub use builtin::BuiltInSearchEngine;
 
 mod meilisearch;
+pub use meilisearch::MeiliSearchEngine;
 
 pub type SearchFlags = u32;
 

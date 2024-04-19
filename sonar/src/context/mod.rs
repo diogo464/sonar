@@ -26,7 +26,7 @@ use crate::{
     },
     migrations, pin, playlist, property, scrobble,
     scrobbler::{self, SonarScrobbler},
-    search::{BuiltInSearchEngine, SearchEngine, SearchResults},
+    search::{BuiltInSearchEngine, MeiliSearchEngine, SearchEngine, SearchResults},
     subscription::SubscriptionController,
     track::{self, TrackListRandom},
     user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId, ArtistMetadata,
@@ -59,6 +59,10 @@ pub enum StorageBackend {
 pub enum SearchBackend {
     #[default]
     BuiltIn,
+    Meilisearch {
+        endpoint: String,
+        key: String,
+    },
 }
 
 #[derive(Debug)]
@@ -202,7 +206,7 @@ pub async fn new(config: Config) -> Result<Context> {
         .pragma("cache_size", format!("{}", -64 * 1024))
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
     let db = sqlx::sqlite::SqlitePoolOptions::new()
-        .max_connections(1)
+        .max_connections(8)
         .connect_with(opts)
         .await
         .map_err(|e| Error::with_source(ErrorKind::Internal, "failed to connect to database", e))?;
@@ -227,6 +231,10 @@ pub async fn new(config: Config) -> Result<Context> {
     let search_engine = match config.search_backend {
         SearchBackend::BuiltIn => {
             Arc::new(BuiltInSearchEngine::new(db.clone())) as Arc<dyn SearchEngine>
+        }
+        SearchBackend::Meilisearch { endpoint, key } => {
+            Arc::new(MeiliSearchEngine::new(db.clone(), endpoint, key).await?)
+                as Arc<dyn SearchEngine>
         }
     };
 
@@ -263,10 +271,8 @@ pub async fn new(config: Config) -> Result<Context> {
         async move { update_listen_counts(&context).await }
     });
 
-    tokio::spawn({
-        let context = context.clone();
-        async move { memory_indexes_rebuild(&context).await }
-    });
+    memory_indexes_rebuild(&context).await;
+    context.search.synchronize_all().await;
 
     context.scrobbler_notify.notify_waiters();
 
@@ -872,6 +878,16 @@ pub async fn favorite_get_bulk(
 ) -> Result<Vec<Favorite>> {
     let mut conn = context.db.acquire().await?;
     favorite::user_get_bulk(&mut conn, user_id, ids).await
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn favorite_find(
+    context: &Context,
+    user_id: UserId,
+    id: SonarId,
+) -> Result<Option<Favorite>> {
+    let mut conn = context.db.acquire().await?;
+    favorite::user_find(&mut conn, user_id, id).await
 }
 
 #[tracing::instrument(skip(context))]

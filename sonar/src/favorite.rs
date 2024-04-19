@@ -54,6 +54,15 @@ pub(crate) async fn user_get_bulk(
         .collect())
 }
 
+pub(crate) async fn user_find(
+    db: &mut DbC,
+    user_id: UserId,
+    id: SonarId,
+) -> Result<Option<Favorite>> {
+    let favorites = user_get_bulk(db, user_id, &[id]).await?;
+    Ok(favorites.into_iter().next())
+}
+
 pub(crate) async fn user_put(db: &mut DbC, user_id: UserId, id: SonarId) -> Result<()> {
     if !std::matches!(
         id,

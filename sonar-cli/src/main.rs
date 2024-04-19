@@ -2348,6 +2348,14 @@ struct ServerArgs {
 
     #[clap(long, env = "SONAR_JAEGER_EXPORTER_ENDPOINT")]
     jaeger_exporter_endpoint: Option<String>,
+
+    #[clap(long, env = "SONAR_LISTENBRAINZ_TOKEN")]
+    listenbrainz_token: Option<String>,
+
+    #[clap(long, env = "SONAR_MEILISEARCH_ENDPOINT")]
+    meilisearch_endpoint: Option<String>,
+    #[clap(long, env = "SONAR_MEILISEARCH_KEY")]
+    meilisearch_key: Option<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -2425,7 +2433,15 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     let storage_backend = sonar::StorageBackend::Filesystem {
         path: data_dir.join("storage"),
     };
-    let search_backend = sonar::SearchBackend::BuiltIn;
+    let search_backend =
+        if let (Some(url), Some(key)) = (args.meilisearch_endpoint, args.meilisearch_key) {
+            sonar::SearchBackend::Meilisearch {
+                endpoint: url,
+                key: key,
+            }
+        } else {
+            sonar::SearchBackend::BuiltIn
+        };
     let mut config = sonar::Config::new(database_url, storage_backend, search_backend);
     config
         .register_extractor("lofty", sonar_extractor_lofty::LoftyExtractor)
@@ -2433,13 +2449,15 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     config
         .register_provider("beets", sonar_beets::BeetsMetadataProvider)
         .context("registering beets metadata importer")?;
-    // config
-    //     .register_scrobbler_for_user(
-    //         "listenbrainz/admin",
-    //         "admin".parse()?,
-    //         sonar_listenbrainz::ListenBrainzScrobbler::new(std::env!("LISTENBRAINZ_API_KEY")),
-    //     )
-    //     .context("registering listenbrainz scrobbler")?;
+    if let Some(token) = args.listenbrainz_token {
+        config
+            .register_scrobbler_for_user(
+                "listenbrainz",
+                "admin".parse()?,
+                sonar_listenbrainz::ListenBrainzScrobbler::new(token),
+            )
+            .context("registering listenbrainz scrobbler")?;
+    }
 
     if let (Some(username), Some(password)) = (args.spotify_username, args.spotify_password) {
         let spotify = sonar_spotify::SpotifyService::new(

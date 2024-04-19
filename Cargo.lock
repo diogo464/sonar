@@ -3775,6 +3775,7 @@ dependencies = [
  "sonar",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
