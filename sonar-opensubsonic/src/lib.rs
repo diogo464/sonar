@@ -41,6 +41,28 @@ impl FavoritesSet {
     }
 }
 
+struct CommonSearchParams {
+    user_id: sonar::UserId,
+    query: String,
+    artist_count: Option<u32>,
+    artist_offset: Option<u32>,
+    album_count: Option<u32>,
+    album_offset: Option<u32>,
+    song_count: Option<u32>,
+    song_offset: Option<u32>,
+}
+
+struct CommonSearchResults {
+    favorites: FavoritesSet,
+    artists: Vec<sonar::Artist>,
+    albums: Vec<sonar::Album>,
+    album_artists: HashMap<sonar::ArtistId, sonar::Artist>,
+    tracks: Vec<sonar::Track>,
+    track_albums: HashMap<sonar::AlbumId, sonar::Album>,
+    track_artists: HashMap<sonar::ArtistId, sonar::Artist>,
+    track_audios: HashMap<sonar::AudioId, sonar::Audio>,
+}
+
 #[derive(Debug)]
 struct Server {
     image_url_prefix: String,
@@ -120,6 +142,130 @@ impl Server {
         })
     }
 
+    async fn search(&self, request: CommonSearchParams) -> Result<CommonSearchResults> {
+        const DEFAULT_LIMIT: u32 = 50;
+
+        let artist_limit = request.artist_count.unwrap_or(DEFAULT_LIMIT);
+        let artist_offset = request.artist_offset.unwrap_or(0);
+        let album_limit = request.album_count.unwrap_or(DEFAULT_LIMIT);
+        let album_offset = request.album_offset.unwrap_or(0);
+        let song_limit = request.song_count.unwrap_or(DEFAULT_LIMIT);
+        let song_offset = request.song_offset.unwrap_or(0);
+
+        // symfonium/substreamer sends two quotes when the search is empty
+        let query = request.query.trim_matches('"');
+
+        if query.is_empty() {
+            let artist_params = sonar::ListParams::from((artist_offset, artist_limit));
+            let album_params = sonar::ListParams::from((album_offset, album_limit));
+            let song_params = sonar::ListParams::from((song_offset, song_limit));
+
+            let artists = sonar::artist_list(&self.context, artist_params);
+            let albums = sonar::album_list(&self.context, album_params);
+            let tracks = sonar::track_list(&self.context, song_params);
+            let (artists, albums, songs) = tokio::try_join!(artists, albums, tracks).m()?;
+
+            let mut favorites = FavoritesSet::default();
+            favorites
+                .populate_with(&self.context, request.user_id, artists.iter().map(|v| v.id))
+                .await?;
+            favorites
+                .populate_with(&self.context, request.user_id, albums.iter().map(|v| v.id))
+                .await?;
+            favorites
+                .populate_with(&self.context, request.user_id, songs.iter().map(|v| v.id))
+                .await?;
+
+            let album_artists = sonar::ext::get_albums_artists_map(&self.context, &albums);
+            let track_albums = sonar::ext::get_tracks_albums_map(&self.context, &songs);
+            let track_artists = sonar::ext::get_tracks_artists_map(&self.context, &songs);
+            let (album_artists, track_albums, track_artists) =
+                tokio::try_join!(album_artists, track_albums, track_artists).m()?;
+            let audios = sonar::ext::get_tracks_audios_map(&self.context, &songs)
+                .await
+                .m()?;
+
+            Ok(CommonSearchResults {
+                favorites,
+                artists,
+                albums,
+                album_artists,
+                tracks: songs,
+                track_albums,
+                track_artists,
+                track_audios: audios,
+            })
+        } else {
+            let mut flags = 0;
+            if artist_limit > 0 {
+                flags |= sonar::SearchQuery::FLAG_ARTIST;
+            }
+            if album_limit > 0 {
+                flags |= sonar::SearchQuery::FLAG_ALBUM;
+            }
+            if song_limit > 0 {
+                flags |= sonar::SearchQuery::FLAG_TRACK;
+            }
+
+            let result = sonar::search(
+                &self.context,
+                request.user_id,
+                sonar::SearchQuery {
+                    query: query.to_string(),
+                    limit: Some(artist_limit + album_limit + song_limit),
+                    flags,
+                },
+            )
+            .await
+            .m()?;
+
+            let mut favorites = FavoritesSet::default();
+            favorites
+                .populate_with(
+                    &self.context,
+                    request.user_id,
+                    result.artists().map(|v| v.id),
+                )
+                .await?;
+            favorites
+                .populate_with(
+                    &self.context,
+                    request.user_id,
+                    result.albums().map(|v| v.id),
+                )
+                .await?;
+            favorites
+                .populate_with(
+                    &self.context,
+                    request.user_id,
+                    result.tracks().map(|v| v.id),
+                )
+                .await?;
+
+            let album_artists = sonar::ext::get_albums_artists_map(&self.context, result.albums());
+            let track_albums = sonar::ext::get_tracks_albums_map(&self.context, result.tracks());
+            let track_artists = sonar::ext::get_tracks_artists_map(&self.context, result.tracks());
+            let (album_artists, track_albums, track_artists) =
+                tokio::try_join!(album_artists, track_albums, track_artists).m()?;
+            let audios = sonar::ext::get_tracks_audios_map(&self.context, result.tracks())
+                .await
+                .m()?;
+
+            let split = result.into_split();
+
+            Ok(CommonSearchResults {
+                favorites,
+                artists: split.artists,
+                albums: split.albums,
+                album_artists,
+                tracks: split.tracks,
+                track_albums,
+                track_artists,
+                track_audios: audios,
+            })
+        }
+    }
+
     fn get_token(&self, username: &str) -> Option<sonar::UserToken> {
         let tokens = self.tokens.lock().unwrap();
         tokens.get(username).cloned()
@@ -154,134 +300,106 @@ impl OpenSubsonicServer for Server {
             .collect();
         Ok(Genres { genre: genres })
     }
-    async fn search3(&self, request: Request<Search3>) -> Result<SearchResult3> {
-        const DEFAULT_LIMIT: u32 = 50;
-
+    async fn search2(&self, request: Request<Search2>) -> Result<SearchResult2> {
         let user_id = self.authenticate(&request).await?;
+        let params = CommonSearchParams {
+            user_id,
+            query: request.body.query,
+            artist_count: request.body.artist_count,
+            artist_offset: request.body.artist_offset,
+            album_count: request.body.album_count,
+            album_offset: request.body.album_offset,
+            song_count: request.body.song_count,
+            song_offset: request.body.song_offset,
+        };
+        let results = self.search(params).await?;
 
-        let artist;
-        let album;
-        let song;
+        let artist = results
+            .artists
+            .into_iter()
+            .map(|a| artist_from_artist(&results.favorites, a))
+            .collect();
 
-        let artist_limit = request.body.artist_count.unwrap_or(DEFAULT_LIMIT);
-        let artist_offset = request.body.artist_offset.unwrap_or(0);
-        let album_limit = request.body.album_count.unwrap_or(DEFAULT_LIMIT);
-        let album_offset = request.body.album_offset.unwrap_or(0);
-        let song_limit = request.body.song_count.unwrap_or(DEFAULT_LIMIT);
-        let song_offset = request.body.song_offset.unwrap_or(0);
+        let album = results
+            .albums
+            .into_iter()
+            .map(|album| {
+                let artist = &results.album_artists[&album.artist];
+                child_from_album_and_artist(&results.favorites, &album, artist)
+            })
+            .collect();
 
-        // symfonium sends two quotes when the search is empty
-        if request.body.query.is_empty() || request.body.query == "\"\"" {
-            let artist_params = sonar::ListParams::from((artist_offset, artist_limit));
-            let album_params = sonar::ListParams::from((album_offset, album_limit));
-            let song_params = sonar::ListParams::from((song_offset, song_limit));
+        let song = results
+            .tracks
+            .into_iter()
+            .map(|track| {
+                let album = &results.track_albums[&track.album];
+                let artist = &results.track_artists[&track.artist];
+                let audio = track
+                    .audio
+                    .and_then(|id| results.track_audios.get(&id))
+                    .cloned();
+                child_from_audio_track_and_album_and_artist(
+                    &results.favorites,
+                    artist,
+                    album,
+                    track,
+                    audio,
+                )
+            })
+            .collect();
 
-            let artists = sonar::artist_list(&self.context, artist_params);
-            let albums = sonar::album_list(&self.context, album_params);
-            let songs = sonar::track_list(&self.context, song_params);
-            let (artists, albums, songs) = tokio::try_join!(artists, albums, songs).m()?;
+        Ok(SearchResult2 {
+            artist,
+            album,
+            song,
+        })
+    }
+    async fn search3(&self, request: Request<Search3>) -> Result<SearchResult3> {
+        let user_id = self.authenticate(&request).await?;
+        let params = CommonSearchParams {
+            user_id,
+            query: request.body.query,
+            artist_count: request.body.artist_count,
+            artist_offset: request.body.artist_offset,
+            album_count: request.body.album_count,
+            album_offset: request.body.album_offset,
+            song_count: request.body.song_count,
+            song_offset: request.body.song_offset,
+        };
+        let results = self.search(params).await?;
 
-            let mut favorites = FavoritesSet::default();
-            favorites
-                .populate_with(&self.context, user_id, artists.iter().map(|v| v.id))
-                .await?;
-            favorites
-                .populate_with(&self.context, user_id, albums.iter().map(|v| v.id))
-                .await?;
-            favorites
-                .populate_with(&self.context, user_id, songs.iter().map(|v| v.id))
-                .await?;
+        let artist = results
+            .artists
+            .into_iter()
+            .map(|a| artistid3_from_artist(&results.favorites, a))
+            .collect::<Vec<_>>();
 
-            let album_artists = sonar::ext::get_albums_artists_map(&self.context, &albums);
-            let track_albums = sonar::ext::get_tracks_albums_map(&self.context, &songs);
-            let track_artists = sonar::ext::get_tracks_artists_map(&self.context, &songs);
-            let (album_artists, track_albums, track_artists) =
-                tokio::try_join!(album_artists, track_albums, track_artists).m()?;
-            let audios = sonar::ext::get_tracks_audios_map(&self.context, &songs)
-                .await
-                .m()?;
-            let albums = sonar::ext::albums_map(albums);
-
-            artist = artists
-                .into_iter()
-                .map(|a| artistid3_from_artist(&favorites, a))
-                .collect();
-            album = multi_albumid3_from_album_and_artist(&favorites, &album_artists, &albums);
-            song = songs
-                .into_iter()
-                .map(|track| {
-                    let album = &track_albums[&track.album];
-                    let artist = &track_artists[&track.artist];
-                    let audio = track.audio.and_then(|id| audios.get(&id)).cloned();
-                    child_from_audio_track_and_album_and_artist(
-                        &favorites, artist, album, track, audio,
-                    )
-                })
-                .collect();
-        } else {
-            let mut flags = 0;
-            if artist_limit > 0 {
-                flags |= sonar::SearchQuery::FLAG_ARTIST;
-            }
-            if album_limit > 0 {
-                flags |= sonar::SearchQuery::FLAG_ALBUM;
-            }
-            if song_limit > 0 {
-                flags |= sonar::SearchQuery::FLAG_TRACK;
-            }
-
-            let result = sonar::search(
-                &self.context,
-                user_id,
-                sonar::SearchQuery {
-                    query: request.body.query,
-                    limit: Some(artist_limit + album_limit + song_limit),
-                    flags,
-                },
-            )
-            .await
-            .m()?;
-
-            let mut favorites = FavoritesSet::default();
-            favorites
-                .populate_with(&self.context, user_id, result.artists().map(|v| v.id))
-                .await?;
-            favorites
-                .populate_with(&self.context, user_id, result.albums().map(|v| v.id))
-                .await?;
-            favorites
-                .populate_with(&self.context, user_id, result.tracks().map(|v| v.id))
-                .await?;
-
-            let album_artists = sonar::ext::get_albums_artists_map(&self.context, result.albums());
-            let track_albums = sonar::ext::get_tracks_albums_map(&self.context, result.tracks());
-            let track_artists = sonar::ext::get_tracks_artists_map(&self.context, result.tracks());
-            let (album_artists, track_albums, track_artists) =
-                tokio::try_join!(album_artists, track_albums, track_artists).m()?;
-            let audios = sonar::ext::get_tracks_audios_map(&self.context, result.tracks())
-                .await
-                .m()?;
-            let albums = sonar::ext::albums_map(result.albums().cloned());
-
-            artist = result
-                .artists()
-                .cloned()
-                .map(|a| artistid3_from_artist(&favorites, a))
-                .collect::<Vec<_>>();
-            album = multi_albumid3_from_album_and_artist(&favorites, &album_artists, &albums);
-            song = result
-                .tracks()
-                .cloned()
-                .map(|track| {
-                    let album = &track_albums[&track.album];
-                    let artist = &track_artists[&track.artist];
-                    let audio = track.audio.and_then(|id| audios.get(&id)).cloned();
-                    child_from_audio_track_and_album_and_artist(
-                        &favorites, artist, album, track, audio,
-                    )
-                })
-                .collect();
-        }
+        let albums = sonar::ext::albums_map(results.albums);
+        let album = multi_albumid3_from_album_and_artist(
+            &results.favorites,
+            &results.album_artists,
+            &albums,
+        );
+        let song = results
+            .tracks
+            .into_iter()
+            .map(|track| {
+                let album = &results.track_albums[&track.album];
+                let artist = &results.track_artists[&track.artist];
+                let audio = track
+                    .audio
+                    .and_then(|id| results.track_audios.get(&id))
+                    .cloned();
+                child_from_audio_track_and_album_and_artist(
+                    &results.favorites,
+                    artist,
+                    album,
+                    track,
+                    audio,
+                )
+            })
+            .collect();
 
         Ok(SearchResult3 {
             artist,
@@ -617,7 +735,7 @@ impl OpenSubsonicServer for Server {
         }
 
         for art in artists {
-            artist.push(artist_from_artist(art));
+            artist.push(artist_from_artist(&favorites, art));
         }
 
         Ok(Starred {
@@ -887,12 +1005,12 @@ impl OpenSubsonicServer for Server {
     }
 }
 
-fn artist_from_artist(artist: sonar::Artist) -> Artist {
+fn artist_from_artist(favorites: &FavoritesSet, artist: sonar::Artist) -> Artist {
     Artist {
         id: artist.id.to_string(),
         name: artist.name,
         artist_image_url: None,
-        starred: None,
+        starred: favorites.starred(artist.id),
         user_rating: None,
         average_rating: None,
     }

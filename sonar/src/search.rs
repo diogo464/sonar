@@ -64,6 +64,16 @@ pub struct SearchResults {
     pub results: Vec<SearchResult>,
 }
 
+/// Split the results of [`SearchResults`] into its different types but loses the order between
+/// elements of different types.
+#[derive(Debug, Default, Clone)]
+pub struct SearchResultsSplit {
+    pub artists: Vec<Artist>,
+    pub albums: Vec<Album>,
+    pub tracks: Vec<Track>,
+    pub playlists: Vec<Playlist>,
+}
+
 #[async_trait]
 pub trait SearchEngine: std::fmt::Debug + Send + Sync + 'static {
     async fn search(&self, user_id: UserId, query: &SearchQuery) -> Result<SearchResults>;
@@ -129,5 +139,28 @@ impl SearchResults {
             SearchResult::Playlist(playlist) => Some(playlist),
             _ => None,
         })
+    }
+
+    pub fn into_split(self) -> SearchResultsSplit {
+        let mut artists = Vec::new();
+        let mut albums = Vec::new();
+        let mut tracks = Vec::new();
+        let mut playlists = Vec::new();
+
+        for result in self.results {
+            match result {
+                SearchResult::Artist(v) => artists.push(v),
+                SearchResult::Album(v) => albums.push(v),
+                SearchResult::Track(v) => tracks.push(v),
+                SearchResult::Playlist(v) => playlists.push(v),
+            }
+        }
+
+        SearchResultsSplit {
+            artists,
+            albums,
+            tracks,
+            playlists,
+        }
     }
 }
