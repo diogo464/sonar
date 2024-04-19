@@ -589,6 +589,14 @@ pub async fn track_list_random(context: &Context, params: TrackListRandom) -> Re
     track::list_random(&mut conn, params).await
 }
 
+pub async fn track_list_top_from_artist(
+    context: &Context,
+    artist_id: ArtistId,
+) -> Result<Vec<Track>> {
+    let mut conn = context.db.acquire().await?;
+    track::list_top_from_artist(&mut conn, artist_id, ListParams::new(0, 50)).await
+}
+
 #[tracing::instrument(skip(context))]
 pub async fn track_get(context: &Context, track_id: TrackId) -> Result<Track> {
     let mut conn = context.db.acquire().await?;

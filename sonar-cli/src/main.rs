@@ -374,11 +374,11 @@ async fn async_main() -> Result<()> {
     let args = Args::parse();
 
     if let Command::Server(ref args) = args.command
-        && args.jaeger_exporter
+        && args.jaeger_exporter_endpoint.is_some()
     {
         let mut tracer = opentelemetry_jaeger::new_agent_pipeline();
         if let Some(ref endpoint) = args.jaeger_exporter_endpoint {
-            tracer = tracer.with_endpoint(endpoint);
+            tracer = tracer.with_endpoint(endpoint).with_auto_split_batch(true);
         }
         let tracer = tracer.with_service_name("sonar").install_simple()?;
 
@@ -2346,10 +2346,7 @@ struct ServerArgs {
     #[clap(long, env = "SONAR_SPOTIFY_CLIENT_SECRET")]
     spotify_client_secret: Option<String>,
 
-    #[clap(long)]
-    jaeger_exporter: bool,
-
-    #[clap(long)]
+    #[clap(long, env = "SONAR_JAEGER_EXPORTER_ENDPOINT")]
     jaeger_exporter_endpoint: Option<String>,
 }
 
@@ -2404,6 +2401,11 @@ async fn cmd_import(args: ImportArgs) -> Result<()> {
 }
 
 async fn cmd_server(args: ServerArgs) -> Result<()> {
+    tracing::info!(
+        "jaeger exporter endpoint: {:?}",
+        args.jaeger_exporter_endpoint
+    );
+
     let data_dir = args
         .data_dir
         .canonicalize()

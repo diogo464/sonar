@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use sqlx::Row;
+use sqlx::{FromRow as _, Row};
 
 use crate::{
     audio::{self, AudioDownload, AudioStat},
@@ -175,34 +175,42 @@ pub async fn list_album_id_pairs(db: &mut DbC) -> Result<Vec<(AlbumId, TrackId)>
 }
 
 #[tracing::instrument(skip(db))]
+pub async fn list_top_from_artist(
+    db: &mut DbC,
+    artist_id: ArtistId,
+    params: ListParams,
+) -> Result<Vec<Track>> {
+    let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new("");
+    query.push("SELECT * FROM sqlx_track");
+    query.push(" WHERE artist = ");
+    query.push_bind(artist_id);
+    query.push(" ORDER BY listen_count");
+    query.push(params.sql_display());
+    tracks_from_views_query(db, query).await
+}
+
+#[tracing::instrument(skip(db))]
 pub async fn list_random(db: &mut DbC, params: TrackListRandom) -> Result<Vec<Track>> {
-    let mut builder =
+    let mut query =
         sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT sqlx_track.id FROM sqlx_track ");
 
     if let Some(genre) = params.genre {
         // TODO: add album genres to?
-        builder.push("JOIN genre ON (genre.namespace = ");
-        builder.push(ID_NAMESPACE_ARTIST);
-        builder.push(" AND genre.identifier = sqlx_track.artist)");
-        builder.push(" WHERE genre.genre = '");
-        builder.push(genre);
-        builder.push("' ");
+        query.push("JOIN genre ON (genre.namespace = ");
+        query.push(ID_NAMESPACE_ARTIST);
+        query.push(" AND genre.identifier = sqlx_track.artist)");
+        query.push(" WHERE genre.genre = '");
+        query.push(genre);
+        query.push("' ");
     }
 
-    builder.push("ORDER BY RANDOM() ");
+    query.push("ORDER BY RANDOM() ");
     if let Some(limit) = params.limit {
-        builder.push("LIMIT ");
-        builder.push(limit);
+        query.push("LIMIT ");
+        query.push(limit);
     }
 
-    let rows = builder.build().fetch_all(&mut *db).await?;
-    let mut track_ids = Vec::with_capacity(rows.len());
-    for row in rows {
-        let id = row.get::<i64, _>(0);
-        track_ids.push(TrackId::from_db(id));
-    }
-
-    get_bulk(db, &track_ids).await
+    tracks_from_views_query(db, query).await
 }
 
 #[tracing::instrument(skip(db))]
@@ -430,4 +438,22 @@ async fn clear_lyrics(db: &mut DbC, track_id: TrackId) -> Result<()> {
         .execute(&mut *db)
         .await?;
     Ok(())
+}
+
+async fn tracks_from_views_query(
+    db: &mut DbC,
+    mut query: sqlx::QueryBuilder<'_, sqlx::Sqlite>,
+) -> Result<Vec<Track>> {
+    let rows = query.build().fetch_all(&mut *db).await?;
+    let mut ids = Vec::with_capacity(rows.len());
+    let mut views = Vec::with_capacity(rows.len());
+    for row in rows {
+        let view = TrackView::from_row(&row)?;
+        let track_id = TrackId::from_db(view.id);
+        ids.push(track_id);
+        views.push(view);
+    }
+    let expanded = db::expand_views(views, &ids);
+    let properties = property::get_bulk(db, ids.iter().copied()).await?;
+    Ok(db::merge_view_properties(expanded, properties))
 }

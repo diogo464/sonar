@@ -388,8 +388,41 @@ impl OpenSubsonicServer for Server {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_top_songs(&self, _request: Request<GetTopSongs>) -> Result<TopSongs> {
-        Ok(Default::default())
+    async fn get_top_songs(&self, request: Request<GetTopSongs>) -> Result<TopSongs> {
+        let user_id = self.authenticate(&request).await?;
+        let artist_id = request.body.artist.parse::<sonar::ArtistId>().m()?;
+        let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
+        let tracks = sonar::track_list_top_from_artist(&self.context, artist_id)
+            .await
+            .m()?;
+        let albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks)
+            .await
+            .m()?;
+        let audios = sonar::ext::get_tracks_audios_map(&self.context, &tracks)
+            .await
+            .m()?;
+
+        let mut favorites = FavoritesSet::default();
+        favorites
+            .populate_with(&self.context, user_id, std::iter::once(artist_id))
+            .await?;
+        favorites
+            .populate_with(&self.context, user_id, tracks.iter().map(|t| t.id))
+            .await?;
+        favorites
+            .populate_with(&self.context, user_id, albums.values().map(|a| a.id))
+            .await?;
+
+        let mut child = Vec::with_capacity(tracks.len());
+        for track in tracks {
+            let album = &albums[&track.album];
+            let audio = track.audio.map(|id| audios[&id].clone());
+            child.push(child_from_audio_track_and_album_and_artist(
+                &favorites, &artist, album, track, audio,
+            ));
+        }
+
+        Ok(TopSongs { song: child })
     }
 
     #[tracing::instrument(skip(self))]

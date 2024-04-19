@@ -51,4 +51,19 @@ impl ListParams {
         let offset = self.offset.map(|offset| offset as i64).unwrap_or(0);
         (offset, limit)
     }
+
+    pub(crate) fn sql_display(self) -> impl std::fmt::Display {
+        struct ListParamsSqlDisplay(ListParams);
+        impl std::fmt::Display for ListParamsSqlDisplay {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(
+                    f,
+                    " LIMIT {} OFFSET {} ",
+                    self.0.limit.unwrap_or(u32::MAX),
+                    self.0.offset.unwrap_or(0)
+                )
+            }
+        }
+        ListParamsSqlDisplay(self)
+    }
 }
