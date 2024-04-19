@@ -23,3 +23,6 @@ music/
 *.jpeg
 *.mp3
 .envrc
+
+/dist
+/*.rpm

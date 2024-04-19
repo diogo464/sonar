@@ -1,0 +1,14 @@
+name: check
+on:
+ push:
+   branches:
+     - main
+jobs:
+  check:
+    runs-on: [fedora-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - run: rustup default nightly
+      - run: cargo check
+      - run: cargo test

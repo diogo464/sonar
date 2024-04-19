@@ -1,0 +1,16 @@
+[package]
+name = "opensubsonic-macro"
+version = "0.0.0"
+edition = "2021"
+description = "Internal macros for opensubsonic"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "1", features = ["parsing", "printing", "extra-traits", "full"] }

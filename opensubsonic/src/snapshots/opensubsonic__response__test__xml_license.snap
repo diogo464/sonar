@@ -1,0 +1,5 @@
+---
+source: opensubsonic/src/response.rs
+expression: "xml::serialize(&License {\n            valid: true,\n            email: Some(\"hello@world.com\".to_string()),\n            ..Default::default()\n        })"
+---
+<license valid="true" email="hello@world.com" />

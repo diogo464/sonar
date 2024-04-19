@@ -1,0 +1,8 @@
+---
+source: opensubsonic/src/response.rs
+expression: "xml::serialize(&MusicFolders {\n            music_folder: vec![MusicFolder\n                { id: 1, name: Some(\"folder 1 name\".to_string()) },\n                MusicFolder\n                { id: 2, name: Some(\"folder 2 name\".to_string()) }],\n        })"
+---
+<musicFolders>
+	<musicFolder id="1" name="folder 1 name" />
+	<musicFolder id="2" name="folder 2 name" />
+</musicFolders>
