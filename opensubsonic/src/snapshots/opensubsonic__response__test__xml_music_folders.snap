@@ -4,5 +4,4 @@ expression: "xml::serialize(&MusicFolders {\n            music_folder: vec![Musi
 ---
 <musicFolders>
 	<musicFolder id="1" name="folder 1 name" />
-	<musicFolder id="2" name="folder 2 name" />
-</musicFolders>
+	<musicFolder id="2" name="folder 2 name" /></musicFolders>
