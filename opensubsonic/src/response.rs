@@ -1045,7 +1045,7 @@ impl XmlSerialize for ResponseBody {
             ResponseBody::ArtistInfo2(v) => XmlSerialize::serialize(v, xml),
             ResponseBody::SimilarSongs(_) => todo!(),
             ResponseBody::SimilarSongs2(_) => todo!(),
-            ResponseBody::TopSongs(_) => todo!(),
+            ResponseBody::TopSongs(v) => XmlSerialize::serialize(v, xml),
             ResponseBody::ScanStatus(_) => todo!(),
             ResponseBody::Error(v) => XmlSerialize::serialize(v, xml),
         }
@@ -1597,6 +1597,17 @@ impl XmlSerialize for Starred2 {
         for album in &self.album {
             XmlSerialize::serialize(album, xml);
         }
+        for song in &self.song {
+            song.serialize_as(xml, "song");
+        }
+        xml::elem_end(xml);
+    }
+}
+
+impl XmlSerialize for TopSongs {
+    fn serialize(&self, xml: &mut xml::Xml) {
+        xml::elem_begin_open(xml, "topSongs");
+        xml::elem_begin_close(xml);
         for song in &self.song {
             song.serialize_as(xml, "song");
         }
