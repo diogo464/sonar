@@ -969,7 +969,7 @@ impl OpenSubsonicServer for Server {
                     track: track_id,
                     listen_at: timestamp,
                     listen_duration: track.duration,
-                    listen_device: "opensubsonic".to_string(),
+                    listen_device: format!("opensubsonic/{}", request.client),
                     properties: Default::default(),
                 },
             )
