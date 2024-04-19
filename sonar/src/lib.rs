@@ -1,5 +1,6 @@
 #![feature(const_for)]
 #![feature(const_trait_impl)]
+#![feature(duration_constructors)]
 #![feature(concat_idents)]
 #![feature(backtrace_frames)]
 #![feature(let_chains)]

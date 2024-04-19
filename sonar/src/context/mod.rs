@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use bytes::Bytes;
@@ -256,6 +257,11 @@ pub async fn new(config: Config) -> Result<Context> {
             context.scrobbler_notify.clone(),
         ));
     }
+
+    tokio::spawn({
+        let context = context.clone();
+        async move { update_listen_counts(&context).await }
+    });
 
     tokio::spawn({
         let context = context.clone();
@@ -1439,4 +1445,28 @@ fn clone_memory_indexes(context: &Context) -> MemoryIndexes {
     context.memory_indexes.lock().unwrap().clone()
 }
 
-async fn update_listen_counts(context: &Context) {}
+async fn update_listen_counts(context: &Context) {
+    loop {
+        tracing::info!("started listen count update");
+        let result = sqlx::query(
+            r#"
+        WITH listen_count AS (
+            SELECT scrobble.track, count(*) 'count' FROM scrobble
+            GROUP BY scrobble.track
+        )
+        UPDATE track
+        SET listen_count = COALESCE((SELECT count FROM listen_count WHERE track.id = listen_count.track), 0);
+    "#,
+        )
+        .execute(&context.db)
+        .await;
+
+        if let Err(err) = result {
+            tracing::error!("failed to update listen counts: {}", err);
+        } else {
+            tracing::info!("finished listen count update");
+        }
+
+        tokio::time::sleep(Duration::from_mins(10)).await;
+    }
+}
