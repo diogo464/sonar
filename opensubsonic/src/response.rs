@@ -1029,7 +1029,7 @@ impl XmlSerialize for ResponseBody {
             ResponseBody::ChatMessages(_) => todo!(),
             ResponseBody::AlbumList(v) => XmlSerialize::serialize(v, xml),
             ResponseBody::AlbumList2(v) => XmlSerialize::serialize(v, xml),
-            ResponseBody::RandomSongs(_) => todo!(),
+            ResponseBody::RandomSongs(v) => XmlSerialize::serialize(v, xml),
             ResponseBody::SongsByGenre(_) => todo!(),
             ResponseBody::Lyrics(_) => todo!(),
             ResponseBody::Podcasts(_) => todo!(),
