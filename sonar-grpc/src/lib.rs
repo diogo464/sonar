@@ -1,7 +1,6 @@
 use std::{net::SocketAddr, str::FromStr};
 
 use bytes::Bytes;
-use eyre::Context;
 
 mod result_ext;
 use result_ext::*;

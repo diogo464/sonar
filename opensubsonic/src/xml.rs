@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::io::Write as _;
 
 pub trait XmlSerialize {
