@@ -1,6 +1,21 @@
 [workspace]
 resolver = "2"
-members = ["opensubsonic", "opensubsonic-cli", "opensubsonic-macro", "sonar", "sonar-beets", "sonar-cli", "sonar-experimental", "sonar-extractor-lofty", "sonar-grpc", "sonar-listenbrainz", "sonar-mpd", "sonar-opensubsonic", "sonar-player", "sonar-spotify"]
+members = [
+	"opensubsonic",
+	"opensubsonic-cli",
+	"opensubsonic-macro",
+	"sonar",
+	"sonar-beets",
+	"sonar-cli",
+	# "sonar-experimental",
+	"sonar-extractor-lofty",
+	"sonar-grpc",
+	"sonar-listenbrainz",
+	# "sonar-mpd",
+	"sonar-opensubsonic",
+	# "sonar-player",
+	"sonar-spotify"
+]
 
 [profile.release]
 strip = true
