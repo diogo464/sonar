@@ -888,18 +888,9 @@ struct TrackListArgs {
 
 async fn cmd_track_list(args: TrackListArgs) -> Result<()> {
     let mut client = create_client().await?;
-    let response = client
-        .track_list(sonar_grpc::TrackListRequest {
-            offset: args.params.offset,
-            count: args.params.limit,
-        })
-        .await?;
-    let tracks = response
-        .into_inner()
-        .tracks
-        .into_iter()
-        .map(Track::from)
-        .collect::<Vec<_>>();
+    let tracks =
+        sonar_grpc::ext::track_list(&mut client, args.params.offset, args.params.limit).await?;
+    let tracks = tracks.into_iter().map(Track::from).collect::<Vec<_>>();
     stdout_values(&tracks)?;
     Ok(())
 }

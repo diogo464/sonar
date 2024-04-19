@@ -53,28 +53,38 @@ pub async fn album_list_all(client: &mut Client) -> Result<Vec<Album>> {
     Ok(albums)
 }
 
-pub async fn track_list_all(client: &mut Client) -> Result<Vec<Track>> {
-    let mut offset = 0;
-    let limit = 1000;
+pub async fn track_list(
+    client: &mut Client,
+    offset: Option<u32>,
+    limit: Option<u32>,
+) -> Result<Vec<Track>> {
+    let mut offset = offset.unwrap_or(0);
+    let mut limit = limit.unwrap_or(u32::MAX);
+    let limit_per_req = 1000;
     let mut tracks = Vec::new();
 
     loop {
         let response = client
             .track_list(super::TrackListRequest {
                 offset: Some(offset),
-                count: Some(limit),
+                count: Some(limit_per_req.min(limit)),
             })
             .await?;
 
         let response = response.into_inner();
         let tracks_len = response.tracks.len();
+        offset += limit_per_req;
+        limit -= response.tracks.len() as u32;
         tracks.extend(response.tracks);
-        offset += limit;
 
-        if tracks_len < limit as usize {
+        if tracks_len < limit_per_req as usize {
             break;
         }
     }
 
     Ok(tracks)
+}
+
+pub async fn track_list_all(client: &mut Client) -> Result<Vec<Track>> {
+    track_list(client, None, None).await
 }
