@@ -390,9 +390,10 @@ impl OpenSubsonicServer for Server {
     #[tracing::instrument(skip(self))]
     async fn get_top_songs(&self, request: Request<GetTopSongs>) -> Result<TopSongs> {
         let user_id = self.authenticate(&request).await?;
-        let artist_id = request.body.artist.parse::<sonar::ArtistId>().m()?;
-        let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
-        let tracks = sonar::track_list_top_from_artist(&self.context, artist_id)
+        let artist = sonar::artist_get_by_name(&self.context, &request.body.artist)
+            .await
+            .m()?;
+        let tracks = sonar::track_list_top_from_artist(&self.context, artist.id)
             .await
             .m()?;
         let albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks)
@@ -404,7 +405,7 @@ impl OpenSubsonicServer for Server {
 
         let mut favorites = FavoritesSet::default();
         favorites
-            .populate_with(&self.context, user_id, std::iter::once(artist_id))
+            .populate_with(&self.context, user_id, std::iter::once(artist.id))
             .await?;
         favorites
             .populate_with(&self.context, user_id, tracks.iter().map(|t| t.id))
