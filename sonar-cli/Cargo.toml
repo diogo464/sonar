@@ -18,18 +18,18 @@ sonar-beets = { path = "../sonar-beets" }
 sonar-listenbrainz = { path = "../sonar-listenbrainz" }
 sonar-spotify = { path = "../sonar-spotify" }
 
-clap = { version = "4.4.18", features = ["env", "derive"] }
-color-eyre = "0.6.2"
-eyre = "0.6.11"
-tokio = { version = "1.35.1", features = ["full"] }
+clap = { version = "4.5.4", features = ["env", "derive"] }
+color-eyre = "0.6.3"
+eyre = "0.6.12"
+tokio = { version = "1.37.0", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "registry"] }
-bytes = "1.5.0"
+bytes = "1.6.0"
 tokio-util = { version = "0.7.10", features = ["full"] }
-tokio-stream = "0.1.14"
-tracing-opentelemetry = "0.22.0"
-opentelemetry-jaeger = "0.20.0"
-serde = { version = "1.0.196", features = ["derive"] }
-serde_json = "1.0.113"
-prost-types = "0.12.3"
+tokio-stream = "0.1.15"
+tracing-opentelemetry = "0.23.0"
+opentelemetry-jaeger = "0.21.0"
+serde = { version = "1.0.198", features = ["derive"] }
+serde_json = "1.0.116"
+prost-types = "0.12.4"
 lofty = "0.18.2"
