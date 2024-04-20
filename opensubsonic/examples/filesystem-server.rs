@@ -130,16 +130,20 @@ impl OpenSubsonicServer for FilesystemServer {
         tracing::info!("scrobble: {:?}", request.body);
         Ok(())
     }
-    async fn get_cover_art(&self, request: Request<GetCoverArt>) -> Result<ByteStream> {
+    async fn get_cover_art(&self, request: Request<GetCoverArt>) -> Result<Image> {
         let track_id = &request.body.id;
         let picture = self
             .pictures
             .get(track_id)
             .expect(&format!("picture '{}' not found", track_id));
-        Ok(ByteStream::new(
-            picture.mime_type.as_deref().unwrap_or("image/jpeg"),
-            tokio_stream::once(Ok(From::from(picture.data.clone()))),
-        ))
+        Ok(Image {
+            mime_type: picture
+                .mime_type
+                .as_deref()
+                .unwrap_or("image/jpeg")
+                .to_string(),
+            data: From::from(picture.data.clone()),
+        })
     }
     async fn get_starred2(&self, _request: Request<GetStarred2>) -> Result<Starred2> {
         Ok(Default::default())
