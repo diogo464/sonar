@@ -14,7 +14,7 @@ const PROP_VAL1: &str = "val1";
 
 #[sonar::async_trait]
 impl sonar::ExternalService for Service1 {
-    async fn validate_id(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
+    async fn probe(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
         if id.as_str() == SERVICE1_ID_ARTIST {
             Ok(ExternalMediaType::Artist)
         } else if id.as_str() == SERVICE1_ID_ALBUM {

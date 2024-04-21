@@ -58,7 +58,7 @@ pub use audio::{Audio, AudioCreate, AudioDownload, AudioStat};
 pub use download::{Download, DownloadCreate, DownloadDelete, DownloadStatus};
 pub use external::{
     ExternalAlbum, ExternalArtist, ExternalImage, ExternalMediaId, ExternalMediaType,
-    ExternalPlaylist, ExternalService, ExternalTrack,
+    ExternalPlaylist, ExternalService, ExternalTrack, MultiExternalMediaId,
 };
 pub use extractor::{ExtractedImage, ExtractedMetadata, Extractor};
 pub use favorite::Favorite;

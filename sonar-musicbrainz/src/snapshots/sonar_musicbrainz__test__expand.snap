@@ -1,0 +1,17 @@
+---
+source: sonar-musicbrainz/src/lib.rs
+expression: expanded
+---
+MultiExternalMediaId(
+    [
+        ExternalMediaId(
+            "307ce9da-5690-4e21-ab71-9d12ea106e52",
+        ),
+        ExternalMediaId(
+            "https://open.spotify.com/track/1mea3bSkSGXuIRvnydlB5b",
+        ),
+        ExternalMediaId(
+            "https://www.deezer.com/track/3157972",
+        ),
+    ],
+)

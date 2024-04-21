@@ -17,6 +17,7 @@ sonar-extractor-lofty = { path = "../sonar-extractor-lofty" }
 sonar-beets = { path = "../sonar-beets" }
 sonar-listenbrainz = { path = "../sonar-listenbrainz" }
 sonar-spotify = { path = "../sonar-spotify" }
+sonar-musicbrainz = { path = "../sonar-musicbrainz" }
 
 clap = { version = "4.5.4", features = ["env", "derive"] }
 color-eyre = "0.6.3"

@@ -1,0 +1,13 @@
+[package]
+name = "sonar-musicbrainz"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+insta = "1.38.0"
+reqwest = { version = "0.12.4", features = ["json"] }
+serde = { version = "1.0.198", features = ["derive"] }
+serde_json = "1.0.116"
+sonar = { path = "../sonar" }
+tokio = { version = "1.37.0", features = ["full"] }
+tracing = "0.1.40"

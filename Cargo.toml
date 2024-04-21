@@ -10,7 +10,7 @@ members = [
 	# "sonar-experimental",
 	"sonar-extractor-lofty",
 	"sonar-grpc",
-	"sonar-listenbrainz",
+	"sonar-listenbrainz", "sonar-musicbrainz",
 	# "sonar-mpd",
 	"sonar-opensubsonic",
 	# "sonar-player",
@@ -23,3 +23,6 @@ opt-level = "z"
 
 [profile.dev.build-override]
 opt-level = 3
+
+[profile.dev]
+strip = true

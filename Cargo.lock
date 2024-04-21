@@ -3763,6 +3763,7 @@ dependencies = [
  "sonar-extractor-lofty",
  "sonar-grpc",
  "sonar-listenbrainz",
+ "sonar-musicbrainz",
  "sonar-opensubsonic",
  "sonar-spotify",
  "tokio",
@@ -3809,6 +3810,19 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "sonar-musicbrainz"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sonar",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

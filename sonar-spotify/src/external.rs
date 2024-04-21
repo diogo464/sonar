@@ -2,7 +2,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 
 use sonar::{
     bytestream::ByteStream, ExternalAlbum, ExternalArtist, ExternalImage, ExternalMediaId,
-    ExternalMediaType, ExternalPlaylist, ExternalTrack, Result,
+    ExternalMediaType, ExternalPlaylist, ExternalTrack, MultiExternalMediaId, Result,
 };
 use spotdl::{LoginCredentials, Resource, ResourceId, SpotifyId};
 use tokio::sync::Semaphore;
@@ -45,7 +45,12 @@ impl SpotifyService {
 #[sonar::async_trait]
 impl sonar::ExternalService for SpotifyService {
     #[tracing::instrument(skip(self))]
-    async fn validate_id(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
+    async fn expand(&self, ids: MultiExternalMediaId) -> MultiExternalMediaId {
+        expand_multi_external_media_id(ids)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn probe(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
         tracing::debug!("validating id: {}", id);
         let resource_id = parse_resource_id(id)?;
         let media_type = match resource_id.resource {
@@ -293,4 +298,57 @@ fn properties_for_resource(id: SpotifyId) -> sonar::Properties {
         sonar::PropertyValue::new(id.to_string()).unwrap(),
     );
     properties
+}
+
+fn expand_multi_external_media_id(ids: MultiExternalMediaId) -> MultiExternalMediaId {
+    let mut external_ids = Vec::with_capacity(ids.len());
+    for id in ids {
+        let external_id = match parse_resource_id(&id) {
+            Ok(spotify_id) => ExternalMediaId::from(spotify_id.to_string()),
+            Err(_) => id,
+        };
+        external_ids.push(external_id);
+    }
+    MultiExternalMediaId::from(external_ids)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_expand_multi_external_media_id() {
+        let ids = MultiExternalMediaId::from(vec![
+            ExternalMediaId::from("spotify:track:3HOe5HB3E9tmz9ocHwsPgP"),
+            ExternalMediaId::from("some-id-that-spotify-doesnt-recognize"),
+            ExternalMediaId::from(
+                "https://open.spotify.com/artist/762310PdDnwsDxAQxzQkfX?si=a88CtChQRO67ArejwWVYrg",
+            ),
+            ExternalMediaId::from("https://open.spotify.com/artist/762310PdDnwsDxAQxzQkfX"),
+            ExternalMediaId::from("spotify:album:5AQ7uKRSpAv7SNUl4j24ru"),
+        ]);
+
+        let expanded = expand_multi_external_media_id(ids);
+        let external_ids: Vec<ExternalMediaId> = From::from(expanded);
+        assert_eq!(
+            external_ids[0].as_str(),
+            "spotify:track:3HOe5HB3E9tmz9ocHwsPgP"
+        );
+        assert_eq!(
+            external_ids[1].as_str(),
+            "some-id-that-spotify-doesnt-recognize"
+        );
+        assert_eq!(
+            external_ids[2].as_str(),
+            "spotify:artist:762310PdDnwsDxAQxzQkfX"
+        );
+        assert_eq!(
+            external_ids[3].as_str(),
+            "spotify:artist:762310PdDnwsDxAQxzQkfX"
+        );
+        assert_eq!(
+            external_ids[4].as_str(),
+            "spotify:album:5AQ7uKRSpAv7SNUl4j24ru"
+        );
+    }
 }

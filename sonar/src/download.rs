@@ -14,8 +14,8 @@ use crate::{
         ExternalTrack, SonarExternalService,
     },
     image, playlist, track, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate,
-    ArtistId, AudioCreate, Error, ErrorKind, ImageCreate, Playlist, PlaylistCreate, Result, Track,
-    TrackCreate, TrackId, UserId, ValueUpdate,
+    ArtistId, AudioCreate, Error, ErrorKind, ImageCreate, MultiExternalMediaId, Playlist,
+    PlaylistCreate, Result, Track, TrackCreate, TrackId, UserId, ValueUpdate,
 };
 
 type Sender<T> = tokio::sync::mpsc::Sender<T>;
@@ -374,7 +374,8 @@ async fn download(
     user_id: UserId,
     external_id: &ExternalMediaId,
 ) -> Result<()> {
-    let (service, media_type) = find_service(services, external_id).await?;
+    let external_ids = expand_ids(services, MultiExternalMediaId::from(external_id.clone())).await;
+    let (service, external_id, media_type) = find_service(services, &external_ids).await?;
     match media_type {
         ExternalMediaType::Artist => {
             let external_artist = service.fetch_artist(external_id).await?;
@@ -392,17 +393,23 @@ async fn download(
 
             let mut result = Ok(());
             for external_id in external_artist.albums.iter() {
-                let album_service =
-                    find_service_for(services, external_id, ExternalMediaType::Album).await?;
-                let external_album = album_service.fetch_album(external_id).await?;
+                let (album_service, album_external_id) =
+                    expand_and_find_service_for(services, external_id, ExternalMediaType::Album)
+                        .await?;
+                let external_album = album_service.fetch_album(&album_external_id).await?;
                 let album = find_or_create_album(db, storage, &external_album, artist.id).await?;
                 for external_id in external_album.tracks.iter() {
-                    let track_service =
-                        find_service_for(services, external_id, ExternalMediaType::Track).await?;
-                    let external_track = track_service.fetch_track(external_id).await?;
+                    let (track_service, track_external_id) = expand_and_find_service_for(
+                        services,
+                        external_id,
+                        ExternalMediaType::Track,
+                    )
+                    .await?;
+                    let external_track = track_service.fetch_track(&track_external_id).await?;
                     let track = find_or_create_track(db, &external_track, album.id).await?;
                     let download_result =
-                        download_track(db, storage, track_service, external_id, track.id).await;
+                        download_track(db, storage, track_service, &track_external_id, track.id)
+                            .await;
                     if result.is_ok() && download_result.is_err() {
                         result = download_result;
                     }
@@ -412,10 +419,13 @@ async fn download(
         }
         ExternalMediaType::Album => {
             let external_album = service.fetch_album(external_id).await?;
-            let artist_service =
-                find_service_for(services, &external_album.artist, ExternalMediaType::Artist)
-                    .await?;
-            let external_artist = artist_service.fetch_artist(&external_album.artist).await?;
+            let (artist_service, artist_external_id) = expand_and_find_service_for(
+                services,
+                &external_album.artist,
+                ExternalMediaType::Artist,
+            )
+            .await?;
+            let external_artist = artist_service.fetch_artist(&artist_external_id).await?;
             let artist = find_or_create_artist(db, &external_artist).await?;
             let album = find_or_create_album(db, storage, &external_album, artist.id).await?;
 
@@ -431,12 +441,13 @@ async fn download(
 
             let mut result = Ok(());
             for external_id in external_album.tracks.iter() {
-                let track_service =
-                    find_service_for(services, external_id, ExternalMediaType::Track).await?;
-                let external_track = track_service.fetch_track(external_id).await?;
+                let (track_service, track_external_id) =
+                    expand_and_find_service_for(services, external_id, ExternalMediaType::Track)
+                        .await?;
+                let external_track = track_service.fetch_track(&track_external_id).await?;
                 let track = find_or_create_track(db, &external_track, album.id).await?;
                 let download_result =
-                    download_track(db, storage, track_service, external_id, track.id).await;
+                    download_track(db, storage, track_service, &track_external_id, track.id).await;
                 if result.is_ok() && download_result.is_err() {
                     result = download_result;
                 }
@@ -445,13 +456,20 @@ async fn download(
         }
         ExternalMediaType::Track => {
             let external_track = service.fetch_track(external_id).await?;
-            let album_service =
-                find_service_for(services, &external_track.album, ExternalMediaType::Album).await?;
-            let external_album = album_service.fetch_album(&external_track.album).await?;
-            let artist_service =
-                find_service_for(services, &external_album.artist, ExternalMediaType::Artist)
-                    .await?;
-            let external_artist = artist_service.fetch_artist(&external_album.artist).await?;
+            let (album_service, album_external_id) = expand_and_find_service_for(
+                services,
+                &external_track.album,
+                ExternalMediaType::Album,
+            )
+            .await?;
+            let external_album = album_service.fetch_album(&album_external_id).await?;
+            let (artist_service, artist_external_id) = expand_and_find_service_for(
+                services,
+                &external_album.artist,
+                ExternalMediaType::Artist,
+            )
+            .await?;
+            let external_artist = artist_service.fetch_artist(&artist_external_id).await?;
 
             let description = format!(
                 "Track: {}/{}/{}",
@@ -487,21 +505,31 @@ async fn download(
 
             let mut playlist_tracks = Vec::new();
             for external_id in external_playlist.tracks.iter() {
-                let track_service =
-                    find_service_for(services, external_id, ExternalMediaType::Track).await?;
-                let external_track = track_service.fetch_track(external_id).await?;
-                let album_service =
-                    find_service_for(services, &external_track.album, ExternalMediaType::Album)
+                let (track_service, track_external_id) =
+                    expand_and_find_service_for(services, external_id, ExternalMediaType::Track)
                         .await?;
-                let external_album = album_service.fetch_album(&external_track.album).await?;
-                let artist_service =
-                    find_service_for(services, &external_album.artist, ExternalMediaType::Artist)
-                        .await?;
-                let external_artist = artist_service.fetch_artist(&external_album.artist).await?;
+                let external_track = track_service.fetch_track(&track_external_id).await?;
+
+                let (album_service, album_external_id) = expand_and_find_service_for(
+                    services,
+                    &external_track.album,
+                    ExternalMediaType::Album,
+                )
+                .await?;
+                let external_album = album_service.fetch_album(&album_external_id).await?;
+
+                let (artist_service, artist_external_id) = expand_and_find_service_for(
+                    services,
+                    &external_album.artist,
+                    ExternalMediaType::Artist,
+                )
+                .await?;
+                let external_artist = artist_service.fetch_artist(&artist_external_id).await?;
+
                 let artist = find_or_create_artist(db, &external_artist).await?;
                 let album = find_or_create_album(db, storage, &external_album, artist.id).await?;
                 let track = find_or_create_track(db, &external_track, album.id).await?;
-                download_track(db, storage, track_service, external_id, track.id).await?;
+                download_track(db, storage, track_service, &track_external_id, track.id).await?;
                 playlist_tracks.push(track.id);
             }
             let playlist = find_or_create_playlist(db, &external_playlist, user_id).await?;
@@ -625,39 +653,66 @@ async fn download_track(
     Ok(())
 }
 
-async fn find_service<'s>(
+async fn find_service<'s, 'i>(
     services: &'s [SonarExternalService],
-    external_id: &'_ ExternalMediaId,
-) -> Result<(&'s SonarExternalService, ExternalMediaType)> {
+    external_ids: &'i MultiExternalMediaId,
+) -> Result<(
+    &'s SonarExternalService,
+    &'i ExternalMediaId,
+    ExternalMediaType,
+)> {
     for service in services {
-        match service.validate_id(external_id).await {
-            Ok(id_type) => return Ok((service, id_type)),
-            Err(err) => {
-                if err.kind() != ErrorKind::Invalid {
-                    tracing::warn!("failed to validate id: {}: {}", service.identifier(), err);
+        for external_id in external_ids {
+            match service.probe(external_id).await {
+                Ok(id_type) => return Ok((service, external_id, id_type)),
+                Err(err) => {
+                    if err.kind() != ErrorKind::Invalid {
+                        tracing::warn!("failed to validate id: {}: {}", service.identifier(), err);
+                    }
                 }
             }
         }
     }
     Err(Error::internal(format!(
-        "no service found for id: {}",
-        external_id
+        "no service found for ids: {:?}",
+        external_ids
     )))
 }
 
-async fn find_service_for<'s>(
+async fn find_service_for<'s, 'i>(
     services: &'s [SonarExternalService],
-    external_id: &'_ ExternalMediaId,
+    external_ids: &'i MultiExternalMediaId,
     media_type: ExternalMediaType,
-) -> Result<&'s SonarExternalService> {
-    let (service, found_media_type) = find_service(services, external_id).await?;
+) -> Result<(&'s SonarExternalService, &'i ExternalMediaId)> {
+    let (service, external_id, found_media_type) = find_service(services, external_ids).await?;
     if media_type != found_media_type {
         return Err(Error::internal(format!(
             "invalid id type for {}: {}",
             media_type, external_id
         )));
     }
-    Ok(service)
+    Ok((service, external_id))
+}
+
+async fn expand_and_find_service_for<'s>(
+    services: &'s [SonarExternalService],
+    external_id: &'_ ExternalMediaId,
+    media_type: ExternalMediaType,
+) -> Result<(&'s SonarExternalService, ExternalMediaId)> {
+    let external_ids = MultiExternalMediaId::from(external_id.clone());
+    let external_ids = expand_ids(services, external_ids).await;
+    let (service, external_id) = find_service_for(services, &external_ids, media_type).await?;
+    Ok((service, external_id.clone()))
+}
+
+async fn expand_ids(
+    services: &[SonarExternalService],
+    mut external_ids: MultiExternalMediaId,
+) -> MultiExternalMediaId {
+    for service in services {
+        external_ids = service.expand(external_ids).await;
+    }
+    external_ids
 }
 
 // download(db, external_id, user_id)

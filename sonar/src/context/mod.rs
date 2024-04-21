@@ -161,6 +161,9 @@ impl Config {
         Ok(())
     }
 
+    /// register a new external service.
+    /// names have to be unique.
+    /// services with lower priority number have a higher precedence.
     pub fn register_external_service(
         &mut self,
         priority: u32,

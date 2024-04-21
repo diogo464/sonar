@@ -12,6 +12,7 @@ use eyre::{Context, Result};
 use lofty::{Accessor, TagExt, TaggedFileExt};
 use serde::Serialize;
 use sonar::{Genres, Properties};
+use sonar_musicbrainz::MusicBrainzService;
 use tokio::io::AsyncWriteExt;
 use tokio_stream::StreamExt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -2458,6 +2459,10 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
             )
             .context("registering listenbrainz scrobbler")?;
     }
+
+    config
+        .register_external_service(2, "musicbrainz", MusicBrainzService::default())
+        .context("registering musicbrainz external service")?;
 
     if let (Some(username), Some(password)) = (args.spotify_username, args.spotify_password) {
         let spotify = sonar_spotify::SpotifyService::new(

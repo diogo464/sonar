@@ -1,6 +1,10 @@
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use sonar::{
+    bytestream::ByteStream, Error, ErrorKind, ExternalAlbum, ExternalArtist, ExternalMediaId,
+    ExternalMediaType, ExternalPlaylist, ExternalTrack, Result,
+};
 
 #[derive(Debug, Clone)]
 pub struct ListenBrainzScrobbler {
@@ -248,6 +252,55 @@ impl sonar::Scrobbler for ListenBrainzScrobbler {
             .await?;
 
         Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ListenBrainzService {
+    client: reqwest::Client,
+}
+
+#[sonar::async_trait]
+impl sonar::ExternalService for ListenBrainzService {
+    async fn probe(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
+        if id.as_str().starts_with("listenbrainz:playlist:") {
+            return Ok(ExternalMediaType::Playlist);
+        }
+        Err(Error::new(ErrorKind::Invalid, "invalid listenbrainz id"))
+    }
+    async fn fetch_artist(&self, _id: &ExternalMediaId) -> Result<ExternalArtist> {
+        Err(Error::new(
+            ErrorKind::Invalid,
+            "listenbrainz service does not support fetching artists",
+        ))
+    }
+    async fn fetch_album(&self, _id: &ExternalMediaId) -> Result<ExternalAlbum> {
+        Err(Error::new(
+            ErrorKind::Invalid,
+            "listenbrainz service does not support fetching albums",
+        ))
+    }
+    async fn fetch_track(&self, _id: &ExternalMediaId) -> Result<ExternalTrack> {
+        Err(Error::new(
+            ErrorKind::Invalid,
+            "listenbrainz service does not support fetching tracks",
+        ))
+    }
+    async fn fetch_playlist(&self, id: &ExternalMediaId) -> Result<ExternalPlaylist> {
+        let playist_id = id
+            .as_str()
+            .strip_prefix("listenbrainz:playlist:")
+            .ok_or_else(|| Error::new(ErrorKind::Invalid, "invalid listenbrainz playlist id"))?;
+
+        let url = format!("https://api.listenbrainz.org/1/playlist/{playlist_id}");
+
+        todo!()
+    }
+    async fn download_track(&self, _id: &ExternalMediaId) -> Result<ByteStream> {
+        Err(Error::new(
+            ErrorKind::Invalid,
+            "listenbrainz service does not support downloading tracks",
+        ))
     }
 }
 

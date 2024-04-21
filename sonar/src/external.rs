@@ -14,6 +14,9 @@ use crate::{async_trait, bytestream::ByteStream, Genres, Properties, Result, Tra
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExternalMediaId(String);
 
+#[derive(Debug, Clone, Hash)]
+pub struct MultiExternalMediaId(Vec<ExternalMediaId>);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExternalMediaType {
     Artist,
@@ -72,7 +75,19 @@ pub struct ExternalPlaylist {
 
 #[async_trait]
 pub trait ExternalService: Send + Sync + 'static {
-    async fn validate_id(&self, id: &ExternalMediaId) -> Result<ExternalMediaType>;
+    /// expand and format the given [`MultiExternalMediaId`].
+    /// example:
+    /// if the service is spotify and the [`MultiExternalMediaId`] contains a spotify url it should
+    /// transform it to a spotify uri
+    /// https://open.spotify.com/artist/762310PdDnwsDxAQxzQkfX?si=9dedf2e195404802 ->
+    /// spotify:artist:762310PdDnwsDxAQxzQkfX
+    ///
+    /// if the service is musicbrainz it could expand the [`MultiExternalMediaId`] with ids from
+    /// other platforms like spotify. these ids are under 'External Links' on the website.
+    async fn expand(&self, ids: MultiExternalMediaId) -> MultiExternalMediaId {
+        ids
+    }
+    async fn probe(&self, id: &ExternalMediaId) -> Result<ExternalMediaType>;
     async fn fetch_artist(&self, id: &ExternalMediaId) -> Result<ExternalArtist>;
     async fn fetch_album(&self, id: &ExternalMediaId) -> Result<ExternalAlbum>;
     async fn fetch_track(&self, id: &ExternalMediaId) -> Result<ExternalTrack>;
@@ -125,6 +140,62 @@ impl AsRef<str> for ExternalMediaId {
     }
 }
 
+impl MultiExternalMediaId {
+    pub fn new(ids: impl IntoIterator<Item = ExternalMediaId>) -> Self {
+        Self(ids.into_iter().collect())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &ExternalMediaId> {
+        self.0.iter()
+    }
+}
+
+impl From<Vec<ExternalMediaId>> for MultiExternalMediaId {
+    fn from(value: Vec<ExternalMediaId>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<MultiExternalMediaId> for Vec<ExternalMediaId> {
+    fn from(value: MultiExternalMediaId) -> Self {
+        value.0
+    }
+}
+
+impl From<ExternalMediaId> for MultiExternalMediaId {
+    fn from(value: ExternalMediaId) -> Self {
+        Self::from(vec![value])
+    }
+}
+
+impl<'a> IntoIterator for &'a MultiExternalMediaId {
+    type Item = &'a ExternalMediaId;
+
+    type IntoIter = <&'a Vec<ExternalMediaId> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.0).into_iter()
+    }
+}
+
+impl IntoIterator for MultiExternalMediaId {
+    type Item = ExternalMediaId;
+
+    type IntoIter = <Vec<ExternalMediaId> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct SonarExternalService {
     priority: u32,
@@ -161,8 +232,12 @@ impl SonarExternalService {
         &self.identifier
     }
 
-    pub async fn validate_id(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
-        self.service.validate_id(id).await
+    pub async fn expand(&self, ids: MultiExternalMediaId) -> MultiExternalMediaId {
+        self.service.expand(ids).await
+    }
+
+    pub async fn probe(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
+        self.service.probe(id).await
     }
 
     pub async fn fetch_artist(&self, id: &ExternalMediaId) -> Result<ExternalArtist> {
