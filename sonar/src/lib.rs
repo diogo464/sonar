@@ -80,7 +80,7 @@ pub use property::{
 pub use scrobble::{Scrobble, ScrobbleCreate, ScrobbleUpdate};
 pub use scrobbler::Scrobbler;
 pub use search::{SearchFlags, SearchQuery, SearchResult};
-pub use subscription::{Subscription, SubscriptionCreate};
+pub use subscription::{Subscription, SubscriptionCreate, SubscriptionMediaType};
 pub use track::{
     Lyrics, LyricsKind, LyricsLine, Track, TrackCreate, TrackListRandom, TrackLyrics, TrackUpdate,
 };

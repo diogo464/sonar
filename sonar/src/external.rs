@@ -26,6 +26,7 @@ pub enum ExternalMediaType {
     Track,
     Playlist,
     Compilation,
+    Group,
 }
 
 #[derive(Clone)]
@@ -170,6 +171,9 @@ pub trait ExternalService: Send + Sync + 'static {
     async fn fetch_compilation(&self, id: &ExternalMediaId) -> Result<ExternalCompilation> {
         Err(Error::new(ErrorKind::Invalid, "not supported"))
     }
+    async fn fetch_group(&self, id: &ExternalMediaId) -> Result<Vec<ExternalMediaId>> {
+        Err(Error::new(ErrorKind::Invalid, "not supported"))
+    }
     async fn download_track(&self, id: &ExternalMediaId) -> Result<ByteStream> {
         Err(Error::new(ErrorKind::Invalid, "not supported"))
     }
@@ -259,6 +263,7 @@ impl std::fmt::Display for ExternalMediaType {
             Self::Track => write!(f, "track"),
             Self::Playlist => write!(f, "playlist"),
             Self::Compilation => write!(f, "compilation"),
+            Self::Group => write!(f, "group"),
         }
     }
 }

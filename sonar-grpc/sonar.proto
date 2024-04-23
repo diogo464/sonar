@@ -531,13 +531,13 @@ message SubscriptionListResponse {
 message SubscriptionCreateRequest {
 	string user_id = 1;
 	google.protobuf.Duration interval = 2;
-	string description = 3;
-	string artist = 4;
-	string album = 5;
-	string track = 6;
-	string playlist = 7;
-	string external_id = 8;
-	string media_type = 9;
+	optional string description = 3;
+	optional string artist = 4;
+	optional string album = 5;
+	optional string track = 6;
+	optional string playlist = 7;
+	optional string external_id = 8;
+	optional string media_type = 9;
 }
 
 message SubscriptionDeleteRequest {

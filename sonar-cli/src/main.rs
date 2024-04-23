@@ -10,6 +10,7 @@ use std::{
 use clap::Parser;
 use eyre::{Context, Result};
 use lofty::{Accessor, TagExt, TaggedFileExt};
+use prost_types::Duration;
 use serde::Serialize;
 use sonar::{Genres, Properties};
 use sonar_listenbrainz::ListenBrainzService;
@@ -1855,7 +1856,22 @@ async fn cmd_subscription_list(_args: SubscriptionListArgs) -> Result<()> {
 
 #[derive(Debug, Parser)]
 struct SubscriptionCreateArgs {
-    external_id: String,
+    #[clap(long)]
+    interval: Option<u32>,
+    #[clap(long)]
+    description: Option<String>,
+    #[clap(long)]
+    artist: Option<String>,
+    #[clap(long)]
+    album: Option<String>,
+    #[clap(long)]
+    track: Option<String>,
+    #[clap(long)]
+    playlist: Option<String>,
+    #[clap(long)]
+    external_id: Option<String>,
+    #[clap(long)]
+    media_type: Option<String>,
 }
 
 async fn cmd_subscription_create(args: SubscriptionCreateArgs) -> Result<()> {
@@ -1864,8 +1880,17 @@ async fn cmd_subscription_create(args: SubscriptionCreateArgs) -> Result<()> {
     client
         .subscription_create(sonar_grpc::SubscriptionCreateRequest {
             user_id,
+            interval: args.interval.map(|s| Duration {
+                seconds: s as i64,
+                nanos: 0,
+            }),
+            description: args.description,
+            artist: args.artist,
+            album: args.album,
+            track: args.track,
+            playlist: args.playlist,
             external_id: args.external_id,
-            ..Default::default()
+            media_type: args.media_type,
         })
         .await?;
     Ok(())

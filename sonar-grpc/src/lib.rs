@@ -862,14 +862,23 @@ impl sonar_service_server::SonarService for Server {
             &self.context,
             sonar::SubscriptionCreate {
                 user: user_id,
-                external_id: Some(req.external_id),
-                interval: None,
-                description: None,
-                artist: None,
-                album: None,
-                track: None,
-                playlist: None,
-                media_type: None,
+                external_id: req.external_id,
+                interval: req.interval.map(|d| TryFrom::try_from(d).unwrap()),
+                description: req.description,
+                artist: req.artist,
+                album: req.album,
+                track: req.track,
+                playlist: req.playlist,
+                media_type: match req.media_type {
+                    Some(media_type) => match media_type.as_str() {
+                        "artist" => Some(sonar::SubscriptionMediaType::Artist),
+                        "album" => Some(sonar::SubscriptionMediaType::Album),
+                        "track" => Some(sonar::SubscriptionMediaType::Track),
+                        "playlist" => Some(sonar::SubscriptionMediaType::Playlist),
+                        _ => return Err(tonic::Status::invalid_argument("invalid media type")),
+                    },
+                    None => None,
+                },
             },
         )
         .await

@@ -277,8 +277,11 @@ impl sonar::ExternalService for ListenBrainzService {
         request: &ExternalMediaRequest,
     ) -> Result<(ExternalMediaType, ExternalMediaId)> {
         for id in &request.external_ids {
-            if id.as_str().starts_with("listenbrainz:playlist:") {
+            if id.as_str().starts_with("listenbrainz:playlist") {
                 return Ok((ExternalMediaType::Compilation, id.clone()));
+            }
+            if id.as_str().starts_with("listenbrainz:createdfor") {
+                return Ok((ExternalMediaType::Group, id.clone()));
             }
         }
         Err(Error::new(ErrorKind::Internal, "no valid id exists"))
@@ -334,6 +337,56 @@ impl sonar::ExternalService for ListenBrainzService {
             tracks,
             properties: Default::default(),
         })
+    }
+
+    async fn fetch_group(&self, id: &ExternalMediaId) -> Result<Vec<ExternalMediaId>> {
+        #[derive(Deserialize)]
+        struct Response {
+            playlists: Vec<ResponsePlaylist>,
+        }
+
+        #[derive(Deserialize)]
+        struct ResponsePlaylist {
+            playlist: ResponsePlaylistPlaylist,
+        }
+
+        #[derive(Deserialize)]
+        struct ResponsePlaylistPlaylist {
+            identifier: String,
+        }
+
+        let listenbrainz_user = id
+            .as_str()
+            .strip_prefix("listenbrainz:createdfor:")
+            .ok_or_else(|| Error::new(ErrorKind::Invalid, "invalid listenbrainz group id"))?;
+
+        let url =
+            format!("https://api.listenbrainz.org/1/user/{listenbrainz_user}/playlists/createdfor");
+
+        let response: Response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(Error::wrap)?
+            .json()
+            .await
+            .map_err(Error::wrap)?;
+
+        let mut external_ids = Vec::new();
+        for playlist in response.playlists {
+            if let Some(playlist_id) = playlist
+                .playlist
+                .identifier
+                .strip_prefix("https://listenbrainz.org/playlist/")
+            {
+                external_ids.push(ExternalMediaId::new(format!(
+                    "listenbrainz:playlist:{playlist_id}"
+                )));
+            }
+        }
+
+        Ok(external_ids)
     }
 }
 

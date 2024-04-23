@@ -154,6 +154,21 @@ pub async fn download(
             playlist::insert_tracks(&mut tx, playlist.id, &tracks).await?;
             tx.commit().await?;
         }
+        ExternalMediaType::Group => {
+            let external_group = service.fetch_group(&external_id).await?;
+            tracing::debug!("expanded group {external_id} to {external_group:#?}");
+            for group_item in external_group {
+                let item_request = ExternalMediaRequest {
+                    external_ids: vec![group_item],
+                    ..Default::default()
+                };
+                if let Err(err) =
+                    Box::pin(download(db, services, storage, user_id, item_request)).await
+                {
+                    tracing::warn!("failed to download group item: {}", err);
+                }
+            }
+        }
     }
     Ok(())
 }
