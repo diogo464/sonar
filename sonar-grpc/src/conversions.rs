@@ -182,6 +182,7 @@ impl TryFrom<PlaylistCreateRequest> for sonar::PlaylistCreate {
             name: value.name,
             owner,
             tracks,
+            cover_art: None,
             properties,
         })
     }
@@ -194,6 +195,7 @@ impl TryFrom<PlaylistUpdateRequest> for (sonar::PlaylistId, sonar::PlaylistUpdat
         let playlist_id = value.playlist_id.parse::<sonar::PlaylistId>().m()?;
         let update = sonar::PlaylistUpdate {
             name: sonar::ValueUpdate::from_option_unchanged(value.name),
+            cover_art: sonar::ValueUpdate::Unchanged,
             properties: convert_property_updates_from_pb(value.properties)?,
         };
         Ok((playlist_id, update))

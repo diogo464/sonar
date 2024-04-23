@@ -867,6 +867,7 @@ impl OpenSubsonicServer for Server {
                     name: playlist_name,
                     owner: user_id,
                     tracks: track_ids,
+                    cover_art: None,
                     properties: Default::default(),
                 },
             )
@@ -1165,7 +1166,7 @@ fn playlist_from_playlist(playlist: sonar::Playlist) -> Playlist {
         duration: Seconds::from(playlist.duration),
         created: Default::default(),
         changed: Default::default(),
-        cover_art: None,
+        cover_art: playlist.cover_art.map(|id| id.to_string()),
         allowed_user: Default::default(),
     }
 }

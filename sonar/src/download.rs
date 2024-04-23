@@ -111,6 +111,7 @@ pub async fn download(
             .await?;
 
             let mut tx = db.begin().await?;
+            playlist::clear_cover(&mut tx, playlist.id).await?;
             playlist::clear_tracks(&mut tx, playlist.id).await?;
             playlist::insert_tracks(&mut tx, playlist.id, &tracks).await?;
             tx.commit().await?;
@@ -783,6 +784,7 @@ async fn find_or_create_playlist(
         name: name.to_string(),
         owner: user_id,
         tracks: Vec::new(),
+        cover_art: None,
         properties: properties.clone(),
     };
     let playlist = playlist::find_or_create_by_name_tx(db, create).await?;

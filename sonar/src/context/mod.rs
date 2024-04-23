@@ -44,6 +44,7 @@ use crate::{
 mod memory_indexes;
 use memory_indexes::*;
 
+mod playlist_cover_process;
 mod scrobbler_process;
 mod subscription_process;
 
@@ -267,6 +268,11 @@ pub async fn new(config: Config) -> Result<Context> {
     tokio::spawn({
         let context = context.clone();
         async move { subscription_process::run(&context).await }
+    });
+
+    tokio::spawn({
+        let context = context.clone();
+        async move { playlist_cover_process::run(&context).await }
     });
 
     tokio::spawn({
@@ -857,6 +863,14 @@ pub async fn playlist_remove_tracks(
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
     playlist::remove_tracks(&mut tx, id, tracks).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn playlist_generate_cover(context: &Context, id: PlaylistId) -> Result<()> {
+    let mut tx = context.db.begin().await?;
+    playlist::generate_cover(&mut tx, &*context.storage, id).await?;
     tx.commit().await?;
     Ok(())
 }
