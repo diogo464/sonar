@@ -13,8 +13,8 @@ use crate::{
     blob::{self, BlobStorage},
     bytestream,
     db::Db,
-    download::DownloadController,
-    external::{ExternalService, SonarExternalService},
+    download,
+    external::{ExternalService, ExternalServices, ExternalServicesEntry},
     extractor::{Extractor, SonarExtractor},
     favorite, gc,
     genre::GenreStats,
@@ -27,17 +27,17 @@ use crate::{
     migrations, pin, playlist, property, scrobble,
     scrobbler::{self, SonarScrobbler},
     search::{BuiltInSearchEngine, MeiliSearchEngine, SearchEngine, SearchResults},
-    subscription::SubscriptionController,
+    subscription,
     track::{self, TrackListRandom},
     user, Album, AlbumCreate, AlbumId, AlbumUpdate, Artist, ArtistCreate, ArtistId, ArtistMetadata,
     ArtistMetadataRequest, ArtistUpdate, Audio, AudioCreate, AudioDownload, AudioId, AudioStat,
-    ByteRange, Download, DownloadCreate, DownloadDelete, Error, ErrorKind, Favorite, Genre, Genres,
+    ByteRange, Error, ErrorKind, ExternalMediaRequest, ExternalMediaType, Favorite, Genre, Genres,
     ImageCreate, ImageDownload, ImageId, Import, ListParams, Lyrics, MetadataFetchMask,
     MetadataFetchParams, Playlist, PlaylistCreate, PlaylistId, PlaylistTrack, PlaylistUpdate,
     Properties, PropertyKey, PropertyUpdate, Result, Scrobble, ScrobbleCreate, ScrobbleId,
-    ScrobbleUpdate, SearchQuery, SonarId, Subscription, SubscriptionCreate, SubscriptionDelete,
-    Track, TrackCreate, TrackId, TrackMetadata, TrackMetadataRequest, TrackUpdate, User,
-    UserCreate, UserId, UserToken, UserUpdate, Username, ValueUpdate, METADATA_FETCH_MASK_COVER,
+    ScrobbleUpdate, SearchQuery, SonarId, Subscription, SubscriptionCreate, SubscriptionId, Track,
+    TrackCreate, TrackId, TrackMetadata, TrackMetadataRequest, TrackUpdate, User, UserCreate,
+    UserId, UserToken, UserUpdate, Username, ValueUpdate, METADATA_FETCH_MASK_COVER,
     METADATA_FETCH_MASK_GENRES, METADATA_FETCH_MASK_NAME, METADATA_FETCH_MASK_PROPERTIES,
 };
 
@@ -45,6 +45,7 @@ mod memory_indexes;
 use memory_indexes::*;
 
 mod scrobbler_process;
+mod subscription_process;
 
 #[derive(Debug, Default, Clone)]
 pub enum StorageBackend {
@@ -73,7 +74,7 @@ pub struct Config {
     extractors: Vec<SonarExtractor>,
     scrobblers: Vec<SonarScrobbler>,
     providers: Vec<SonarMetadataProvider>,
-    external: Vec<SonarExternalService>,
+    external: Vec<ExternalServicesEntry>,
     max_import_size: usize,
     max_parallel_imports: usize,
 }
@@ -171,14 +172,17 @@ impl Config {
         service: impl ExternalService,
     ) -> Result<()> {
         let name = name.into();
-        if self.external.iter().any(|s| s.identifier() == name) {
+        if self.external.iter().any(|s| s.identifier == name) {
             return Err(Error::new(
                 ErrorKind::Invalid,
                 "external service already registered",
             ));
         }
-        self.external
-            .push(SonarExternalService::new(priority, name, service));
+        self.external.push(ExternalServicesEntry {
+            identifier: name,
+            service: Box::new(service),
+            priority,
+        });
         Ok(())
     }
 }
@@ -193,9 +197,7 @@ pub struct Context {
     extractors: Arc<Vec<SonarExtractor>>,
     scrobblers: Arc<Vec<SonarScrobbler>>,
     providers: Arc<Vec<SonarMetadataProvider>>,
-    external: Arc<Vec<SonarExternalService>>,
-    downloads: DownloadController,
-    subscriptions: SubscriptionController,
+    external: ExternalServices,
     scrobbler_notify: Arc<Notify>,
     memory_indexes: Arc<Mutex<MemoryIndexes>>,
 }
@@ -229,8 +231,6 @@ pub async fn new(config: Config) -> Result<Context> {
         max_concurrent_imports: config.max_parallel_imports,
     });
 
-    let downloads = DownloadController::new(db.clone(), storage.clone(), config.external.clone());
-
     let search_engine = match config.search_backend {
         SearchBackend::BuiltIn => {
             Arc::new(BuiltInSearchEngine::new(db.clone())) as Arc<dyn SearchEngine>
@@ -241,9 +241,6 @@ pub async fn new(config: Config) -> Result<Context> {
         }
     };
 
-    let subscriptions =
-        SubscriptionController::new(db.clone(), config.external.clone(), downloads.clone()).await;
-
     let context = Context {
         db,
         tokens: Default::default(),
@@ -253,9 +250,7 @@ pub async fn new(config: Config) -> Result<Context> {
         extractors: Arc::new(config.extractors),
         scrobblers: Arc::new(config.scrobblers),
         providers: Arc::new(config.providers),
-        external: Arc::new(config.external),
-        downloads,
-        subscriptions,
+        external: ExternalServices::new(config.external),
         scrobbler_notify: Arc::new(Notify::new()),
         memory_indexes: Default::default(),
     };
@@ -268,6 +263,11 @@ pub async fn new(config: Config) -> Result<Context> {
             context.scrobbler_notify.clone(),
         ));
     }
+
+    tokio::spawn({
+        let context = context.clone();
+        async move { subscription_process::run(&context).await }
+    });
 
     tokio::spawn({
         let context = context.clone();
@@ -1014,55 +1014,110 @@ pub async fn pin_unset(context: &Context, user_id: UserId, id: SonarId) -> Resul
 
 #[tracing::instrument(skip(context))]
 pub async fn external_service_list(context: &Context) -> Result<Vec<String>> {
-    Ok(context
-        .external
-        .iter()
-        .map(|s| s.identifier().to_string())
-        .collect())
+    todo!()
+    // Ok(context
+    //     .external
+    //     .iter()
+    //     .map(|s| s.identifier().to_string())
+    //     .collect())
 }
 
 #[tracing::instrument(skip(context))]
 pub async fn subscription_list(context: &Context, user_id: UserId) -> Result<Vec<Subscription>> {
-    context.subscriptions.list(user_id).await
+    let mut conn = context.db.acquire().await?;
+    let subscription = subscription::list(&mut conn, user_id, Default::default()).await?;
+    Ok(subscription)
 }
 
 #[tracing::instrument(skip(context))]
-pub async fn subscription_create(context: &Context, create: SubscriptionCreate) -> Result<()> {
-    context.subscriptions.create(create.clone()).await?;
-    context
-        .downloads
-        .request(create.user, create.external_id)
-        .await;
+pub async fn subscription_list_all(context: &Context) -> Result<Vec<Subscription>> {
+    let mut conn = context.db.acquire().await?;
+    let subscription = subscription::list_all(&mut conn, Default::default()).await?;
+    Ok(subscription)
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn subscription_create(
+    context: &Context,
+    create: SubscriptionCreate,
+) -> Result<Subscription> {
+    let mut tx = context.db.begin().await?;
+    let subscription = subscription::create(&mut tx, create).await?;
+    tx.commit().await?;
+    subscription_submit(context, subscription.id).await?;
+    Ok(subscription)
+}
+
+#[tracing::instrument(skip(context))]
+pub async fn subscription_delete(context: &Context, subscription_id: SubscriptionId) -> Result<()> {
+    let mut tx = context.db.begin().await?;
+    subscription::remove(&mut tx, subscription_id).await?;
+    tx.commit().await?;
     Ok(())
 }
 
 #[tracing::instrument(skip(context))]
-pub async fn subscription_delete(context: &Context, delete: SubscriptionDelete) -> Result<()> {
-    context.subscriptions.delete(delete).await
-}
+pub async fn subscription_submit(context: &Context, subscription_id: SubscriptionId) -> Result<()> {
+    let sub = {
+        let mut tx = context.db.begin().await?;
+        subscription::update_last_submitted_to_now(&mut tx, subscription_id).await?;
+        let sub = subscription::get(&mut tx, subscription_id).await?;
+        tx.commit().await?;
+        sub
+    };
 
-#[tracing::instrument(skip(context))]
-pub async fn download_list(context: &Context, user_id: UserId) -> Result<Vec<Download>> {
-    Ok(context.downloads.list(user_id))
-}
+    tokio::spawn({
+        let db = context.db.clone();
+        let services = context.external.clone();
+        let storage = context.storage.clone();
+        let request = ExternalMediaRequest {
+            artist: sub.artist,
+            album: sub.album,
+            track: sub.track,
+            playlist: sub.playlist,
+            duration: None,
+            media_type: sub.media_type.map(|t| match t {
+                subscription::SubscriptionMediaType::Artist => ExternalMediaType::Artist,
+                subscription::SubscriptionMediaType::Album => ExternalMediaType::Album,
+                subscription::SubscriptionMediaType::Track => ExternalMediaType::Track,
+                subscription::SubscriptionMediaType::Playlist => ExternalMediaType::Playlist,
+            }),
+            external_ids: sub.external_id.into_iter().map(From::from).collect(),
+        };
 
-#[tracing::instrument(skip(context))]
-pub async fn download_request(context: &Context, request: DownloadCreate) -> Result<()> {
-    context
-        .downloads
-        .request(request.user_id, request.external_id)
-        .await;
+        async move {
+            if let Err(err) = download::download(&db, &services, &*storage, sub.user, request).await
+            {
+                tracing::error!("failed to download {}: {}", sub.id, err);
+            }
+        }
+    });
+
     Ok(())
 }
 
-#[tracing::instrument(skip(context))]
-pub async fn download_delete(context: &Context, delete: DownloadDelete) -> Result<()> {
-    context
-        .downloads
-        .delete(delete.user_id, delete.external_id)
-        .await;
-    Ok(())
-}
+// #[tracing::instrument(skip(context))]
+// pub async fn download_list(context: &Context, user_id: UserId) -> Result<Vec<Download>> {
+//     Ok(context.downloads.list(user_id))
+// }
+//
+// #[tracing::instrument(skip(context))]
+// pub async fn download_request(context: &Context, request: DownloadCreate) -> Result<()> {
+//     context
+//         .downloads
+//         .request(request.user_id, request.external_id)
+//         .await;
+//     Ok(())
+// }
+//
+// #[tracing::instrument(skip(context))]
+// pub async fn download_delete(context: &Context, delete: DownloadDelete) -> Result<()> {
+//     context
+//         .downloads
+//         .delete(delete.user_id, delete.external_id)
+//         .await;
+//     Ok(())
+// }
 
 #[tracing::instrument(skip(context))]
 pub async fn garbage_collection_candidates(context: &Context) -> Result<Vec<SonarId>> {

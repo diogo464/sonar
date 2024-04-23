@@ -2,8 +2,9 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use sonar::{
-    bytestream::ByteStream, Error, ErrorKind, ExternalAlbum, ExternalArtist, ExternalMediaId,
-    ExternalMediaType, ExternalPlaylist, ExternalTrack, Result,
+    Error, ErrorKind, ExternalAlbum, ExternalArtist, ExternalCompilation, ExternalCompilationTrack,
+    ExternalMediaEnrichStatus, ExternalMediaId, ExternalMediaRequest, ExternalMediaType,
+    ExternalPlaylist, ExternalTrack, Result,
 };
 
 #[derive(Debug, Clone)]
@@ -262,45 +263,77 @@ pub struct ListenBrainzService {
 
 #[sonar::async_trait]
 impl sonar::ExternalService for ListenBrainzService {
-    async fn probe(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
-        if id.as_str().starts_with("listenbrainz:playlist:") {
-            return Ok(ExternalMediaType::Playlist);
+    #[tracing::instrument(skip(self))]
+    async fn enrich(
+        &self,
+        request: &mut ExternalMediaRequest,
+    ) -> Result<ExternalMediaEnrichStatus> {
+        Ok(ExternalMediaEnrichStatus::NotModified)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn extract(
+        &self,
+        request: &ExternalMediaRequest,
+    ) -> Result<(ExternalMediaType, ExternalMediaId)> {
+        for id in &request.external_ids {
+            if id.as_str().starts_with("listenbrainz:playlist:") {
+                return Ok((ExternalMediaType::Compilation, id.clone()));
+            }
         }
-        Err(Error::new(ErrorKind::Invalid, "invalid listenbrainz id"))
+        Err(Error::new(ErrorKind::Internal, "no valid id exists"))
     }
-    async fn fetch_artist(&self, _id: &ExternalMediaId) -> Result<ExternalArtist> {
-        Err(Error::new(
-            ErrorKind::Invalid,
-            "listenbrainz service does not support fetching artists",
-        ))
-    }
-    async fn fetch_album(&self, _id: &ExternalMediaId) -> Result<ExternalAlbum> {
-        Err(Error::new(
-            ErrorKind::Invalid,
-            "listenbrainz service does not support fetching albums",
-        ))
-    }
-    async fn fetch_track(&self, _id: &ExternalMediaId) -> Result<ExternalTrack> {
-        Err(Error::new(
-            ErrorKind::Invalid,
-            "listenbrainz service does not support fetching tracks",
-        ))
-    }
-    async fn fetch_playlist(&self, id: &ExternalMediaId) -> Result<ExternalPlaylist> {
-        let playist_id = id
+
+    async fn fetch_compilation(&self, id: &ExternalMediaId) -> Result<ExternalCompilation> {
+        #[derive(Deserialize)]
+        struct Response {
+            playlist: ResponsePlaylist,
+        }
+
+        #[derive(Deserialize)]
+        struct ResponsePlaylist {
+            title: String,
+            track: Vec<ResponsePlaylistTrack>,
+        }
+
+        #[derive(Deserialize)]
+        struct ResponsePlaylistTrack {
+            album: String,
+            creator: String,
+            title: String,
+        }
+
+        let playlist_id = id
             .as_str()
             .strip_prefix("listenbrainz:playlist:")
             .ok_or_else(|| Error::new(ErrorKind::Invalid, "invalid listenbrainz playlist id"))?;
 
         let url = format!("https://api.listenbrainz.org/1/playlist/{playlist_id}");
+        let response: Response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(Error::wrap)?
+            .json()
+            .await
+            .map_err(Error::wrap)?;
 
-        todo!()
-    }
-    async fn download_track(&self, _id: &ExternalMediaId) -> Result<ByteStream> {
-        Err(Error::new(
-            ErrorKind::Invalid,
-            "listenbrainz service does not support downloading tracks",
-        ))
+        let name = response.playlist.title;
+        let mut tracks = Vec::with_capacity(response.playlist.track.len());
+        for track in response.playlist.track {
+            tracks.push(ExternalCompilationTrack {
+                artist: track.creator,
+                album: track.album,
+                track: track.title,
+            });
+        }
+
+        Ok(ExternalCompilation {
+            name,
+            tracks,
+            properties: Default::default(),
+        })
     }
 }
 

@@ -297,22 +297,31 @@ impl TryFrom<SearchRequest> for (sonar::UserId, sonar::SearchQuery) {
 impl From<sonar::Subscription> for Subscription {
     fn from(value: sonar::Subscription) -> Self {
         Self {
+            id: value.id.to_string(),
             user_id: value.user.to_string(),
-            external_id: value.external_id.to_string(),
+            created_at: Some(convert_timestamp_to_pb(value.created_at)),
+            last_submitted: value.last_submitted.map(convert_timestamp_to_pb),
+            interval: value.interval.map(|v| TryFrom::try_from(v).unwrap()),
             description: value.description.unwrap_or_default(),
+            artist: value.artist.unwrap_or_default(),
+            album: value.album.unwrap_or_default(),
+            track: value.track.unwrap_or_default(),
+            playlist: value.playlist.unwrap_or_default(),
+            external_id: value.external_id.unwrap_or_default(),
+            media_type: value.media_type.map(|v| v.to_string()).unwrap_or_default(),
         }
     }
 }
 
-impl From<sonar::Download> for Download {
-    fn from(value: sonar::Download) -> Self {
-        Self {
-            user_id: value.user_id.to_string(),
-            external_id: value.external_id.to_string(),
-            description: value.description,
-        }
-    }
-}
+// impl From<sonar::Download> for Download {
+//     fn from(value: sonar::Download) -> Self {
+//         Self {
+//             user_id: value.user_id.to_string(),
+//             external_id: value.external_id.to_string(),
+//             description: value.description,
+//         }
+//     }
+// }
 
 impl From<sonar::TrackMetadata> for TrackMetadata {
     fn from(value: sonar::TrackMetadata) -> Self {

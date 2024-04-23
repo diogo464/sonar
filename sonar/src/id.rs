@@ -12,6 +12,7 @@ pub(crate) const ID_NAMESPACE_IMAGE: u32 = 6;
 pub(crate) const ID_NAMESPACE_USER: u32 = 7;
 pub(crate) const ID_NAMESPACE_LYRICS: u32 = 8;
 pub(crate) const ID_NAMESPACE_SCROBBLE: u32 = 9;
+pub(crate) const ID_NAMESPACE_SUBSCRIPTION: u32 = 10;
 
 const ID_NAMESPACE_ARTIST_STR: &str = "artist";
 const ID_NAMESPACE_ALBUM_STR: &str = "album";
@@ -22,6 +23,7 @@ const ID_NAMESPACE_IMAGE_STR: &str = "image";
 const ID_NAMESPACE_USER_STR: &str = "user";
 const ID_NAMESPACE_LYRICS_STR: &str = "lyrics";
 const ID_NAMESPACE_SCROBBLE_STR: &str = "scrobble";
+const ID_NAMESPACE_SUBSCRIPTION_STR: &str = "subscription";
 
 #[derive(Debug)]
 pub struct InvalidIdError {
@@ -166,6 +168,7 @@ macro_rules! impl_id {
     };
 }
 
+// TODO: replace hardcoded strings
 impl_id!(ArtistId, Artist, "artist", ID_NAMESPACE_ARTIST);
 impl_id!(AlbumId, Album, "album", ID_NAMESPACE_ALBUM);
 impl_id!(TrackId, Track, "track", ID_NAMESPACE_TRACK);
@@ -175,6 +178,12 @@ impl_id!(ImageId, Image, "image", ID_NAMESPACE_IMAGE);
 impl_id!(UserId, User, "user", ID_NAMESPACE_USER);
 impl_id!(LyricsId, Lyrics, "lyrics", ID_NAMESPACE_LYRICS);
 impl_id!(ScrobbleId, Scrobble, "scrobble", ID_NAMESPACE_SCROBBLE);
+impl_id!(
+    SubscriptionId,
+    Subscription,
+    "subscription",
+    ID_NAMESPACE_SUBSCRIPTION
+);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SonarId {
@@ -187,6 +196,7 @@ pub enum SonarId {
     User(UserId),
     Lyrics(LyricsId),
     Scrobble(ScrobbleId),
+    Subscription(SubscriptionId),
 }
 
 impl std::fmt::Display for SonarId {
@@ -203,6 +213,7 @@ impl std::fmt::Display for SonarId {
             ID_NAMESPACE_USER => write!(f, "{}", ID_NAMESPACE_USER_STR)?,
             ID_NAMESPACE_LYRICS => write!(f, "{}", ID_NAMESPACE_LYRICS_STR)?,
             ID_NAMESPACE_SCROBBLE => write!(f, "{}", ID_NAMESPACE_SCROBBLE_STR)?,
+            ID_NAMESPACE_SUBSCRIPTION => write!(f, "{}", ID_NAMESPACE_SUBSCRIPTION_STR)?,
             _ => unreachable!(),
         };
         write!(f, ":{:x}", id)
@@ -229,6 +240,7 @@ impl TryFrom<u32> for SonarId {
             ID_NAMESPACE_USER => Ok(Self::User(UserId::try_from(id)?)),
             ID_NAMESPACE_LYRICS => Ok(Self::Lyrics(LyricsId::try_from(id)?)),
             ID_NAMESPACE_SCROBBLE => Ok(Self::Scrobble(ScrobbleId::try_from(id)?)),
+            ID_NAMESPACE_SUBSCRIPTION => Ok(Self::Subscription(SubscriptionId::try_from(id)?)),
             _ => Err(InvalidIdError::new(id, "unknown ID type")),
         }
     }
@@ -246,6 +258,7 @@ impl From<SonarId> for u32 {
             SonarId::User(id) => id.into(),
             SonarId::Lyrics(id) => id.into(),
             SonarId::Scrobble(id) => id.into(),
+            SonarId::Subscription(id) => id.into(),
         }
     }
 }
@@ -282,6 +295,7 @@ impl FromStr for SonarId {
             ID_NAMESPACE_USER_STR => Ok(Self::User(UserId::try_from(id)?)),
             ID_NAMESPACE_LYRICS_STR => Ok(Self::Lyrics(LyricsId::try_from(id)?)),
             ID_NAMESPACE_SCROBBLE_STR => Ok(Self::Scrobble(ScrobbleId::try_from(id)?)),
+            ID_NAMESPACE_SUBSCRIPTION_STR => Ok(Self::Subscription(SubscriptionId::try_from(id)?)),
             _ => Err(InvalidIdError::new(id, "unknown ID type")),
         }
     }
@@ -299,6 +313,7 @@ impl SonarIdentifier for SonarId {
             SonarId::User(id) => id.name(),
             SonarId::Lyrics(id) => id.name(),
             SonarId::Scrobble(id) => id.name(),
+            SonarId::Subscription(id) => id.name(),
         }
     }
 
@@ -313,6 +328,7 @@ impl SonarIdentifier for SonarId {
             SonarId::User(id) => id.namespace(),
             SonarId::Lyrics(id) => id.namespace(),
             SonarId::Scrobble(id) => id.namespace(),
+            SonarId::Subscription(id) => id.namespace(),
         }
     }
 
@@ -327,6 +343,7 @@ impl SonarIdentifier for SonarId {
             SonarId::User(id) => id.identifier(),
             SonarId::Lyrics(id) => id.identifier(),
             SonarId::Scrobble(id) => id.identifier(),
+            SonarId::Subscription(id) => id.identifier(),
         }
     }
 }

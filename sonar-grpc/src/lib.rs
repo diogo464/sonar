@@ -858,12 +858,18 @@ impl sonar_service_server::SonarService for Server {
 
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
-        let external_id = sonar::ExternalMediaId::from(req.external_id);
         sonar::subscription_create(
             &self.context,
             sonar::SubscriptionCreate {
                 user: user_id,
-                external_id,
+                external_id: Some(req.external_id),
+                interval: None,
+                description: None,
+                artist: None,
+                album: None,
+                track: None,
+                playlist: None,
+                media_type: None,
             },
         )
         .await
@@ -875,19 +881,23 @@ impl sonar_service_server::SonarService for Server {
         request: tonic::Request<SubscriptionDeleteRequest>,
     ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
         self.require_admin(&request).await?;
-
         let req = request.into_inner();
-        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
-        let external_id = sonar::ExternalMediaId::from(req.external_id);
-        sonar::subscription_delete(
-            &self.context,
-            sonar::SubscriptionDelete {
-                user: user_id,
-                external_id,
-            },
-        )
-        .await
-        .m()?;
+        let subscription_id = req.id.parse::<sonar::SubscriptionId>().m()?;
+        sonar::subscription_delete(&self.context, subscription_id)
+            .await
+            .m()?;
+        Ok(tonic::Response::new(()))
+    }
+    async fn subscription_submit(
+        &self,
+        request: tonic::Request<SubscriptionSubmitRequest>,
+    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+        self.require_admin(&request).await?;
+        let req = request.into_inner();
+        let subscription_id = req.id.parse::<sonar::SubscriptionId>().m()?;
+        sonar::subscription_submit(&self.context, subscription_id)
+            .await
+            .m()?;
         Ok(tonic::Response::new(()))
     }
     async fn download_list(
@@ -898,9 +908,10 @@ impl sonar_service_server::SonarService for Server {
 
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
-        let downloads = sonar::download_list(&self.context, user_id).await.m()?;
-        let downloads = downloads.into_iter().map(Into::into).collect();
-        Ok(tonic::Response::new(DownloadListResponse { downloads }))
+        todo!()
+        // let downloads = sonar::download_list(&self.context, user_id).await.m()?;
+        // let downloads = downloads.into_iter().map(Into::into).collect();
+        // Ok(tonic::Response::new(DownloadListResponse { downloads }))
     }
     async fn download_start(
         &self,
@@ -910,17 +921,18 @@ impl sonar_service_server::SonarService for Server {
 
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
-        let external_id = sonar::ExternalMediaId::from(req.external_id);
-        sonar::download_request(
-            &self.context,
-            sonar::DownloadCreate {
-                user_id,
-                external_id,
-            },
-        )
-        .await
-        .m()?;
-        Ok(tonic::Response::new(()))
+        todo!()
+        // let external_id = sonar::ExternalMediaId::from(req.external_id);
+        // sonar::download_request(
+        //     &self.context,
+        //     sonar::DownloadCreate {
+        //         user_id,
+        //         external_id,
+        //     },
+        // )
+        // .await
+        // .m()?;
+        // Ok(tonic::Response::new(()))
     }
     async fn download_cancel(
         &self,
@@ -930,17 +942,18 @@ impl sonar_service_server::SonarService for Server {
 
         let req = request.into_inner();
         let user_id = req.user_id.parse::<sonar::UserId>().m()?;
-        let external_id = sonar::ExternalMediaId::from(req.external_id);
-        sonar::download_delete(
-            &self.context,
-            sonar::DownloadDelete {
-                user_id,
-                external_id,
-            },
-        )
-        .await
-        .m()?;
-        Ok(tonic::Response::new(()))
+        todo!()
+        // let external_id = sonar::ExternalMediaId::from(req.external_id);
+        // sonar::download_delete(
+        //     &self.context,
+        //     sonar::DownloadDelete {
+        //         user_id,
+        //         external_id,
+        //     },
+        // )
+        // .await
+        // .m()?;
+        // Ok(tonic::Response::new(()))
     }
     async fn import(
         &self,

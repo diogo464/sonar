@@ -42,6 +42,12 @@ impl Timestamp {
         std::time::Duration::new(self.seconds, self.nanos)
     }
 
+    pub fn elapsed(&self) -> std::time::Duration {
+        let self_dur = self.as_duration();
+        let now_dur = Self::now().as_duration();
+        now_dur - self_dur
+    }
+
     pub fn now() -> Self {
         let now = std::time::SystemTime::now();
         let duration = now.duration_since(std::time::UNIX_EPOCH).unwrap();

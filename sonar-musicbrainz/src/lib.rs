@@ -1,7 +1,8 @@
 use serde::Deserialize;
 use sonar::{
-    bytestream::ByteStream, Error, ErrorKind, ExternalAlbum, ExternalArtist, ExternalMediaId,
-    ExternalMediaType, ExternalPlaylist, ExternalTrack, MultiExternalMediaId, Result,
+    bytestream::ByteStream, Error, ErrorKind, ExternalAlbum, ExternalArtist,
+    ExternalMediaEnrichStatus, ExternalMediaId, ExternalMediaRequest, ExternalMediaType,
+    ExternalPlaylist, ExternalTrack, MultiExternalMediaId, Result,
 };
 
 mod rate_limiter;
@@ -81,14 +82,19 @@ impl MusicBrainzService {
 
 #[sonar::async_trait]
 impl sonar::ExternalService for MusicBrainzService {
-    async fn expand(&self, ids: MultiExternalMediaId) -> MultiExternalMediaId {
-        self.expand_recording(ids).await
+    #[tracing::instrument(skip(self))]
+    async fn enrich(
+        &self,
+        request: &mut ExternalMediaRequest,
+    ) -> Result<ExternalMediaEnrichStatus> {
+        Ok(ExternalMediaEnrichStatus::NotModified)
     }
-    async fn probe(&self, _id: &ExternalMediaId) -> Result<ExternalMediaType> {
-        Err(Error::new(
-            ErrorKind::Invalid,
-            "musicbrainz service does not support probing",
-        ))
+    #[tracing::instrument(skip(self))]
+    async fn extract(
+        &self,
+        request: &ExternalMediaRequest,
+    ) -> Result<(ExternalMediaType, ExternalMediaId)> {
+        Err(Error::new(ErrorKind::Internal, "not implemented"))
     }
     async fn fetch_artist(&self, _id: &ExternalMediaId) -> Result<ExternalArtist> {
         Err(Error::new(

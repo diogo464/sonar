@@ -21,7 +21,7 @@ members = [
 strip = true
 opt-level = "z"
 
-[profile.dev.build-override]
+[profile.dev.package.scrypt]
 opt-level = 3
 
 [profile.dev]

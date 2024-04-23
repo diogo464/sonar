@@ -1,6 +1,7 @@
 use sonar::{
-    bytestream::ByteStream, ExternalAlbum, ExternalArtist, ExternalMediaId, ExternalMediaType,
-    ExternalPlaylist, ExternalTrack, Genre, Genres, Properties, PropertyKey, PropertyValue, Result,
+    bytestream::ByteStream, ExternalAlbum, ExternalArtist, ExternalMediaId, ExternalMediaRequest,
+    ExternalMediaType, ExternalPlaylist, ExternalTrack, Genre, Genres, Properties, PropertyKey,
+    PropertyValue, Result,
 };
 
 struct Service1;
@@ -14,19 +15,25 @@ const PROP_VAL1: &str = "val1";
 
 #[sonar::async_trait]
 impl sonar::ExternalService for Service1 {
-    async fn probe(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
-        if id.as_str() == SERVICE1_ID_ARTIST {
-            Ok(ExternalMediaType::Artist)
-        } else if id.as_str() == SERVICE1_ID_ALBUM {
-            Ok(ExternalMediaType::Album)
-        } else if id.as_str() == SERVICE1_ID_TRACK {
-            Ok(ExternalMediaType::Track)
-        } else {
-            Err(sonar::Error::new(
-                sonar::ErrorKind::Invalid,
-                "invalid external id",
-            ))
+    async fn extract(
+        &self,
+        request: &ExternalMediaRequest,
+    ) -> Result<(ExternalMediaType, ExternalMediaId)> {
+        for external_id in &request.external_ids {
+            if external_id.as_str() == SERVICE1_ID_ARTIST {
+                return Ok((ExternalMediaType::Artist, external_id.clone()));
+            }
+            if external_id.as_str() == SERVICE1_ID_ALBUM {
+                return Ok((ExternalMediaType::Album, external_id.clone()));
+            }
+            if external_id.as_str() == SERVICE1_ID_TRACK {
+                return Ok((ExternalMediaType::Track, external_id.clone()));
+            }
         }
+        Err(sonar::Error::new(
+            sonar::ErrorKind::Invalid,
+            "no valid external ids",
+        ))
     }
     async fn fetch_artist(&self, id: &ExternalMediaId) -> Result<ExternalArtist> {
         if id.as_str() != SERVICE1_ID_ARTIST {
@@ -105,11 +112,18 @@ async fn external_download_track() {
 
     let ctx = sonar::new(config).await.unwrap();
     let user = sonar::test::create_user(&ctx, "user").await;
-    sonar::download_request(
+    sonar::subscription_create(
         &ctx,
-        sonar::DownloadCreate {
-            user_id: user.id,
-            external_id: ExternalMediaId::new("service1:track:1"),
+        sonar::SubscriptionCreate {
+            user: user.id,
+            external_id: Some("service1:track:1".to_string()),
+            interval: None,
+            description: None,
+            artist: None,
+            album: None,
+            track: None,
+            playlist: None,
+            media_type: None,
         },
     )
     .await

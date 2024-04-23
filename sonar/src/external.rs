@@ -1,6 +1,8 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
-use crate::{async_trait, bytestream::ByteStream, Genres, Properties, Result, TrackLyrics};
+use crate::{
+    async_trait, bytestream::ByteStream, Error, ErrorKind, Genres, Properties, Result, TrackLyrics,
+};
 
 // requirements and use cases for an external service:
 // - we should be able to subscribe/unsubscribe to some type of external media.
@@ -23,6 +25,7 @@ pub enum ExternalMediaType {
     Album,
     Track,
     Playlist,
+    Compilation,
 }
 
 #[derive(Clone)]
@@ -73,26 +76,179 @@ pub struct ExternalPlaylist {
     pub properties: Properties,
 }
 
-#[async_trait]
-pub trait ExternalService: Send + Sync + 'static {
-    /// expand and format the given [`MultiExternalMediaId`].
-    /// example:
-    /// if the service is spotify and the [`MultiExternalMediaId`] contains a spotify url it should
-    /// transform it to a spotify uri
-    /// https://open.spotify.com/artist/762310PdDnwsDxAQxzQkfX?si=9dedf2e195404802 ->
-    /// spotify:artist:762310PdDnwsDxAQxzQkfX
-    ///
-    /// if the service is musicbrainz it could expand the [`MultiExternalMediaId`] with ids from
-    /// other platforms like spotify. these ids are under 'External Links' on the website.
-    async fn expand(&self, ids: MultiExternalMediaId) -> MultiExternalMediaId {
-        ids
+#[derive(Debug, Clone)]
+pub struct ExternalCompilation {
+    pub name: String,
+    pub tracks: Vec<ExternalCompilationTrack>,
+    pub properties: Properties,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExternalCompilationTrack {
+    pub artist: String,
+    pub album: String,
+    pub track: String,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ExternalMediaRequest {
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub track: Option<String>,
+    pub playlist: Option<String>,
+    pub duration: Option<Duration>,
+    pub media_type: Option<ExternalMediaType>,
+    pub external_ids: Vec<ExternalMediaId>,
+}
+
+impl ExternalMediaRequest {
+    pub fn merge(&mut self, mut other: ExternalMediaRequest) -> ExternalMediaEnrichStatus {
+        fn merge_field<T>(
+            left: &mut Option<T>,
+            right: Option<T>,
+            status: &mut ExternalMediaEnrichStatus,
+        ) {
+            if left.is_none() && right.is_some() {
+                *left = right;
+                *status = ExternalMediaEnrichStatus::Modified;
+            }
+        }
+
+        let mut status = ExternalMediaEnrichStatus::NotModified;
+        merge_field(&mut self.artist, other.artist, &mut status);
+        merge_field(&mut self.album, other.album, &mut status);
+        merge_field(&mut self.track, other.track, &mut status);
+        merge_field(&mut self.playlist, other.playlist, &mut status);
+        merge_field(&mut self.duration, other.duration, &mut status);
+        merge_field(&mut self.media_type, other.media_type, &mut status);
+
+        other
+            .external_ids
+            .retain(|v| !self.external_ids.contains(v));
+        if !other.external_ids.is_empty() {
+            self.external_ids.extend(other.external_ids);
+            status = ExternalMediaEnrichStatus::Modified;
+        }
+
+        status
     }
-    async fn probe(&self, id: &ExternalMediaId) -> Result<ExternalMediaType>;
-    async fn fetch_artist(&self, id: &ExternalMediaId) -> Result<ExternalArtist>;
-    async fn fetch_album(&self, id: &ExternalMediaId) -> Result<ExternalAlbum>;
-    async fn fetch_track(&self, id: &ExternalMediaId) -> Result<ExternalTrack>;
-    async fn fetch_playlist(&self, id: &ExternalMediaId) -> Result<ExternalPlaylist>;
-    async fn download_track(&self, id: &ExternalMediaId) -> Result<ByteStream>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExternalMediaEnrichStatus {
+    Modified,
+    NotModified,
+}
+
+#[async_trait]
+#[allow(unused)]
+pub trait ExternalService: Send + Sync + 'static {
+    async fn enrich(
+        &self,
+        request: &mut ExternalMediaRequest,
+    ) -> Result<ExternalMediaEnrichStatus> {
+        Ok(ExternalMediaEnrichStatus::NotModified)
+    }
+    async fn extract(
+        &self,
+        request: &ExternalMediaRequest,
+    ) -> Result<(ExternalMediaType, ExternalMediaId)> {
+        Err(Error::new(ErrorKind::Invalid, "not supported"))
+    }
+    async fn fetch_artist(&self, id: &ExternalMediaId) -> Result<ExternalArtist> {
+        Err(Error::new(ErrorKind::Invalid, "not supported"))
+    }
+    async fn fetch_album(&self, id: &ExternalMediaId) -> Result<ExternalAlbum> {
+        Err(Error::new(ErrorKind::Invalid, "not supported"))
+    }
+    async fn fetch_track(&self, id: &ExternalMediaId) -> Result<ExternalTrack> {
+        Err(Error::new(ErrorKind::Invalid, "not supported"))
+    }
+    async fn fetch_playlist(&self, id: &ExternalMediaId) -> Result<ExternalPlaylist> {
+        Err(Error::new(ErrorKind::Invalid, "not supported"))
+    }
+    async fn fetch_compilation(&self, id: &ExternalMediaId) -> Result<ExternalCompilation> {
+        Err(Error::new(ErrorKind::Invalid, "not supported"))
+    }
+    async fn download_track(&self, id: &ExternalMediaId) -> Result<ByteStream> {
+        Err(Error::new(ErrorKind::Invalid, "not supported"))
+    }
+}
+
+struct ExternalServicesInner {
+    services: Vec<ExternalServicesEntry>,
+}
+
+impl std::fmt::Debug for ExternalServicesInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExternalServicesInner").finish()
+    }
+}
+
+pub(crate) struct ExternalServicesEntry {
+    pub identifier: String,
+    pub service: Box<dyn ExternalService>,
+    pub priority: u32,
+}
+
+impl std::fmt::Debug for ExternalServicesEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExternalServicesEntry")
+            .field("identifier", &self.identifier)
+            .field("priority", &self.priority)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ExternalServices(Arc<ExternalServicesInner>);
+
+impl ExternalServices {
+    pub fn new(entries: impl IntoIterator<Item = ExternalServicesEntry>) -> Self {
+        let mut entries = entries.into_iter().collect::<Vec<_>>();
+        entries.sort_by_key(|s| s.priority);
+        Self(Arc::new(ExternalServicesInner { services: entries }))
+    }
+
+    pub async fn enrich(&self, request: &mut ExternalMediaRequest) -> Result<()> {
+        let mut status = ExternalMediaEnrichStatus::Modified;
+        while status == ExternalMediaEnrichStatus::Modified {
+            status = ExternalMediaEnrichStatus::NotModified;
+            for service in self.services() {
+                if service.enrich(request).await? == ExternalMediaEnrichStatus::Modified {
+                    status = ExternalMediaEnrichStatus::Modified;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn extract(
+        &self,
+        request: &ExternalMediaRequest,
+    ) -> Result<(&dyn ExternalService, ExternalMediaType, ExternalMediaId)> {
+        for service in self.services() {
+            if let Ok((media_type, external_id)) = service.extract(request).await {
+                return Ok((service, media_type, external_id));
+            }
+        }
+        tracing::warn!("failed to extract request: {request:#?}");
+        Err(Error::new(ErrorKind::Invalid, "failed to extract request"))
+    }
+
+    pub fn services(&self) -> impl Iterator<Item = &dyn ExternalService> {
+        self.0.services.iter().map(|v| &*v.service)
+    }
+}
+
+impl<'a> IntoIterator for &'a ExternalServices {
+    type Item = <&'a [ExternalServicesEntry] as IntoIterator>::Item;
+
+    type IntoIter = <&'a [ExternalServicesEntry] as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.services.as_slice().into_iter()
+    }
 }
 
 impl std::fmt::Display for ExternalMediaType {
@@ -102,6 +258,7 @@ impl std::fmt::Display for ExternalMediaType {
             Self::Album => write!(f, "album"),
             Self::Track => write!(f, "track"),
             Self::Playlist => write!(f, "playlist"),
+            Self::Compilation => write!(f, "compilation"),
         }
     }
 }
@@ -196,67 +353,82 @@ impl IntoIterator for MultiExternalMediaId {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct SonarExternalService {
-    priority: u32,
-    identifier: String,
-    service: Arc<dyn ExternalService>,
-}
-
-impl std::fmt::Debug for SonarExternalService {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SonarExternalService")
-            .field("identifier", &self.identifier)
-            .finish()
-    }
-}
-
-impl SonarExternalService {
-    pub fn new(
-        priority: u32,
-        identifier: impl Into<String>,
-        service: impl ExternalService,
-    ) -> Self {
+impl From<ExternalMediaId> for ExternalMediaRequest {
+    fn from(value: ExternalMediaId) -> Self {
         Self {
-            priority,
-            identifier: identifier.into(),
-            service: Arc::new(service),
+            external_ids: vec![value],
+            ..Default::default()
         }
     }
-
-    pub fn priority(&self) -> u32 {
-        self.priority
-    }
-
-    pub fn identifier(&self) -> &str {
-        &self.identifier
-    }
-
-    pub async fn expand(&self, ids: MultiExternalMediaId) -> MultiExternalMediaId {
-        self.service.expand(ids).await
-    }
-
-    pub async fn probe(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
-        self.service.probe(id).await
-    }
-
-    pub async fn fetch_artist(&self, id: &ExternalMediaId) -> Result<ExternalArtist> {
-        self.service.fetch_artist(id).await
-    }
-
-    pub async fn fetch_album(&self, id: &ExternalMediaId) -> Result<ExternalAlbum> {
-        self.service.fetch_album(id).await
-    }
-
-    pub async fn fetch_track(&self, id: &ExternalMediaId) -> Result<ExternalTrack> {
-        self.service.fetch_track(id).await
-    }
-
-    pub async fn fetch_playlist(&self, id: &ExternalMediaId) -> Result<ExternalPlaylist> {
-        self.service.fetch_playlist(id).await
-    }
-
-    pub async fn download_track(&self, id: &ExternalMediaId) -> Result<ByteStream> {
-        self.service.download_track(id).await
-    }
 }
+
+// #[derive(Clone)]
+// pub(crate) struct SonarExternalService {
+//     priority: u32,
+//     identifier: String,
+//     service: Arc<dyn ExternalService>,
+// }
+//
+// impl std::fmt::Debug for SonarExternalService {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.debug_struct("SonarExternalService")
+//             .field("identifier", &self.identifier)
+//             .finish()
+//     }
+// }
+//
+// impl SonarExternalService {
+//     pub fn new(
+//         priority: u32,
+//         identifier: impl Into<String>,
+//         service: impl ExternalService,
+//     ) -> Self {
+//         Self {
+//             priority,
+//             identifier: identifier.into(),
+//             service: Arc::new(service),
+//         }
+//     }
+//
+//     pub fn priority(&self) -> u32 {
+//         self.priority
+//     }
+//
+//     pub fn identifier(&self) -> &str {
+//         &self.identifier
+//     }
+//
+//     pub async fn enrich(
+//         &self,
+//         request: &mut ExternalMediaRequest,
+//     ) -> Result<ExternalMediaEnrichStatus> {
+//         self.service.enrich(request).await
+//     }
+//
+//     pub async fn extract(
+//         &self,
+//         request: &ExternalMediaRequest,
+//     ) -> Result<(ExternalMediaType, ExternalMediaId)> {
+//         self.service.extract(request).await
+//     }
+//
+//     pub async fn fetch_artist(&self, id: &ExternalMediaId) -> Result<ExternalArtist> {
+//         self.service.fetch_artist(id).await
+//     }
+//
+//     pub async fn fetch_album(&self, id: &ExternalMediaId) -> Result<ExternalAlbum> {
+//         self.service.fetch_album(id).await
+//     }
+//
+//     pub async fn fetch_track(&self, id: &ExternalMediaId) -> Result<ExternalTrack> {
+//         self.service.fetch_track(id).await
+//     }
+//
+//     pub async fn fetch_playlist(&self, id: &ExternalMediaId) -> Result<ExternalPlaylist> {
+//         self.service.fetch_playlist(id).await
+//     }
+//
+//     pub async fn download_track(&self, id: &ExternalMediaId) -> Result<ByteStream> {
+//         self.service.download_track(id).await
+//     }
+// }

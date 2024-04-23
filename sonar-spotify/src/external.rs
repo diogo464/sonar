@@ -1,8 +1,10 @@
 use std::{path::Path, sync::Arc, time::Duration};
 
+use rspotify::clients::BaseClient;
 use sonar::{
-    bytestream::ByteStream, ExternalAlbum, ExternalArtist, ExternalImage, ExternalMediaId,
-    ExternalMediaType, ExternalPlaylist, ExternalTrack, MultiExternalMediaId, Result,
+    bytestream::ByteStream, Error, ErrorKind, ExternalAlbum, ExternalArtist, ExternalImage,
+    ExternalMediaEnrichStatus, ExternalMediaId, ExternalMediaRequest, ExternalMediaType,
+    ExternalPlaylist, ExternalService, ExternalTrack, MultiExternalMediaId, Result,
 };
 use spotdl::{LoginCredentials, Resource, ResourceId, SpotifyId};
 use tokio::sync::Semaphore;
@@ -12,13 +14,25 @@ use crate::{convert, convert_genres};
 const MAX_CONCURRENT_TRACK_DOWNLOADS: usize = 3;
 
 pub struct SpotifyService {
+    client: rspotify::ClientCredsSpotify,
     session: spotdl::session::Session,
     fetcher: Arc<dyn spotdl::fetcher::MetadataFetcher>,
     download_sem: Arc<Semaphore>,
 }
 
 impl SpotifyService {
-    pub async fn new(credentials: LoginCredentials, cache_dir: &Path) -> Result<Self> {
+    pub async fn new(
+        credentials: LoginCredentials,
+        cache_dir: &Path,
+        client_id: impl Into<String>,
+        client_secret: impl Into<String>,
+    ) -> Result<Self> {
+        let client = rspotify::ClientCredsSpotify::new(rspotify::Credentials {
+            id: client_id.into(),
+            secret: Some(client_secret.into()),
+        });
+        client.request_token().await.map_err(Error::wrap)?;
+
         let credentials = spotdl::session::login(&credentials)
             .await
             .map_err(sonar::Error::wrap)?;
@@ -35,32 +49,216 @@ impl SpotifyService {
         let fetcher = Arc::new(fetcher);
 
         Ok(Self {
+            client,
             session,
             fetcher,
             download_sem: Arc::new(Semaphore::new(MAX_CONCURRENT_TRACK_DOWNLOADS)),
         })
+    }
+
+    async fn enrich_by_id(
+        &self,
+        request: &mut ExternalMediaRequest,
+        resource_id: ResourceId,
+    ) -> Result<ExternalMediaEnrichStatus> {
+        let mut canvas = ExternalMediaRequest::default();
+        let external_id = ExternalMediaId::from(resource_id.to_uri());
+        match resource_id.resource {
+            Resource::Artist => {
+                let artist = self.fetch_artist(&external_id).await?;
+                canvas.artist = Some(artist.name);
+                canvas.media_type = Some(ExternalMediaType::Artist);
+            }
+            Resource::Album => {
+                let album = self.fetch_album(&external_id).await?;
+                let artist = self.fetch_artist(&album.artist).await?;
+                canvas.artist = Some(artist.name);
+                canvas.album = Some(album.name);
+                canvas.media_type = Some(ExternalMediaType::Album);
+            }
+            Resource::Track => {
+                let track = self.fetch_track(&external_id).await?;
+                let album = self.fetch_album(&track.album).await?;
+                let artist = self.fetch_artist(&track.artist).await?;
+                canvas.artist = Some(artist.name);
+                canvas.album = Some(album.name);
+                canvas.track = Some(track.name);
+                canvas.media_type = Some(ExternalMediaType::Track);
+            }
+            Resource::Playlist => {
+                let playlist = self.fetch_playlist(&external_id).await?;
+                canvas.playlist = Some(playlist.name);
+                canvas.media_type = Some(ExternalMediaType::Playlist);
+            }
+        }
+        Ok(request.merge(canvas))
+    }
+
+    async fn enrich_by_search(
+        &self,
+        request: &mut ExternalMediaRequest,
+    ) -> Result<ExternalMediaEnrichStatus> {
+        let media_type = match request.media_type {
+            Some(media_type) => media_type,
+            None => return Ok(ExternalMediaEnrichStatus::NotModified),
+        };
+
+        let (query, search_type) = match media_type {
+            ExternalMediaType::Artist => {
+                let artist_name = match request.artist.as_ref() {
+                    Some(artist_name) => artist_name,
+                    None => return Ok(ExternalMediaEnrichStatus::NotModified),
+                };
+                (
+                    format!("{}", artist_name),
+                    rspotify::model::SearchType::Artist,
+                )
+            }
+            ExternalMediaType::Album => {
+                let artist_name = match request.artist.as_ref() {
+                    Some(artist_name) => artist_name,
+                    None => return Ok(ExternalMediaEnrichStatus::NotModified),
+                };
+                let album_name = match request.album.as_ref() {
+                    Some(album_name) => album_name,
+                    None => return Ok(ExternalMediaEnrichStatus::NotModified),
+                };
+                (
+                    format!("{} {}", artist_name, album_name),
+                    rspotify::model::SearchType::Album,
+                )
+            }
+            ExternalMediaType::Track => {
+                let artist_name = match request.artist.as_ref() {
+                    Some(artist_name) => artist_name,
+                    None => return Ok(ExternalMediaEnrichStatus::NotModified),
+                };
+                let album_name = match request.album.as_ref() {
+                    Some(album_name) => album_name,
+                    None => return Ok(ExternalMediaEnrichStatus::NotModified),
+                };
+                let track_name = match request.track.as_ref() {
+                    Some(track_name) => track_name,
+                    None => return Ok(ExternalMediaEnrichStatus::NotModified),
+                };
+                (
+                    format!("{} {} {}", artist_name, album_name, track_name),
+                    rspotify::model::SearchType::Track,
+                )
+            }
+            _ => return Ok(ExternalMediaEnrichStatus::NotModified),
+        };
+
+        let search_result = self
+            .client
+            .search(&query, search_type, None, None, Some(10), Some(0))
+            .await
+            .map_err(Error::wrap)?;
+
+        let mut canvas = ExternalMediaRequest::default();
+        match search_result {
+            rspotify::model::SearchResult::Artists(page) => {
+                tracing::trace!("{page:#?}");
+                if let Some(artist) = page.items.first() {
+                    canvas
+                        .external_ids
+                        .push(ExternalMediaId::new(artist.id.to_string()));
+                }
+            }
+            rspotify::model::SearchResult::Albums(page) => {
+                tracing::trace!("{page:#?}");
+                if let Some(album) = page.items.first()
+                    && let Some(ref album_id) = album.id
+                    && &album.artists[0].name == request.artist.as_ref().unwrap()
+                {
+                    canvas
+                        .external_ids
+                        .push(ExternalMediaId::new(album_id.to_string()));
+                }
+            }
+            rspotify::model::SearchResult::Tracks(page) => {
+                tracing::trace!("{page:#?}");
+                if let Some(track) = Self::pick_best_track_for_request(request, &page.items) {
+                    let track_id = track
+                        .id
+                        .as_ref()
+                        .expect("rspotify full track did not have id");
+                    canvas
+                        .external_ids
+                        .push(ExternalMediaId::new(track_id.to_string()));
+                }
+            }
+            _ => {}
+        }
+
+        Ok(request.merge(canvas))
+    }
+
+    fn pick_best_track_for_request<'t>(
+        request: &'_ ExternalMediaRequest,
+        tracks: &'t [rspotify::model::FullTrack],
+    ) -> Option<&'t rspotify::model::FullTrack> {
+        let match_album = |t: &rspotify::model::FullTrack| {
+            let request_album = match request.album {
+                Some(ref name) => name,
+                None => return true,
+            };
+            request_album.eq_ignore_ascii_case(&t.album.name)
+                || t.album
+                    .name
+                    .to_lowercase()
+                    .contains(&request_album.to_lowercase())
+        };
+        let match_track = |t: &rspotify::model::FullTrack| {
+            let request_track = match request.track {
+                Some(ref name) => name,
+                None => return false,
+            };
+            request_track.eq_ignore_ascii_case(&t.name)
+        };
+        tracks
+            .into_iter()
+            .filter(|t| match_album(t))
+            .filter(|t| match_track(t))
+            .next()
+            .or(tracks.into_iter().filter(|t| match_album(t)).next())
     }
 }
 
 #[sonar::async_trait]
 impl sonar::ExternalService for SpotifyService {
     #[tracing::instrument(skip(self))]
-    async fn expand(&self, ids: MultiExternalMediaId) -> MultiExternalMediaId {
-        expand_multi_external_media_id(ids)
+    async fn enrich(
+        &self,
+        request: &mut ExternalMediaRequest,
+    ) -> Result<ExternalMediaEnrichStatus> {
+        if let Some(resource_id) = fix_and_extract_resource_id(request) {
+            self.enrich_by_id(request, resource_id).await
+        } else {
+            self.enrich_by_search(request).await
+        }
     }
 
     #[tracing::instrument(skip(self))]
-    async fn probe(&self, id: &ExternalMediaId) -> Result<ExternalMediaType> {
-        tracing::debug!("validating id: {}", id);
-        let resource_id = parse_resource_id(id)?;
-        let media_type = match resource_id.resource {
-            Resource::Artist => ExternalMediaType::Artist,
-            Resource::Album => ExternalMediaType::Album,
-            Resource::Track => ExternalMediaType::Track,
-
-            Resource::Playlist => ExternalMediaType::Playlist,
-        };
-        Ok(media_type)
+    async fn extract(
+        &self,
+        request: &ExternalMediaRequest,
+    ) -> Result<(ExternalMediaType, ExternalMediaId)> {
+        for external_id in &request.external_ids {
+            if let Ok(resource_id) = parse_resource_id(&external_id) {
+                let media_type = match resource_id.resource {
+                    Resource::Artist => ExternalMediaType::Artist,
+                    Resource::Album => ExternalMediaType::Album,
+                    Resource::Track => ExternalMediaType::Track,
+                    Resource::Playlist => ExternalMediaType::Playlist,
+                };
+                return Ok((media_type, external_id.clone()));
+            }
+        }
+        return Err(Error::new(
+            ErrorKind::Invalid,
+            "no valid spotify id in request",
+        ));
     }
 
     #[tracing::instrument(skip(self))]
@@ -310,6 +508,16 @@ fn expand_multi_external_media_id(ids: MultiExternalMediaId) -> MultiExternalMed
         external_ids.push(external_id);
     }
     MultiExternalMediaId::from(external_ids)
+}
+
+fn fix_and_extract_resource_id(request: &mut ExternalMediaRequest) -> Option<ResourceId> {
+    for id in &mut request.external_ids {
+        if let Ok(resource_id) = parse_resource_id(id) {
+            *id = ExternalMediaId::from(resource_id.to_uri());
+            return Some(resource_id);
+        }
+    }
+    None
 }
 
 #[cfg(test)]

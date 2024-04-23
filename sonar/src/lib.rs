@@ -55,9 +55,9 @@ pub(crate) mod user;
 pub use album::{Album, AlbumCreate, AlbumUpdate};
 pub use artist::{Artist, ArtistCreate, ArtistUpdate};
 pub use audio::{Audio, AudioCreate, AudioDownload, AudioStat};
-pub use download::{Download, DownloadCreate, DownloadDelete, DownloadStatus};
 pub use external::{
-    ExternalAlbum, ExternalArtist, ExternalImage, ExternalMediaId, ExternalMediaType,
+    ExternalAlbum, ExternalArtist, ExternalCompilation, ExternalCompilationTrack, ExternalImage,
+    ExternalMediaEnrichStatus, ExternalMediaId, ExternalMediaRequest, ExternalMediaType,
     ExternalPlaylist, ExternalService, ExternalTrack, MultiExternalMediaId,
 };
 pub use extractor::{ExtractedImage, ExtractedMetadata, Extractor};
@@ -80,7 +80,7 @@ pub use property::{
 pub use scrobble::{Scrobble, ScrobbleCreate, ScrobbleUpdate};
 pub use scrobbler::Scrobbler;
 pub use search::{SearchFlags, SearchQuery, SearchResult};
-pub use subscription::{Subscription, SubscriptionCreate, SubscriptionDelete};
+pub use subscription::{Subscription, SubscriptionCreate};
 pub use track::{
     Lyrics, LyricsKind, LyricsLine, Track, TrackCreate, TrackListRandom, TrackLyrics, TrackUpdate,
 };

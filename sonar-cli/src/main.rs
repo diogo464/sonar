@@ -12,6 +12,7 @@ use eyre::{Context, Result};
 use lofty::{Accessor, TagExt, TaggedFileExt};
 use serde::Serialize;
 use sonar::{Genres, Properties};
+use sonar_listenbrainz::ListenBrainzService;
 use sonar_musicbrainz::MusicBrainzService;
 use tokio::io::AsyncWriteExt;
 use tokio_stream::StreamExt;
@@ -313,13 +314,16 @@ impl std::fmt::Display for SearchResults {
 
 #[derive(Debug, Serialize)]
 struct Subscription {
+    id: String,
     user: String,
+    // TODO: add remaining fields
     external_id: String,
 }
 
 impl From<sonar_grpc::Subscription> for Subscription {
     fn from(value: sonar_grpc::Subscription) -> Self {
         Self {
+            id: value.id,
             user: value.user_id,
             external_id: value.external_id,
         }
@@ -328,7 +332,7 @@ impl From<sonar_grpc::Subscription> for Subscription {
 
 impl std::fmt::Display for Subscription {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}\t{}", self.user, self.external_id)
+        write!(f, "{}\t{}\t{}", self.id, self.user, self.external_id)
     }
 }
 
@@ -456,6 +460,7 @@ async fn async_main() -> Result<()> {
             SubscriptionCommand::List(cargs) => cmd_subscription_list(cargs).await?,
             SubscriptionCommand::Create(cargs) => cmd_subscription_create(cargs).await?,
             SubscriptionCommand::Delete(cargs) => cmd_subscription_delete(cargs).await?,
+            SubscriptionCommand::Submit(cargs) => cmd_subscription_submit(cargs).await?,
         },
         Command::Download(cargs) => match cargs.command {
             DownloadCommand::List(cargs) => cmd_download_list(cargs).await?,
@@ -1823,6 +1828,7 @@ enum SubscriptionCommand {
     List(SubscriptionListArgs),
     Create(SubscriptionCreateArgs),
     Delete(SubscriptionDeleteArgs),
+    Submit(SubscriptionSubmitArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -1859,6 +1865,7 @@ async fn cmd_subscription_create(args: SubscriptionCreateArgs) -> Result<()> {
         .subscription_create(sonar_grpc::SubscriptionCreateRequest {
             user_id,
             external_id: args.external_id,
+            ..Default::default()
         })
         .await?;
     Ok(())
@@ -1869,38 +1876,32 @@ struct SubscriptionDeleteArgs {
     /// delete by subscription index, starts at 0.
     #[clap(long)]
     index: bool,
-    external_id: String,
+    subscription_id: String,
 }
 
 async fn cmd_subscription_delete(args: SubscriptionDeleteArgs) -> Result<()> {
     let mut client = create_client().await?;
-    let (user_id, _) = auth_read().await?;
-    let external_id = if args.index {
-        let index = args
-            .external_id
-            .parse::<usize>()
-            .context("invalid subscription index")?;
-        let response = client
-            .subscription_list(sonar_grpc::SubscriptionListRequest {
-                user_id: user_id.clone(),
-            })
-            .await?;
-        let subscriptions = response
-            .into_inner()
-            .subscriptions
-            .into_iter()
-            .map(Subscription::from)
-            .collect::<Vec<_>>();
-        subscriptions[index].external_id.clone()
-    } else {
-        args.external_id
-    };
     client
         .subscription_delete(sonar_grpc::SubscriptionDeleteRequest {
-            user_id,
-            external_id,
+            id: args.subscription_id,
         })
         .await?;
+    Ok(())
+}
+
+#[derive(Debug, Parser)]
+struct SubscriptionSubmitArgs {
+    /// subscription ids to submit
+    ids: Vec<String>,
+}
+
+async fn cmd_subscription_submit(args: SubscriptionSubmitArgs) -> Result<()> {
+    let mut client = create_client().await?;
+    for id in args.ids {
+        client
+            .subscription_submit(sonar_grpc::SubscriptionSubmitRequest { id })
+            .await?;
+    }
     Ok(())
 }
 
@@ -2464,10 +2465,21 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
         .register_external_service(2, "musicbrainz", MusicBrainzService::default())
         .context("registering musicbrainz external service")?;
 
-    if let (Some(username), Some(password)) = (args.spotify_username, args.spotify_password) {
+    config
+        .register_external_service(3, "listenbrainz", ListenBrainzService::default())
+        .context("registering listenbrainz external service")?;
+
+    if let (Some(username), Some(password), Some(ref client_id), Some(ref client_secret)) = (
+        args.spotify_username,
+        args.spotify_password,
+        &args.spotify_client_id,
+        &args.spotify_client_secret,
+    ) {
         let spotify = sonar_spotify::SpotifyService::new(
             sonar_spotify::LoginCredentials { username, password },
             &spotify_cache,
+            client_id,
+            client_secret,
         )
         .await
         .context("creating spotify context")?;

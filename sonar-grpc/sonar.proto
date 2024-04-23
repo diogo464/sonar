@@ -69,6 +69,7 @@ service SonarService {
 	rpc SubscriptionList(SubscriptionListRequest) returns (SubscriptionListResponse);
 	rpc SubscriptionCreate(SubscriptionCreateRequest) returns (google.protobuf.Empty);
 	rpc SubscriptionDelete(SubscriptionDeleteRequest) returns (google.protobuf.Empty);
+	rpc SubscriptionSubmit(SubscriptionSubmitRequest) returns (google.protobuf.Empty);
 
 	rpc DownloadList(DownloadListRequest) returns (DownloadListResponse);
 	rpc DownloadStart(DownloadStartRequest) returns (google.protobuf.Empty);
@@ -505,9 +506,18 @@ message PinUnsetRequest {
 }
 
 message Subscription {
-	string user_id = 1;
-	string external_id = 2;
-	string description = 3;
+	string id = 1;
+	string user_id = 2;
+	google.protobuf.Timestamp created_at = 3;
+	google.protobuf.Timestamp last_submitted = 4;
+	google.protobuf.Duration interval = 5;
+	string description = 6;
+	string artist = 7;
+	string album = 8;
+	string track = 9;
+	string playlist = 10;
+	string external_id = 11;
+	string media_type = 12;
 }
 
 message SubscriptionListRequest {
@@ -520,12 +530,22 @@ message SubscriptionListResponse {
 
 message SubscriptionCreateRequest {
 	string user_id = 1;
-	string external_id = 2;
+	google.protobuf.Duration interval = 2;
+	string description = 3;
+	string artist = 4;
+	string album = 5;
+	string track = 6;
+	string playlist = 7;
+	string external_id = 8;
+	string media_type = 9;
 }
 
 message SubscriptionDeleteRequest {
-	string user_id = 1;
-	string external_id = 2;
+	string id = 1;
+}
+
+message SubscriptionSubmitRequest {
+	string id = 1;
 }
 
 message Download {
