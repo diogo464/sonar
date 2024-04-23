@@ -545,10 +545,7 @@ where
                     http::header::CONTENT_LENGTH,
                     http::HeaderValue::from(content_length),
                 );
-                headers.insert(
-                    http::header::CONTENT_TYPE,
-                    image.mime_type.parse().unwrap(),
-                );
+                headers.insert(http::header::CONTENT_TYPE, image.mime_type.parse().unwrap());
 
                 Ok(response)
             }
@@ -608,7 +605,10 @@ where
 
                 let content_length = stream_chunk.data.len();
                 let range_offset = range.offset.unwrap_or(0);
-                let range_length = range.length.unwrap_or(stream_chunk.content_length);
+                let range_length = range
+                    .length
+                    .unwrap_or(stream_chunk.content_length)
+                    .min(stream_chunk.content_length - range_offset);
 
                 let mut response = http::Response::new(http_body_util::StreamBody::new(
                     OpenSubsonicBodyStream::Bytes(Some(stream_chunk.data)),
