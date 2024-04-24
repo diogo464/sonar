@@ -951,7 +951,13 @@ impl OpenSubsonicServer for Server {
     async fn scrobble(&self, request: Request<Scrobble>) -> Result<()> {
         let user_id = self.authenticate(&request).await?;
 
-        if !request.body.submission.unwrap_or(false) {
+        let submission = match (request.client.as_str(), request.body.submission) {
+            ("Amperfy", _) => true,
+            (_, Some(v)) => v,
+            _ => false,
+        };
+
+        if !submission {
             return Ok(());
         }
 
