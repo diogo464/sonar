@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use lofty::AudioFile;
+use lofty::prelude::AudioFile;
 use sqlx::Row;
 
 use crate::{

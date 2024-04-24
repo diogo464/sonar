@@ -1,4 +1,8 @@
-use lofty::{Accessor, AudioFile, TaggedFileExt};
+use lofty::{
+    file::{AudioFile, TaggedFileExt},
+    prelude::ItemKey,
+    tag::Accessor,
+};
 
 #[derive(Debug, Default)]
 pub struct LoftyExtractor;
@@ -22,7 +26,7 @@ impl sonar::Extractor for LoftyExtractor {
 
         let title = tag.title().map(|x| x.to_string());
         let album = tag.album().map(|x| x.to_string());
-        let artist = match tag.get_string(&lofty::ItemKey::AlbumArtist) {
+        let artist = match tag.get_string(&ItemKey::AlbumArtist) {
             Some(x) => Some(x.to_string()),
             None => tag.artist().map(|x| x.to_string()),
         };

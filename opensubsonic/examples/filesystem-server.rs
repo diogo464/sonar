@@ -6,7 +6,11 @@ use std::{
 };
 
 use anyhow::{Context, Result as AResult};
-use lofty::{Accessor, AudioFile, Probe, TaggedFileExt};
+use lofty::{
+    file::{AudioFile as _, TaggedFileExt as _},
+    probe::Probe,
+    tag::Accessor as _,
+};
 use opensubsonic::service::prelude::*;
 use tokio::net::TcpListener;
 

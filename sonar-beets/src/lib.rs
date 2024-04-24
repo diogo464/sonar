@@ -3,7 +3,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use lofty::{Accessor, Probe, Tag, TagExt, TaggedFileExt};
+use lofty::{
+    config::WriteOptions,
+    prelude::*,
+    probe::Probe,
+    tag::{Tag, TagType},
+};
 use serde::Deserialize;
 use sonar::{bytes::Bytes, metadata_prelude::*};
 use tokio::process::Command;
@@ -250,14 +255,14 @@ async fn prepare_directory(
                 let tag = match tagged_file.first_tag_mut() {
                     Some(tag) => tag,
                     None => {
-                        tagged_file.insert_tag(Tag::new(lofty::TagType::Id3v2));
+                        tagged_file.insert_tag(Tag::new(TagType::Id3v2));
                         tagged_file.primary_tag_mut().unwrap()
                     }
                 };
                 tag.set_artist(artist_name);
                 tag.set_album(album_name);
                 tag.set_title(track_name);
-                tag.save_to_path(&track_path)
+                tag.save_to_path(&track_path, WriteOptions::default())
                     .expect("ERROR: Failed to save tags!");
             }
         })

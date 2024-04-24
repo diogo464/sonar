@@ -2340,9 +2340,9 @@ dependencies = [
 
 [[package]]
 name = "lofty"
-version = "0.18.2"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f75066eb1d25a7047fb2667edb410ae2592439ed81546f95c28b0a1c7d7d3818"
+checksum = "9fa325c10d8be7f4a5ce3bdae49c340551e0eb56d376611ac7d6811b67739f8b"
 dependencies = [
  "byteorder",
  "data-encoding",
@@ -2355,9 +2355,9 @@ dependencies = [
 
 [[package]]
 name = "lofty_attr"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "764b60e1ddd07e5665a6a17636a95cd7d8f3b86c73503a69c32979d05f72f3cf"
+checksum = "83e2dcdba64a01c3ce936b02401ab17b52db3c72720cf484c9df3387ca7517d3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2779,9 +2779,9 @@ dependencies = [
 
 [[package]]
 name = "ogg_pager"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c949d63b387b25c332f6e39d1762dd4b405008289dd7681f02c258b1294653ca"
+checksum = "87b0bef808533c5890ab77279538212efdbbbd9aa4ef1ccdfcfbf77a42f7e6fa"
 dependencies = [
  "byteorder",
 ]
@@ -3226,7 +3226,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80b776a1b2dc779f5ee0641f8ade0125bc1298dd41a9a0c16d8bd57b42d222b1"
 dependencies = [
  "bytes",
- "heck 0.5.0",
+ "heck 0.4.1",
  "itertools",
  "log",
  "multimap 0.10.0",
@@ -4330,7 +4330,7 @@ dependencies = [
 [[package]]
 name = "spotdl"
 version = "0.1.0"
-source = "git+https://git.d464.sh/code/spotdl#48b6d66e6a86b450436df613314ccbb36e3d922c"
+source = "git+https://git.d464.sh/code/spotdl#3af37a38c16bfb12228e823f3836514e46207f12"
 dependencies = [
  "ahash",
  "anyhow",

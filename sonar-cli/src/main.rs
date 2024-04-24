@@ -9,7 +9,10 @@ use std::{
 
 use clap::Parser;
 use eyre::{Context, Result};
-use lofty::{Accessor, TagExt, TaggedFileExt};
+use lofty::{
+    file::TaggedFileExt as _,
+    tag::{Accessor as _, TagExt as _},
+};
 use prost_types::Duration;
 use serde::Serialize;
 use sonar::{Genres, Properties};
@@ -1542,12 +1545,13 @@ async fn cmd_sync(args: SyncArgs) -> Result<()> {
                         let file = std::fs::File::open(&download_path)
                             .with_context(|| format!("opening file {}", download_path.display()))?;
                         let reader = std::io::BufReader::new(file);
-                        let probe = lofty::Probe::new(reader).set_file_type(lofty::FileType::Mpeg);
+                        let probe = lofty::probe::Probe::new(reader)
+                            .set_file_type(lofty::file::FileType::Mpeg);
                         let mut tagged = probe
                             .read()
                             .with_context(|| format!("reading file {}", download_path.display()))?;
                         let tag_type = tagged.primary_tag_type();
-                        tagged.insert_tag(lofty::Tag::new(tag_type));
+                        tagged.insert_tag(lofty::tag::Tag::new(tag_type));
 
                         let tag = tagged.primary_tag_mut().unwrap();
                         tag.set_artist(artist_name);
@@ -1556,7 +1560,7 @@ async fn cmd_sync(args: SyncArgs) -> Result<()> {
                         tag.set_disk(disc_number);
                         tag.set_track(track_number);
                         tag.set_genre(genre);
-                        tag.save_to_path(download_path)
+                        tag.save_to_path(download_path, Default::default())
                             .context("saving lofty tag to file")?;
 
                         Ok::<_, eyre::Error>(())
