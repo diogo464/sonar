@@ -498,18 +498,6 @@ fn properties_for_resource(id: SpotifyId) -> sonar::Properties {
     properties
 }
 
-fn expand_multi_external_media_id(ids: MultiExternalMediaId) -> MultiExternalMediaId {
-    let mut external_ids = Vec::with_capacity(ids.len());
-    for id in ids {
-        let external_id = match parse_resource_id(&id) {
-            Ok(spotify_id) => ExternalMediaId::from(spotify_id.to_string()),
-            Err(_) => id,
-        };
-        external_ids.push(external_id);
-    }
-    MultiExternalMediaId::from(external_ids)
-}
-
 fn fix_and_extract_resource_id(request: &mut ExternalMediaRequest) -> Option<ResourceId> {
     for id in &mut request.external_ids {
         if let Ok(resource_id) = parse_resource_id(id) {
@@ -518,45 +506,4 @@ fn fix_and_extract_resource_id(request: &mut ExternalMediaRequest) -> Option<Res
         }
     }
     None
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_expand_multi_external_media_id() {
-        let ids = MultiExternalMediaId::from(vec![
-            ExternalMediaId::from("spotify:track:3HOe5HB3E9tmz9ocHwsPgP"),
-            ExternalMediaId::from("some-id-that-spotify-doesnt-recognize"),
-            ExternalMediaId::from(
-                "https://open.spotify.com/artist/762310PdDnwsDxAQxzQkfX?si=a88CtChQRO67ArejwWVYrg",
-            ),
-            ExternalMediaId::from("https://open.spotify.com/artist/762310PdDnwsDxAQxzQkfX"),
-            ExternalMediaId::from("spotify:album:5AQ7uKRSpAv7SNUl4j24ru"),
-        ]);
-
-        let expanded = expand_multi_external_media_id(ids);
-        let external_ids: Vec<ExternalMediaId> = From::from(expanded);
-        assert_eq!(
-            external_ids[0].as_str(),
-            "spotify:track:3HOe5HB3E9tmz9ocHwsPgP"
-        );
-        assert_eq!(
-            external_ids[1].as_str(),
-            "some-id-that-spotify-doesnt-recognize"
-        );
-        assert_eq!(
-            external_ids[2].as_str(),
-            "spotify:artist:762310PdDnwsDxAQxzQkfX"
-        );
-        assert_eq!(
-            external_ids[3].as_str(),
-            "spotify:artist:762310PdDnwsDxAQxzQkfX"
-        );
-        assert_eq!(
-            external_ids[4].as_str(),
-            "spotify:album:5AQ7uKRSpAv7SNUl4j24ru"
-        );
-    }
 }

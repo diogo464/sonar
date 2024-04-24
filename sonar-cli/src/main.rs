@@ -59,7 +59,6 @@ enum Command {
     Pin(PinArgs),
     Search(SearchArgs),
     Subscription(SubscriptionArgs),
-    Download(DownloadArgs),
     Metadata(MetadataArgs),
     Admin(AdminArgs),
     Import(ImportArgs),
@@ -337,33 +336,6 @@ impl std::fmt::Display for Subscription {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct Download {
-    user: String,
-    external_id: String,
-    description: String,
-}
-
-impl From<sonar_grpc::Download> for Download {
-    fn from(value: sonar_grpc::Download) -> Self {
-        Self {
-            user: value.user_id,
-            external_id: value.external_id,
-            description: value.description,
-        }
-    }
-}
-
-impl std::fmt::Display for Download {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}\t{}\t{}",
-            self.user, self.external_id, self.description
-        )
-    }
-}
-
 fn main() -> Result<()> {
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(16)
@@ -462,11 +434,6 @@ async fn async_main() -> Result<()> {
             SubscriptionCommand::Create(cargs) => cmd_subscription_create(cargs).await?,
             SubscriptionCommand::Delete(cargs) => cmd_subscription_delete(cargs).await?,
             SubscriptionCommand::Submit(cargs) => cmd_subscription_submit(cargs).await?,
-        },
-        Command::Download(cargs) => match cargs.command {
-            DownloadCommand::List(cargs) => cmd_download_list(cargs).await?,
-            DownloadCommand::Start(cargs) => cmd_download_start(cargs).await?,
-            DownloadCommand::Stop(cargs) => cmd_download_stop(cargs).await?,
         },
         Command::Metadata(cargs) => match cargs.command {
             MetadataCommand::Providers => cmd_metadata_providers().await?,
@@ -1927,75 +1894,6 @@ async fn cmd_subscription_submit(args: SubscriptionSubmitArgs) -> Result<()> {
             .subscription_submit(sonar_grpc::SubscriptionSubmitRequest { id })
             .await?;
     }
-    Ok(())
-}
-
-#[derive(Debug, Parser)]
-struct DownloadArgs {
-    #[clap(subcommand)]
-    command: DownloadCommand,
-}
-
-#[derive(Debug, Parser)]
-enum DownloadCommand {
-    List(DownloadListArgs),
-    Start(DownloadStartArgs),
-    Stop(DownloadStopArgs),
-}
-
-#[derive(Debug, Parser)]
-struct DownloadListArgs {}
-
-async fn cmd_download_list(_args: DownloadListArgs) -> Result<()> {
-    let mut client = create_client().await?;
-    let (user_id, _) = auth_read().await?;
-    let response = client
-        .download_list(sonar_grpc::DownloadListRequest {
-            user_id,
-            ..Default::default()
-        })
-        .await?;
-    let downloads = response
-        .into_inner()
-        .downloads
-        .into_iter()
-        .map(Download::from)
-        .collect::<Vec<_>>();
-    stdout_values(&downloads)?;
-    Ok(())
-}
-
-#[derive(Debug, Parser)]
-struct DownloadStartArgs {
-    external_id: String,
-}
-
-async fn cmd_download_start(args: DownloadStartArgs) -> Result<()> {
-    let mut client = create_client().await?;
-    let (user_id, _) = auth_read().await?;
-    client
-        .download_start(sonar_grpc::DownloadStartRequest {
-            user_id,
-            external_id: args.external_id,
-        })
-        .await?;
-    Ok(())
-}
-
-#[derive(Debug, Parser)]
-struct DownloadStopArgs {
-    external_id: String,
-}
-
-async fn cmd_download_stop(args: DownloadStopArgs) -> Result<()> {
-    let mut client = create_client().await?;
-    let (user_id, _) = auth_read().await?;
-    client
-        .download_cancel(sonar_grpc::DownloadCancelRequest {
-            user_id,
-            external_id: args.external_id,
-        })
-        .await?;
     Ok(())
 }
 

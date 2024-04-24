@@ -71,10 +71,6 @@ service SonarService {
 	rpc SubscriptionDelete(SubscriptionDeleteRequest) returns (google.protobuf.Empty);
 	rpc SubscriptionSubmit(SubscriptionSubmitRequest) returns (google.protobuf.Empty);
 
-	rpc DownloadList(DownloadListRequest) returns (DownloadListResponse);
-	rpc DownloadStart(DownloadStartRequest) returns (google.protobuf.Empty);
-	rpc DownloadCancel(DownloadCancelRequest) returns (google.protobuf.Empty);
-
 	rpc Import(stream ImportRequest) returns (Track);
 	rpc Search(SearchRequest) returns (SearchResponse);
 
@@ -546,30 +542,6 @@ message SubscriptionDeleteRequest {
 
 message SubscriptionSubmitRequest {
 	string id = 1;
-}
-
-message Download {
-	string user_id = 1;
-	string external_id = 2;
-	string description = 3;
-}
-
-message DownloadListRequest {
-	string user_id = 1;
-}
-
-message DownloadListResponse {
-	repeated Download downloads = 1;
-}
-
-message DownloadStartRequest {
-	string user_id = 1;
-	string external_id = 2;
-}
-
-message DownloadCancelRequest {
-	string user_id = 1;
-	string external_id = 2;
 }
 
 message ImportRequest {

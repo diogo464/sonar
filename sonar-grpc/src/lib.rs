@@ -909,61 +909,6 @@ impl sonar_service_server::SonarService for Server {
             .m()?;
         Ok(tonic::Response::new(()))
     }
-    async fn download_list(
-        &self,
-        request: tonic::Request<DownloadListRequest>,
-    ) -> std::result::Result<tonic::Response<DownloadListResponse>, tonic::Status> {
-        self.require_admin(&request).await?;
-
-        let req = request.into_inner();
-        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
-        todo!()
-        // let downloads = sonar::download_list(&self.context, user_id).await.m()?;
-        // let downloads = downloads.into_iter().map(Into::into).collect();
-        // Ok(tonic::Response::new(DownloadListResponse { downloads }))
-    }
-    async fn download_start(
-        &self,
-        request: tonic::Request<DownloadStartRequest>,
-    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-        self.require_admin(&request).await?;
-
-        let req = request.into_inner();
-        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
-        todo!()
-        // let external_id = sonar::ExternalMediaId::from(req.external_id);
-        // sonar::download_request(
-        //     &self.context,
-        //     sonar::DownloadCreate {
-        //         user_id,
-        //         external_id,
-        //     },
-        // )
-        // .await
-        // .m()?;
-        // Ok(tonic::Response::new(()))
-    }
-    async fn download_cancel(
-        &self,
-        request: tonic::Request<DownloadCancelRequest>,
-    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-        self.require_admin(&request).await?;
-
-        let req = request.into_inner();
-        let user_id = req.user_id.parse::<sonar::UserId>().m()?;
-        todo!()
-        // let external_id = sonar::ExternalMediaId::from(req.external_id);
-        // sonar::download_delete(
-        //     &self.context,
-        //     sonar::DownloadDelete {
-        //         user_id,
-        //         external_id,
-        //     },
-        // )
-        // .await
-        // .m()?;
-        // Ok(tonic::Response::new(()))
-    }
     async fn import(
         &self,
         request: tonic::Request<tonic::Streaming<ImportRequest>>,
