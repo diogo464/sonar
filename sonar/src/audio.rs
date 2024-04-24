@@ -189,7 +189,7 @@ pub async fn download(
         .fetch_one(&mut *db)
         .await?;
     let blob_key = row.get::<String, _>(1);
-    let stream = storage.read(&blob_key, From::from(range)).await?;
+    let stream = storage.read(&blob_key, range).await?;
     Ok(AudioDownload {
         mime_type: row.get(0),
         stream,

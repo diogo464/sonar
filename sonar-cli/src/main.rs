@@ -1478,16 +1478,14 @@ async fn cmd_sync(args: SyncArgs) -> Result<()> {
             .properties
             .iter()
             .find(|p| p.key == sonar::prop::DISC_NUMBER.as_str())
-            .map(|p| p.value.parse::<u32>().ok())
-            .flatten()
-            .unwrap_or_else(|| 0);
+            .and_then(|p| p.value.parse::<u32>().ok())
+            .unwrap_or(0);
         let track_number = track
             .properties
             .iter()
             .find(|p| p.key == sonar::prop::TRACK_NUMBER.as_str())
-            .map(|p| p.value.parse::<u32>().ok())
-            .flatten()
-            .unwrap_or_else(|| 0);
+            .and_then(|p| p.value.parse::<u32>().ok())
+            .unwrap_or(0);
 
         let parent_dir = args.output.join(&artist.name).join(&album.name);
         let track_path = parent_dir
@@ -1738,26 +1736,31 @@ async fn cmd_search(args: SearchArgs) -> Result<()> {
     let mut client = create_client().await?;
     let (user_id, _) = auth_read().await?;
 
-    let mut request = sonar_grpc::SearchRequest::default();
-    request.user_id = user_id;
-    request.query = args.query;
-    request.limit = Some(args.limit);
-    if args.artist || args.album || args.track || args.playlist {
-        let mut flags = 0;
-        if args.artist {
-            flags |= sonar_grpc::search_request::Flags::FlagArtist as u32;
-        }
-        if args.album {
-            flags |= sonar_grpc::search_request::Flags::FlagAlbum as u32;
-        }
-        if args.track {
-            flags |= sonar_grpc::search_request::Flags::FlagTrack as u32;
-        }
-        if args.playlist {
-            flags |= sonar_grpc::search_request::Flags::FlagPlaylist as u32;
-        }
-        request.flags = Some(flags);
-    }
+    let request = sonar_grpc::SearchRequest {
+        user_id,
+        query: args.query,
+        limit: Some(args.limit),
+        flags: Some(
+            if args.artist || args.album || args.track || args.playlist {
+                let mut flags = 0;
+                if args.artist {
+                    flags |= sonar_grpc::search_request::Flags::FlagArtist as u32;
+                }
+                if args.album {
+                    flags |= sonar_grpc::search_request::Flags::FlagAlbum as u32;
+                }
+                if args.track {
+                    flags |= sonar_grpc::search_request::Flags::FlagTrack as u32;
+                }
+                if args.playlist {
+                    flags |= sonar_grpc::search_request::Flags::FlagPlaylist as u32;
+                }
+                flags
+            } else {
+                0
+            },
+        ),
+    };
 
     let response = client.search(request).await?;
     let response = response.into_inner();
@@ -2360,10 +2363,7 @@ async fn cmd_server(args: ServerArgs) -> Result<()> {
     };
     let search_backend =
         if let (Some(url), Some(key)) = (args.meilisearch_endpoint, args.meilisearch_key) {
-            sonar::SearchBackend::Meilisearch {
-                endpoint: url,
-                key: key,
-            }
+            sonar::SearchBackend::Meilisearch { endpoint: url, key }
         } else {
             sonar::SearchBackend::BuiltIn
         };

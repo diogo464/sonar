@@ -463,13 +463,10 @@ impl OpenSubsonicServer for Server {
     async fn get_artist_info2(&self, request: Request<GetArtistInfo2>) -> Result<ArtistInfo2> {
         let artist_id = request.body.id.parse::<sonar::ArtistId>().m()?;
         let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
-        let cover_art = match artist.cover_art {
-            Some(cover_id) => Some(format!(
+        let cover_art = artist.cover_art.map(|cover_id| format!(
                 "{}/rest/getCoverArt?id={}&v=1.15.0&u=0&p=0&c=sonar",
                 self.image_url_prefix, cover_id
-            )),
-            None => None,
-        };
+            ));
 
         Ok(ArtistInfo2 {
             info: ArtistInfoBase {
@@ -731,7 +728,7 @@ impl OpenSubsonicServer for Server {
 
         for alb in albums {
             let artist = &album_artists[&alb.artist];
-            album.push(child_from_album_and_artist(&favorites, &alb, &artist));
+            album.push(child_from_album_and_artist(&favorites, &alb, artist));
         }
 
         for art in artists {
@@ -1233,7 +1230,7 @@ fn child_sort_disc_track(a: &Child, b: &Child) -> std::cmp::Ordering {
                 (Some(_), None) => std::cmp::Ordering::Greater,
                 (Some(a_t), Some(b_t)) => a_t.cmp(&b_t),
             },
-            ord @ _ => ord,
+            ord => ord,
         },
     }
 }

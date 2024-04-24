@@ -18,7 +18,7 @@ async fn create_user_one() {
     };
     let user = sonar::user_create(&ctx, create).await.unwrap();
     assert_eq!(user.username.as_str(), "User");
-    assert_eq!(user.admin, false);
+    assert!(!user.admin);
 }
 
 #[tokio::test]
@@ -32,7 +32,7 @@ async fn create_user_one_admin() {
     };
     let user = sonar::user_create(&ctx, create).await.unwrap();
     assert_eq!(user.username.as_str(), "User");
-    assert_eq!(user.admin, true);
+    assert!(user.admin);
 }
 
 #[tokio::test]
@@ -87,7 +87,7 @@ async fn update_admin() {
     };
     let user = sonar::user_create(&ctx, create).await.unwrap();
     assert_eq!(user.username.as_str(), "User");
-    assert_eq!(user.admin, false);
+    assert!(!user.admin);
 
     let user = sonar::user_update(
         &ctx,
@@ -99,7 +99,7 @@ async fn update_admin() {
     )
     .await
     .unwrap();
-    assert_eq!(user.admin, true);
+    assert!(user.admin);
 }
 
 #[tokio::test]

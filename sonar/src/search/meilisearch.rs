@@ -15,8 +15,8 @@ use super::{SearchEngine, SearchResults};
 // TODO: take care of user id when searching for playlists
 
 const DEFAULT_SEARCH_LIMIT: u32 = 50;
-const INDEX_NAME: &'static str = "items";
-const INDEX_KEY: &'static str = "id";
+const INDEX_NAME: &str = "items";
+const INDEX_KEY: &str = "id";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 enum DocumentKind {
@@ -318,21 +318,21 @@ impl SearchEngine for MeiliSearchEngine {
 }
 
 fn sonar_id_to_meilisearch_id(id: impl Into<SonarId>) -> String {
-    id.into().to_string().replace(":", "_")
+    id.into().to_string().replace(':', "_")
 }
 
 fn meilisearch_id_to_artist_id(id: &str) -> ArtistId {
-    id.replace("_", ":").parse().unwrap()
+    id.replace('_', ":").parse().unwrap()
 }
 
 fn meilisearch_id_to_album_id(id: &str) -> AlbumId {
-    id.replace("_", ":").parse().unwrap()
+    id.replace('_', ":").parse().unwrap()
 }
 
 fn meilisearch_id_to_track_id(id: &str) -> TrackId {
-    id.replace("_", ":").parse().unwrap()
+    id.replace('_', ":").parse().unwrap()
 }
 
 fn meilisearch_id_to_playlist_id(id: &str) -> PlaylistId {
-    id.replace("_", ":").parse().unwrap()
+    id.replace('_', ":").parse().unwrap()
 }

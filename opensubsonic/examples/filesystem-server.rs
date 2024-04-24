@@ -135,7 +135,7 @@ impl OpenSubsonicServer for FilesystemServer {
         let picture = self
             .pictures
             .get(track_id)
-            .expect(&format!("picture '{}' not found", track_id));
+            .unwrap_or_else(|| panic!("picture '{}' not found", track_id));
         Ok(Image {
             mime_type: picture
                 .mime_type
@@ -183,7 +183,7 @@ impl OpenSubsonicServer for FilesystemServer {
             album: self
                 .albums
                 .get(album_id)
-                .expect(&format!("album '{}' not found", album_id))
+                .unwrap_or_else(|| panic!("album '{}' not found", album_id))
                 .clone(),
             song: self
                 .tracks

@@ -486,7 +486,7 @@ where
         // NOTE: the amperfy iOS client does a get request to / , probably to try to figure
         // out what kind of server it is talking to, and will fail to login if it returns
         // 404.
-        if path == "" || path == "/" {
+        if path.is_empty() || path == "/" {
             return Ok(self.response_from_byte_stream(ByteStream::empty()));
         }
 
@@ -828,7 +828,7 @@ fn unsupported<T>() -> Result<T> {
 fn get_range_from_header_value(value: &http::HeaderValue) -> Option<ByteRange> {
     let value = std::str::from_utf8(value.as_bytes()).ok()?;
     let value = value.trim().strip_prefix("bytes=")?;
-    let (from, to) = value.split_once("-")?;
+    let (from, to) = value.split_once('-')?;
     let from = match from.parse::<u64>().ok() {
         Some(from) => from,
         None => return Some(Default::default()),

@@ -2,9 +2,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use sonar::{
-    Error, ErrorKind, ExternalAlbum, ExternalArtist, ExternalCompilation, ExternalCompilationTrack,
-    ExternalMediaEnrichStatus, ExternalMediaId, ExternalMediaRequest, ExternalMediaType,
-    ExternalPlaylist, ExternalTrack, Result,
+    Error, ErrorKind, ExternalCompilation, ExternalCompilationTrack,
+    ExternalMediaEnrichStatus, ExternalMediaId, ExternalMediaRequest, ExternalMediaType, Result,
 };
 
 #[derive(Debug, Clone)]
@@ -174,7 +173,7 @@ impl ListenBrainzClient {
 
         if response.status() == reqwest::StatusCode::OK {
             tracing::info!("scrobbled successfully to ListenBrainz");
-            return Ok(());
+            Ok(())
         } else if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             tracing::info!("rate limited by ListenBrainz");
             if let Some(reset_in) = response.headers().get("X-RateLimit-Reset-In") {
@@ -228,24 +227,24 @@ impl sonar::Scrobbler for ListenBrainzScrobbler {
                 .map_err(std::io::Error::other)?
                 .is_some();
 
-        let mbid = self.client.lookup(&artist_name, &track_name).await?;
+        let mbid = self.client.lookup(artist_name, track_name).await?;
         let feedback = match favorited {
             true => Feedback::Love,
             false => Feedback::Neutral,
         };
         tracing::debug!("track {artist_name}/{album_name}/{track_name} has mbid {mbid:?} and favorited = {favorited}");
 
-        let mbid = mbid.as_ref().map(|v| v.as_str());
+        let mbid = mbid.as_deref();
 
         if let Some(mbid) = mbid {
-            self.client.recording_feedback(&mbid, feedback).await?;
+            self.client.recording_feedback(mbid, feedback).await?;
         }
 
         self.client
             .submit_listen(
-                &artist_name,
-                &album_name,
-                &track_name,
+                artist_name,
+                album_name,
+                track_name,
                 listen_at,
                 track.duration,
                 mbid,

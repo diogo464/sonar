@@ -170,7 +170,7 @@ impl Genres {
     pub fn into_genre_updates(self) -> Vec<GenreUpdate> {
         self.0
             .into_iter()
-            .map(|genre| GenreUpdate::set(genre))
+            .map(GenreUpdate::set)
             .collect()
     }
 

@@ -651,10 +651,10 @@ pub async fn track_update(context: &Context, id: TrackId, update: TrackUpdate) -
 #[tracing::instrument(skip(context))]
 pub async fn track_delete(context: &Context, id: TrackId) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = track::delete(&mut tx, id).await?;
+    track::delete(&mut tx, id).await?;
     tx.commit().await?;
     on_track_crud(context, id).await;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]
@@ -850,9 +850,9 @@ pub async fn playlist_insert_tracks(
     tracks: &[TrackId],
 ) -> Result<()> {
     let mut tx = context.db.begin().await?;
-    let result = playlist::insert_tracks(&mut tx, id, tracks).await?;
+    playlist::insert_tracks(&mut tx, id, tracks).await?;
     tx.commit().await?;
-    Ok(result)
+    Ok(())
 }
 
 #[tracing::instrument(skip(context))]

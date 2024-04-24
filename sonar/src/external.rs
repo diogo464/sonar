@@ -251,7 +251,7 @@ impl<'a> IntoIterator for &'a ExternalServices {
     type IntoIter = <&'a [ExternalServicesEntry] as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.services.as_slice().into_iter()
+        self.0.services.as_slice().iter()
     }
 }
 
@@ -344,7 +344,7 @@ impl<'a> IntoIterator for &'a MultiExternalMediaId {
     type IntoIter = <&'a Vec<ExternalMediaId> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        (&self.0).into_iter()
+        self.0.iter()
     }
 }
 

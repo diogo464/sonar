@@ -87,7 +87,7 @@ impl From<SubscriptionView> for Subscription {
             track: value.track,
             playlist: value.playlist,
             external_id: value.external_id,
-            media_type: match value.media_type.as_ref().map(|v| v.as_str()) {
+            media_type: match value.media_type.as_deref() {
                 Some("artist") => Some(SubscriptionMediaType::Artist),
                 Some("album") => Some(SubscriptionMediaType::Album),
                 Some("track") => Some(SubscriptionMediaType::Track),

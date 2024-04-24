@@ -276,13 +276,13 @@ async fn download_track(
     storage: &dyn BlobStorage,
     external_id: &ExternalMediaId,
 ) -> Result<TrackId> {
-    let external_track = service.fetch_track(&external_id).await?;
+    let external_track = service.fetch_track(external_id).await?;
     let external_album = service.fetch_album(&external_track.album).await?;
     let external_artist = service.fetch_artist(&external_track.artist).await?;
     let artist = find_or_create_artist(db, &external_artist).await?;
     let album = find_or_create_album(db, storage, &external_album, artist.id).await?;
     let track = find_or_create_track(db, &external_track, album.id).await?;
-    download_audio(db, service, storage, &external_id, track.id).await?;
+    download_audio(db, service, storage, external_id, track.id).await?;
     Ok(track.id)
 }
 

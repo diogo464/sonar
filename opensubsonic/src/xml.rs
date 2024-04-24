@@ -29,7 +29,7 @@ where
 }
 pub fn elem_begin_open(xml: &mut Xml, element: &'static str) {
     if !xml.tag_stack.is_empty() {
-        let _ = write!(xml.buffer, "\n");
+        let _ = writeln!(xml.buffer);
     }
     for _ in 0..xml.tag_stack.len() {
         let _ = write!(xml.buffer, "\t");
@@ -49,10 +49,10 @@ pub fn attr(xml: &mut Xml, attr: &str, value: &impl std::fmt::Display) {
 
     // TODO: improve clones?
     let mut value = format!("{}", value);
-    value = value.replace("&", "&amp;");
-    value = value.replace("\"", "&quot;");
-    value = value.replace("<", "&lt;");
-    value = value.replace("<", "&gt;");
+    value = value.replace('&', "&amp;");
+    value = value.replace('"', "&quot;");
+    value = value.replace('<', "&lt;");
+    value = value.replace('<', "&gt;");
 
     let _ = write!(xml.buffer, "{}", value);
     let _ = write!(xml.buffer, "\"");

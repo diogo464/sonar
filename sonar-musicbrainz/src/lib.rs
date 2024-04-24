@@ -8,7 +8,7 @@ use sonar::{
 mod rate_limiter;
 use rate_limiter::*;
 
-const USER_AGENT: &'static str = "sonar/1.0.0 ( diogo464@d464.sh )";
+const USER_AGENT: &str = "sonar/1.0.0 ( diogo464@d464.sh )";
 
 #[derive(Debug)]
 pub struct MusicBrainzService {

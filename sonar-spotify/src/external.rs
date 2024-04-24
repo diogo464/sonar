@@ -4,7 +4,7 @@ use rspotify::clients::BaseClient;
 use sonar::{
     bytestream::ByteStream, Error, ErrorKind, ExternalAlbum, ExternalArtist, ExternalImage,
     ExternalMediaEnrichStatus, ExternalMediaId, ExternalMediaRequest, ExternalMediaType,
-    ExternalPlaylist, ExternalService, ExternalTrack, MultiExternalMediaId, Result,
+    ExternalPlaylist, ExternalService, ExternalTrack, Result,
 };
 use spotdl::{LoginCredentials, Resource, ResourceId, SpotifyId};
 use tokio::sync::Semaphore;
@@ -110,7 +110,7 @@ impl SpotifyService {
                     None => return Ok(ExternalMediaEnrichStatus::NotModified),
                 };
                 (
-                    format!("{}", artist_name),
+                    artist_name.to_string(),
                     rspotify::model::SearchType::Artist,
                 )
             }
@@ -217,11 +217,9 @@ impl SpotifyService {
             request_track.eq_ignore_ascii_case(&t.name)
         };
         tracks
-            .into_iter()
-            .filter(|t| match_album(t))
-            .filter(|t| match_track(t))
-            .next()
-            .or(tracks.into_iter().filter(|t| match_album(t)).next())
+            .iter()
+            .filter(|t| match_album(t)).find(|t| match_track(t))
+            .or(tracks.iter().find(|t| match_album(t)))
     }
 }
 
@@ -245,7 +243,7 @@ impl sonar::ExternalService for SpotifyService {
         request: &ExternalMediaRequest,
     ) -> Result<(ExternalMediaType, ExternalMediaId)> {
         for external_id in &request.external_ids {
-            if let Ok(resource_id) = parse_resource_id(&external_id) {
+            if let Ok(resource_id) = parse_resource_id(external_id) {
                 let media_type = match resource_id.resource {
                     Resource::Artist => ExternalMediaType::Artist,
                     Resource::Album => ExternalMediaType::Album,
