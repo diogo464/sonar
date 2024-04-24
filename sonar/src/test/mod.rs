@@ -5,7 +5,8 @@ use bytes::Bytes;
 use crate::{
     bytestream::ByteStream,
     extractor::{ExtractedMetadata, Extractor},
-    Album, AlbumId, Artist, ArtistId, Audio, AudioId, Context, Playlist, Track, User, UserId,
+    Album, AlbumId, Artist, ArtistId, Audio, AudioId, Context, ImageId, Playlist, Track, User,
+    UserId,
 };
 
 // https://gist.github.com/scotthaleen/32f76a413e0dfd4b4d79c2a534d49c0b
@@ -444,6 +445,17 @@ pub async fn create_playlist(ctx: &Context, owner: UserId, name: &str) -> Playli
             tracks: Default::default(),
             cover_art: None,
             properties: Default::default(),
+        },
+    )
+    .await
+    .unwrap()
+}
+
+pub async fn create_image(ctx: &Context) -> ImageId {
+    crate::image_create(
+        ctx,
+        crate::ImageCreate {
+            data: crate::bytestream::from_bytes(SMALL_IMAGE_JPEG),
         },
     )
     .await

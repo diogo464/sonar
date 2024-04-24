@@ -38,6 +38,53 @@ async fn playlist_create_one() {
 }
 
 #[tokio::test]
+async fn playlist_update_one() {
+    let ctx = sonar::test::create_context_memory().await;
+    let user = sonar::test::create_user(&ctx, "user").await;
+    let playlist = sonar::playlist_create(
+        &ctx,
+        sonar::PlaylistCreate {
+            name: "Playlist".to_string(),
+            owner: user.id,
+            tracks: Default::default(),
+            cover_art: None,
+            properties: sonar::test::create_simple_properties(),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(playlist.name, "Playlist");
+    assert_eq!(playlist.owner, user.id);
+    assert_eq!(playlist.cover_art, None);
+    assert_eq!(playlist.properties.len(), 2);
+
+    let image_id = sonar::test::create_image(&ctx).await;
+    sonar::playlist_update(
+        &ctx,
+        playlist.id,
+        sonar::PlaylistUpdate {
+            name: sonar::ValueUpdate::set("Playlist2".to_string()),
+            cover_art: sonar::ValueUpdate::set(image_id),
+            properties: vec![sonar::PropertyUpdate {
+                key: sonar::PropertyKey::new_const("update-key"),
+                action: sonar::PropertyUpdateAction::Set(sonar::PropertyValue::new_uncheked(
+                    "update-value",
+                )),
+            }],
+        },
+    )
+    .await
+    .unwrap();
+
+    let playlist = sonar::playlist_get(&ctx, playlist.id).await.unwrap();
+    assert_eq!(playlist.name, "Playlist2");
+    assert_eq!(playlist.owner, user.id);
+    assert_eq!(playlist.cover_art, Some(image_id));
+    assert_eq!(playlist.properties.len(), 3);
+}
+
+#[tokio::test]
 async fn playlist_list_one() {
     let ctx = sonar::test::create_context_memory().await;
     let user = sonar::test::create_user(&ctx, "user").await;
