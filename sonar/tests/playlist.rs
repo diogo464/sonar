@@ -26,6 +26,7 @@ async fn playlist_create_one() {
             name: "Playlist".to_string(),
             owner: user.id,
             tracks: Default::default(),
+            cover_art: None,
             properties: sonar::test::create_simple_properties(),
         },
     )

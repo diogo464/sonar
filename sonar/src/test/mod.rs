@@ -442,6 +442,7 @@ pub async fn create_playlist(ctx: &Context, owner: UserId, name: &str) -> Playli
             name: name.to_string(),
             owner,
             tracks: Default::default(),
+            cover_art: None,
             properties: Default::default(),
         },
     )
