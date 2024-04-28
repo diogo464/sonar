@@ -109,10 +109,7 @@ impl SpotifyService {
                     Some(artist_name) => artist_name,
                     None => return Ok(ExternalMediaEnrichStatus::NotModified),
                 };
-                (
-                    artist_name.to_string(),
-                    rspotify::model::SearchType::Artist,
-                )
+                (artist_name.to_string(), rspotify::model::SearchType::Artist)
             }
             ExternalMediaType::Album => {
                 let artist_name = match request.artist.as_ref() {
@@ -218,7 +215,8 @@ impl SpotifyService {
         };
         tracks
             .iter()
-            .filter(|t| match_album(t)).find(|t| match_track(t))
+            .filter(|t| match_album(t))
+            .find(|t| match_track(t))
             .or(tracks.iter().find(|t| match_album(t)))
     }
 }

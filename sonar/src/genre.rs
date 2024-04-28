@@ -168,10 +168,7 @@ impl Genres {
     }
 
     pub fn into_genre_updates(self) -> Vec<GenreUpdate> {
-        self.0
-            .into_iter()
-            .map(GenreUpdate::set)
-            .collect()
+        self.0.into_iter().map(GenreUpdate::set).collect()
     }
 
     pub fn merge(&mut self, other: &Self) {

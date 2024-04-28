@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use sonar::{
-    Error, ErrorKind, ExternalCompilation, ExternalCompilationTrack,
-    ExternalMediaEnrichStatus, ExternalMediaId, ExternalMediaRequest, ExternalMediaType, Result,
+    Error, ErrorKind, ExternalCompilation, ExternalCompilationTrack, ExternalMediaEnrichStatus,
+    ExternalMediaId, ExternalMediaRequest, ExternalMediaType, Result,
 };
 
 #[derive(Debug, Clone)]

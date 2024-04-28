@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
+use serde::{Deserialize, Serialize};
 
 use crate::common::{VideoBitrate, VideoSize};
 #[allow(unused)]

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
+use serde::{Deserialize, Serialize};
 
 #[allow(unused)]
 use crate::{

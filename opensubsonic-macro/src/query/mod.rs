@@ -203,7 +203,7 @@ pub fn from_query_struct(container: &Container, fields: &[Field]) -> Result<Toke
 
             impl #impl_g crate::query::FromQuery for #container_ident #type_g #where_g {
                 type QueryAccumulator = Accum #type_g #where_g;
-            } 
+            }
         };
     };
     Ok(output)
@@ -232,10 +232,7 @@ fn field_finish(field: &Field) -> TokenStream {
 }
 
 fn fields_flattened_consume(fields: &[Field]) -> Vec<TokenStream> {
-    fields
-        .iter()
-        .map(field_flattened_consume)
-        .collect()
+    fields.iter().map(field_flattened_consume).collect()
 }
 
 fn field_flattened_consume(field: &Field) -> TokenStream {
@@ -260,7 +257,7 @@ fn field_to_query(field: &Field) -> TokenStream {
     let field_ty = field.ty;
     let field_ident = field.ident;
     let field_name = field_name(field);
-    
+
     if field.attrs.flatten {
         quote::quote! {
             <#field_ty as crate::query::ToQuery>::to_query_builder(
@@ -280,10 +277,7 @@ fn field_to_query(field: &Field) -> TokenStream {
 }
 
 fn fields_consume_match_arm(fields: &[Field]) -> Vec<TokenStream> {
-    fields
-        .iter()
-        .map(field_consume_match_arm)
-        .collect()
+    fields.iter().map(field_consume_match_arm).collect()
 }
 
 fn field_consume_match_arm(field: &Field) -> TokenStream {
@@ -305,10 +299,7 @@ fn field_consume_match_arm(field: &Field) -> TokenStream {
 }
 
 fn fields_accum_struct_type(fields: &[Field]) -> Vec<TokenStream> {
-    fields
-        .iter()
-        .map(field_accum_struct_type)
-        .collect()
+    fields.iter().map(field_accum_struct_type).collect()
 }
 
 fn field_accum_struct_type(field: &Field) -> TokenStream {

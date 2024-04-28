@@ -463,10 +463,12 @@ impl OpenSubsonicServer for Server {
     async fn get_artist_info2(&self, request: Request<GetArtistInfo2>) -> Result<ArtistInfo2> {
         let artist_id = request.body.id.parse::<sonar::ArtistId>().m()?;
         let artist = sonar::artist_get(&self.context, artist_id).await.m()?;
-        let cover_art = artist.cover_art.map(|cover_id| format!(
+        let cover_art = artist.cover_art.map(|cover_id| {
+            format!(
                 "{}/rest/getCoverArt?id={}&v=1.15.0&u=0&p=0&c=sonar",
                 self.image_url_prefix, cover_id
-            ));
+            )
+        });
 
         Ok(ArtistInfo2 {
             info: ArtistInfoBase {

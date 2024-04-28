@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
+use serde::{Deserialize, Serialize};
 
 /// Returns all Podcast channels the server subscribes to, and (optionally) their episodes.
 /// This method can also be used to return details for only one channel - refer to the id parameter.

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use opensubsonic_macro::{FromQuery, SubsonicRequest, ToQuery};
+use serde::{Deserialize, Serialize};
 
 /// Returns the current status for media library scanning. Takes no extra parameters.
 ///
