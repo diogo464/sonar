@@ -191,8 +191,7 @@ pub async fn list_top_from_artist(
 
 #[tracing::instrument(skip(db))]
 pub async fn list_random(db: &mut DbC, params: TrackListRandom) -> Result<Vec<Track>> {
-    let mut query =
-        sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT * FROM sqlx_track ");
+    let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT * FROM sqlx_track ");
 
     if let Some(genre) = params.genre {
         // TODO: add album genres to?
@@ -290,6 +289,16 @@ pub async fn update(db: &mut DbC, track_id: TrackId, update: TrackUpdate) -> Res
 
 #[tracing::instrument(skip(db))]
 pub async fn delete(db: &mut DbC, track_id: TrackId) -> Result<()> {
+    // TODO: add audio gc
+    // TODO: add test to delete track with lyrics and audio
+    sqlx::query("DELETE FROM track_lyrics_line WHERE track = ?")
+        .bind(track_id)
+        .execute(&mut *db)
+        .await?;
+    sqlx::query("DELETE FROM track_audio WHERE track = ?")
+        .bind(track_id)
+        .execute(&mut *db)
+        .await?;
     sqlx::query("DELETE FROM track WHERE id = ?")
         .bind(track_id)
         .execute(&mut *db)
