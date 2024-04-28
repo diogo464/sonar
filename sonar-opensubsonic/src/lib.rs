@@ -1222,7 +1222,12 @@ fn genre_string_from_genres<'a>(genres: impl IntoIterator<Item = &'a sonar::Genr
 
 fn child_sort_disc_track(a: &Child, b: &Child) -> std::cmp::Ordering {
     match (a.disc_number, b.disc_number) {
-        (None, _) => std::cmp::Ordering::Less,
+        (None, None) => match (a.track, b.track) {
+            (None, _) => std::cmp::Ordering::Less,
+            (Some(_), None) => std::cmp::Ordering::Greater,
+            (Some(a_t), Some(b_t)) => a_t.cmp(&b_t),
+        },
+        (None, Some(_)) => std::cmp::Ordering::Less,
         (Some(_), None) => std::cmp::Ordering::Greater,
         (Some(a_d), Some(b_d)) => match a_d.cmp(&b_d) {
             std::cmp::Ordering::Equal => match (a.track, b.track) {
