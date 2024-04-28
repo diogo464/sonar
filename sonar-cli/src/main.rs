@@ -319,8 +319,16 @@ impl std::fmt::Display for SearchResults {
 struct Subscription {
     id: String,
     user: String,
-    // TODO: add remaining fields
+    created_at: u64,
+    last_submitted: Option<u64>,
+    interval: Option<u64>,
+    description: String,
+    artist: String,
+    album: String,
+    track: String,
+    playlist: String,
     external_id: String,
+    media_type: String,
 }
 
 impl From<sonar_grpc::Subscription> for Subscription {
@@ -328,7 +336,16 @@ impl From<sonar_grpc::Subscription> for Subscription {
         Self {
             id: value.id,
             user: value.user_id,
+            created_at: value.created_at.unwrap().seconds as u64,
+            last_submitted: value.last_submitted.map(|t| t.seconds as u64),
+            interval: value.interval.map(|d| d.seconds as u64),
+            description: value.description,
+            artist: value.artist,
+            album: value.album,
+            track: value.track,
+            playlist: value.playlist,
             external_id: value.external_id,
+            media_type: value.media_type,
         }
     }
 }
