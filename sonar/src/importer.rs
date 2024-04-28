@@ -1,11 +1,13 @@
+use std::str::FromStr;
+
 use crate::{
     album, artist, audio,
     blob::BlobStorage,
     bytestream::{self, ByteStream},
     db::Db,
     extractor::SonarExtractor,
-    track, AlbumCreate, AlbumId, ArtistCreate, ArtistId, AudioCreate, Error, ErrorKind, Result,
-    Track, TrackCreate,
+    track, AlbumCreate, AlbumId, ArtistCreate, ArtistId, AudioCreate, Error, ErrorKind, Properties,
+    PropertyValue, Result, Track, TrackCreate,
 };
 
 #[derive(Debug)]
@@ -204,6 +206,20 @@ pub async fn import(
         album::find_or_create_by_name_tx(db, album_create).await?.id
     };
 
+    let mut properties = Properties::default();
+    if let Some(disc_number) = metadatas.iter().find_map(|m| m.disc_number) {
+        properties.insert(
+            crate::prop::DISC_NUMBER,
+            PropertyValue::from_str(&disc_number.to_string()).unwrap(),
+        );
+    }
+    if let Some(track_number) = metadatas.iter().find_map(|m| m.track_number) {
+        properties.insert(
+            crate::prop::TRACK_NUMBER,
+            PropertyValue::from_str(&track_number.to_string()).unwrap(),
+        );
+    }
+
     let mut conn = db.begin().await?;
     let audio_stream = bytestream::from_file(&tmp_filepath).await?;
     let audio = audio::create(
@@ -223,7 +239,7 @@ pub async fn import(
         cover_art: None, // TODO: extract cover art
         lyrics: None,    // TODO: extract lyrics
         audio: Some(audio.id),
-        properties: Default::default(),
+        properties,
     };
     let track = track::create(&mut conn, track_create).await?;
     conn.commit().await?;

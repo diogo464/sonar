@@ -2309,6 +2309,12 @@ struct ServerArgs {
 
 #[derive(Debug, Parser)]
 struct ImportArgs {
+    /// the id of the artist to upload to
+    #[clap(long)]
+    artist: Option<String>,
+    /// the id of the album to upload to
+    #[clap(long)]
+    album: Option<String>,
     paths: Vec<PathBuf>,
 }
 
@@ -2328,6 +2334,8 @@ async fn cmd_import(args: ImportArgs) -> Result<()> {
     for filepath in files {
         let mut client = create_client().await?;
         let permit = semaphore.clone().acquire_owned().await;
+        let artist = args.artist.clone();
+        let album = args.album.clone();
         let handle = tokio::spawn(async move {
             tracing::info!("importing {}", filepath.display());
             let _permit = permit;
@@ -2337,8 +2345,8 @@ async fn cmd_import(args: ImportArgs) -> Result<()> {
                 tokio_util::io::ReaderStream::new(reader).map(move |x| sonar_grpc::ImportRequest {
                     chunk: x.unwrap().to_vec(),
                     filepath: Some(filepath.display().to_string()),
-                    artist_id: None,
-                    album_id: None,
+                    artist_id: artist.clone(),
+                    album_id: album.clone(),
                 });
             let response = client.import(stream).await?;
             let track = response.into_inner();

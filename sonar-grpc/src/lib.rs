@@ -923,12 +923,12 @@ impl sonar_service_server::SonarService for Server {
         let filepath = first_message.filepath;
         let artist = first_message
             .artist_id
-            .map(sonar::ArtistId::try_from)
+            .map(|id| id.parse::<sonar::ArtistId>())
             .transpose()
             .m()?;
         let album = first_message
             .album_id
-            .map(sonar::AlbumId::try_from)
+            .map(|id| id.parse::<sonar::AlbumId>())
             .transpose()
             .m()?;
         let track = sonar::import(
