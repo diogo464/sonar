@@ -821,6 +821,7 @@ impl OpenSubsonicServer for Server {
 
     #[tracing::instrument(skip(self))]
     async fn get_playlist(&self, request: Request<GetPlaylist>) -> Result<PlaylistWithSongs> {
+        let user_id = self.authenticate(&request).await?;
         let playlist_id = request.body.id.parse::<sonar::PlaylistId>().m()?;
         let playlist = sonar::playlist_get(&self.context, playlist_id).await.m()?;
         let playlist_tracks =
@@ -835,11 +836,24 @@ impl OpenSubsonicServer for Server {
         let tracks = sonar::track_get_bulk(&self.context, &track_ids).await.m()?;
         let albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks);
         let artists = sonar::ext::get_tracks_artists_map(&self.context, &tracks);
-        let (albums, artists) = tokio::try_join!(albums, artists).m()?;
+        let audios = sonar::ext::get_tracks_audios_map(&self.context, &tracks);
+        let (albums, artists, audios) = tokio::try_join!(albums, artists, audios).m()?;
+
+        let mut favorites = FavoritesSet::default();
+        favorites
+            .populate_with(&self.context, user_id, track_ids)
+            .await?;
 
         Ok(PlaylistWithSongs {
             playlist: playlist_from_playlist(playlist),
-            entry: child_from_playlist_tracks(&playlist_tracks, &tracks, &albums, &artists),
+            entry: child_from_playlist_tracks(
+                &playlist_tracks,
+                &tracks,
+                &albums,
+                &artists,
+                &audios,
+                &favorites,
+            ),
         })
     }
 
@@ -895,10 +909,24 @@ impl OpenSubsonicServer for Server {
         let tracks = sonar::track_get_bulk(&self.context, &track_ids).await.m()?;
         let albums = sonar::ext::get_tracks_albums_map(&self.context, &tracks);
         let artists = sonar::ext::get_tracks_artists_map(&self.context, &tracks);
-        let (albums, artists) = tokio::try_join!(albums, artists).m()?;
+        let audios = sonar::ext::get_tracks_audios_map(&self.context, &tracks);
+        let (albums, artists, audios) = tokio::try_join!(albums, artists, audios).m()?;
+
+        let mut favorites = FavoritesSet::default();
+        favorites
+            .populate_with(&self.context, user_id, track_ids)
+            .await?;
+
         Ok(PlaylistWithSongs {
             playlist: playlist_from_playlist(playlist),
-            entry: child_from_playlist_tracks(&playlist_tracks, &tracks, &albums, &artists),
+            entry: child_from_playlist_tracks(
+                &playlist_tracks,
+                &tracks,
+                &albums,
+                &artists,
+                &audios,
+                &favorites,
+            ),
         })
     }
 
@@ -1182,12 +1210,14 @@ fn child_from_playlist_tracks(
     tracks: &[sonar::Track],
     albums: &HashMap<sonar::AlbumId, sonar::Album>,
     artists: &HashMap<sonar::ArtistId, sonar::Artist>,
+    audios: &HashMap<sonar::AudioId, sonar::Audio>,
+    favorites: &FavoritesSet,
 ) -> Vec<Child> {
     let mut children = Vec::with_capacity(playlist_tracks.len());
     for (idx, track) in tracks.iter().enumerate() {
         let artist = &artists[&track.artist];
         let album = &albums[&track.album];
-        let genre = genre_string_from_genres(artist.genres.iter().chain(album.genres.iter()));
+        let audio = track.audio.and_then(|id| audios.get(&id));
 
         children.push(Child {
             id: track.id.to_string(),
@@ -1196,9 +1226,8 @@ fn child_from_playlist_tracks(
             title: track.name.clone(),
             album: Some(album.name.clone()),
             artist: Some(artist.name.clone()),
-            track: Some((idx + 1) as u32),
-            year: None,
-            genre: Some(genre),
+            track: Some(idx as u32 + 1),
+            genre: None,
             cover_art: track
                 .cover_art
                 .map(|id| id.to_string())
@@ -1206,8 +1235,14 @@ fn child_from_playlist_tracks(
             duration: Some(From::from(track.duration)),
             play_count: Some(track.listen_count as u64),
             disc_number: None,
-            album_id: Some(track.album.to_string()),
-            artist_id: Some(track.artist.to_string()),
+            starred: favorites.starred(track.id),
+            album_id: Some(album.id.to_string()),
+            artist_id: Some(artist.id.to_string()),
+            media_type: Some(MediaType::Music),
+            is_video: Some(false),
+            content_type: audio.as_ref().map(|a| a.mime_type.clone()),
+            bit_rate: audio.as_ref().map(|a| a.bitrate),
+            size: audio.as_ref().map(|a| u64::from(a.size)),
             ..Default::default()
         });
     }
