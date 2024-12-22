@@ -1,6 +1,81 @@
 # sonar
 
-Self hosted music database/streaming server.
+Self hosted music database/streaming server compatible with opensubsonic clients.
+
+## Note
+
+`sonar` was an attempt to replace Spotify/Apple Music with a self-hosted alternative. However, I am no longer working on it since it can’t match the convenience of commercial streaming services:  
+
+1. **Music Library Access**  
+   Streaming services make it super easy to browse an artist’s catalog and play tracks not already in a local library.  
+
+2. **Better Playlists**  
+   Auto-generated playlists on Spotify/Apple Music are hard to beat, thanks to the massive amount of user data they use. ListenBrainz playlists are decent, but they didn’t seem as good.
+
+
+## Screenshots
+
+Airsonic Web Client        |  Amperfy iOS Client
+:-------------------------:|:-------------------------:
+![](./sonar-airsonic.webp)  |  ![](./sonar-amperfy.webp)
+```bash
+~/d/c/s/sonar-cli (main)> sonar playlist list
+sonar:playlist:4000001  2000s Mix
+sonar:playlist:4000002  Discover Weekly
+sonar:playlist:4000003  Chill Mix
+sonar:playlist:4000004  2010s Mix
+sonar:playlist:4000005  Daily Mix 1
+sonar:playlist:4000006  Daily Mix 3
+sonar:playlist:4000007  Metal Mix
+sonar:playlist:4000008  Daily Mix 2
+sonar:playlist:4000009  Upbeat Mix
+sonar:playlist:400000a  Daily Mix 5
+sonar:playlist:400000b  Daily Mix 4
+sonar:playlist:400000c  Blues Mix
+sonar:playlist:400000d  Daily Mix 6
+sonar:playlist:400000e  Rock Mix
+sonar:playlist:400000f  Daily Jams for diogo464, 2024-04-23 Tue
+sonar:playlist:4000010  Weekly Exploration for diogo464, week of 2024-04-22 Mon
+sonar:playlist:4000011  Weekly Jams for diogo464, week of 2024-04-22 Mon
+sonar:playlist:4000012  Weekly Exploration for diogo464, week of 2024-04-15 Mon
+sonar:playlist:4000013  Top Discoveries of 2023 for diogo464
+sonar:playlist:4000014  Top Missed Recordings of 2023 for diogo464
+sonar:playlist:4000015  Daily Jams for diogo464, 2024-04-24 Wed
+sonar:playlist:4000016  Daily Jams for diogo464, 2024-04-25 Thu
+sonar:playlist:4000017  Daily Jams for diogo464, 2024-04-26 Fri
+sonar:playlist:4000018  Weekly Jams for diogo464, week of 2024-04-25 Thu
+sonar:playlist:4000019  Daily Jams for diogo464, 2024-04-27 Sat
+```
+
+## CLI subcommands
+
+```
+Usage: sonar [OPTIONS] <COMMAND>
+
+Commands:
+  login
+  logout
+  artist
+  album
+  track
+  playlist
+  favorite
+  scrobble
+  sync
+  pin
+  search
+  subscription
+  metadata
+  admin
+  import
+  server
+  help          Print this message or the help of the given subcommand(s)
+
+Options:
+      --server <SERVER>  [env: SONAR_SERVER=http://sonar-grpc.d464.sh:3000] [default: http://localhost:3000]
+      --json             [env: SONAR_JSON=]
+  -h, --help             Print help
+```
 
 ## Server Environment Variables
 
@@ -27,17 +102,10 @@ SONAR_SPOTIFY_CLIENT_ID="..."
 SONAR_SPOTIFY_CLIENT_SECRET="..."
 ```
 # opensubsonic
-
-TODO:
-+ some authentication middleware
-+ rename get_starreed to get_starred
-+ maybe add error middleware
-
-## opensubsonic
 This crate provides types to work with the [OpenSubsonic API](https://opensubsonic.netlify.app/).
 Right now it is mainly focused on implementing server-side functionality.
 
-### Server
+## Server
 
 A server can be created by implementing the [`service::OpenSubsonicServer`] trait.
 Then a [`tower::Service`] can be created from it using [`service::OpenSubsonicService::new`].
