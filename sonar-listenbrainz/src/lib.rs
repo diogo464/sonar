@@ -389,26 +389,27 @@ impl sonar::ExternalService for ListenBrainzService {
     }
 }
 
-#[doc(hidden)]
-pub async fn test_main() {
-    tracing_subscriber::fmt::init();
-
-    let token = "0f0494b8-f720-4fd3-b052-a5e432320501";
-    let client = ListenBrainzClient::new(token);
-    client.lookup("System of a Down", "Aerials").await.unwrap();
-    client
-        .recording_feedback("616d5df1-cef3-4dd3-b796-5065e0e4d5ba", Feedback::Love)
-        .await
-        .unwrap();
-    client
-        .submit_listen(
-            "Metallica",
-            "Metallica",
-            "Enter Sandman",
-            1713558174,
-            Duration::from_secs(331),
-            None,
-        )
-        .await
-        .unwrap();
-}
+// TODO: token reset, update test to use env variables
+// #[doc(hidden)]
+// pub async fn test_main() {
+//     tracing_subscriber::fmt::init();
+//
+//     let token = "0f0494b8-f720-4fd3-b052-a5e432320501";
+//     let client = ListenBrainzClient::new(token);
+//     client.lookup("System of a Down", "Aerials").await.unwrap();
+//     client
+//         .recording_feedback("616d5df1-cef3-4dd3-b796-5065e0e4d5ba", Feedback::Love)
+//         .await
+//         .unwrap();
+//     client
+//         .submit_listen(
+//             "Metallica",
+//             "Metallica",
+//             "Enter Sandman",
+//             1713558174,
+//             Duration::from_secs(331),
+//             None,
+//         )
+//         .await
+//         .unwrap();
+// }
